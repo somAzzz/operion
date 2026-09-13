@@ -35,6 +35,34 @@ The validator rejects non-canonical or duplicate normalized domains, missing or
 duplicate WWI external IDs, nonblank target IDs, missing names, and People company
 relations that cannot resolve in the Company file.
 
+Before importing ERPNext files, create Fiscal Year `2016` and add the following
+Data custom fields (unique where supported): `Operion Source Key` on Customer,
+Supplier, Item, Contact, Sales Order, Sales Order Item, Purchase Order, and Purchase
+Order Item; `WWI Source Status` on Sales Order and Purchase Order; and `WWI Supplier
+Reference` on Purchase Order. The target already needs Company `AI Demo GmbH`, UOM
+`Unit`, customer group `Commercial`, supplier group `All Supplier Groups`, item group
+`Products`, territory `Rest Of The World`, and the standard EUR buying/selling price
+lists.
+
+Validate the six ERPNext files together:
+
+```bash
+PYTHONPATH=src python3 -m operion_etl validate-erpnext \
+  --directory data/exports/erpnext/<batch-id> \
+  --report reports/<batch-id>/erpnext_preimport_validation.json
+```
+
+Import in this order: `customers.csv`, `suppliers.csv`, `items.csv`, `contacts.csv`,
+`sales_orders.csv`, then `purchase_orders.csv`. Choose **Insert New Records** and do
+not map the blank native `ID` column. Parent orders and their Items child rows are in
+the same file; rows after the first child deliberately leave all parent columns
+blank. Purchase Orders contain only positive, unreceived open commitments.
+
+The WWI source amount columns do not identify a source currency. For this demo batch,
+numeric amounts are intentionally preserved and mapped to the target company's EUR
+currency with exchange rate 1; this is a mapping assumption, not a currency
+conversion.
+
 After `TWENTY_API_KEY` is present in `.env`, Companies can be loaded idempotently
 and read back from `/rest/companies`. The command writes real Twenty UUIDs into the
 batch identity map:

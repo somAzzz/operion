@@ -9,6 +9,10 @@ __pycache__/
 *.egg-info/
 .DS_Store
 
+# Local planning documents
+docs/project-plan.md
+docs/roadmap.md
+
 # Business data and generated outputs
 data/**
 !data/**/

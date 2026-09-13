@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .download import download_wwi
+from .erpnext_preimport import validate_directory
 from .pipeline import run_etl
 from .preimport import validate_files
 from .twenty import load_companies
@@ -28,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--companies", type=Path, required=True)
     validate.add_argument("--people", type=Path, required=True)
     validate.add_argument("--report", type=Path)
+    validate_erpnext = subparsers.add_parser(
+        "validate-erpnext", help="Validate an ERPNext CSV directory before import"
+    )
+    validate_erpnext.add_argument("--directory", type=Path, required=True)
+    validate_erpnext.add_argument("--report", type=Path)
     load = subparsers.add_parser(
         "load-twenty-companies", help="Load Companies and persist Twenty UUID readback"
     )
@@ -47,6 +53,11 @@ def main() -> None:
         print(run_etl(args.snapshot, args.batch_id, args.data_root, args.reports_root, args.container, args.order_limit))
     elif args.command == "validate-twenty":
         result = validate_files(args.companies, args.people, args.report)
+        print(result)
+        if result["status"] != "passed":
+            raise SystemExit(1)
+    elif args.command == "validate-erpnext":
+        result = validate_directory(args.directory, args.report)
         print(result)
         if result["status"] != "passed":
             raise SystemExit(1)

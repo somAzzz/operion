@@ -5,8 +5,14 @@ import csv
 from pathlib import Path
 
 from operion_etl.pipeline import (
+    ERPNEXT_PURCHASE_ORDER_HEADERS,
+    ERPNEXT_SALES_ORDER_HEADERS,
     TWENTY_COMPANY_HEADERS,
     TWENTY_PEOPLE_HEADERS,
+    _erpnext_contact_rows,
+    _erpnext_item_rows,
+    _erpnext_purchase_order_rows,
+    _erpnext_sales_order_rows,
     _number,
     _normalized_domain,
     _scenarios,
@@ -96,6 +102,63 @@ class PipelineTests(unittest.TestCase):
         }])
         self.assertEqual(list(rows[0]), TWENTY_PEOPLE_HEADERS)
         self.assertEqual(rows[0]["Company WWI External ID"], "wwi:organization:customer:1")
+
+    def test_erpnext_masters_map_uom_and_contact_relation(self):
+        organizations = {
+            "wwi:organization:customer:1": {
+                "canonical_id": "wwi:organization:customer:1",
+                "name": "Customer A", "roles": "customer",
+            }
+        }
+        item = _erpnext_item_rows([{
+            "canonical_id": "wwi:product:1", "name": "Widget",
+            "uom": "Each", "unit_price_ex_tax": "12.50",
+        }])[0]
+        contact = _erpnext_contact_rows([{
+            "canonical_id": "wwi:contact:1", "full_name": "Ada Lovelace",
+            "email": "ada@example.test", "phone": "123",
+            "company_canonical_id": "wwi:organization:customer:1",
+        }], organizations)[0]
+        self.assertEqual(item["ID"], "")
+        self.assertEqual(item["Default Unit of Measure"], "Unit")
+        self.assertEqual(contact["Link Document Type (Links)"], "Customer")
+        self.assertEqual(contact["Link Name (Links)"], "Customer A")
+
+    def test_erpnext_orders_combine_children_and_filter_closed_commitments(self):
+        organizations = {
+            "wwi:organization:customer:1": {"name": "Customer A"},
+            "wwi:organization:supplier:2": {"name": "Supplier B"},
+        }
+        products = {"wwi:product:1": {"name": "Widget"}}
+        sales = _erpnext_sales_order_rows(
+            [{"canonical_id": "wwi:sales_order:1", "customer_canonical_id": "wwi:organization:customer:1",
+              "order_date": "2016-05-30", "expected_delivery_date": "2016-06-01",
+              "customer_po_number": "PO-1", "source_status": "open"}],
+            [
+                {"canonical_id": "wwi:sales_order_line:1", "sales_order_canonical_id": "wwi:sales_order:1",
+                 "product_canonical_id": "wwi:product:1", "open_quantity": "2", "unit_price_ex_tax": "3", "uom": "Each"},
+                {"canonical_id": "wwi:sales_order_line:2", "sales_order_canonical_id": "wwi:sales_order:1",
+                 "product_canonical_id": "wwi:product:1", "open_quantity": "1", "unit_price_ex_tax": "4", "uom": "Each"},
+            ], organizations, products,
+        )
+        purchases = _erpnext_purchase_order_rows(
+            [{"canonical_id": "wwi:purchase_order:2", "supplier_canonical_id": "wwi:organization:supplier:2",
+              "order_date": "2016-05-29", "expected_delivery_date": "2016-06-02",
+              "supplier_reference": "REF", "source_status": "open"}],
+            [
+                {"canonical_id": "wwi:purchase_order_line:1", "purchase_order_canonical_id": "wwi:purchase_order:2",
+                 "product_canonical_id": "wwi:product:1", "open_quantity": "5", "expected_unit_price_each": "2", "canonical_uom": "Each"},
+                {"canonical_id": "wwi:purchase_order_line:2", "purchase_order_canonical_id": "wwi:purchase_order:2",
+                 "product_canonical_id": "wwi:product:1", "open_quantity": "0", "expected_unit_price_each": "2", "canonical_uom": "Each"},
+            ], organizations, products,
+        )
+        self.assertEqual(list(sales[0]), ERPNEXT_SALES_ORDER_HEADERS)
+        self.assertEqual(sales[1]["Customer"], "")
+        self.assertEqual(sales[1]["Operion Source Key"], "")
+        self.assertEqual(sales[1]["Quantity (Items)"], "1")
+        self.assertEqual(list(purchases[0]), ERPNEXT_PURCHASE_ORDER_HEADERS)
+        self.assertEqual(len(purchases), 1)
+        self.assertEqual(purchases[0]["Quantity (Items)"], "5")
 
 
 if __name__ == "__main__":
