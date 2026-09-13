@@ -1,0 +1,48 @@
+{
+  "mapping_version": "wwi-minimal-v1",
+  "source_namespace": "wwi",
+  "identity_rule": "wwi:<canonical_entity>:<source_id>; organizations include the customer/supplier role",
+  "status_rules": {
+    "sales_order": {
+      "PickingCompletedWhen is null": "open",
+      "PickingCompletedWhen is not null": "picked"
+    },
+    "purchase_order": {
+      "IsOrderFinalized = 0": "open",
+      "IsOrderFinalized = 1": "finalized"
+    }
+  },
+  "quantity_rules": {
+    "sales_open_quantity": "max(Quantity - PickedQuantity, 0)",
+    "purchase_open_quantity": "max(OrderedOuters - ReceivedOuters, 0) * QuantityPerOuter",
+    "purchase_canonical_uom": "Warehouse.StockItems.UnitPackageID -> Warehouse.PackageTypes.PackageTypeName",
+    "purchase_source_uom": "Warehouse.StockItems.OuterPackageID -> Warehouse.PackageTypes.PackageTypeName"
+  },
+  "amount_rules": {
+    "sales_net_amount": "Quantity * UnitPrice, excluding tax",
+    "purchase_unit_price_each": "ExpectedUnitPricePerOuter / QuantityPerOuter"
+  },
+  "target_scope": {
+    "erpnext": ["Organization(customer)", "Organization(supplier)", "Contact", "Product", "SalesOrder/Line", "PurchaseOrder/Line"],
+    "twenty": ["Organization", "Contact"]
+  },
+  "twenty_company_csv": {
+    "reference": "data/test_data/companies-sample.csv",
+    "identity_rule": "WWI External ID = canonical_id; unique in Twenty",
+    "id_rule": "leave Twenty Id blank on import; populate the real UUID only after REST readback",
+    "domain_rule": "normalize to lowercase IDNA host; if a host occurs more than once, leave Domain blank for every member of that group; otherwise emit https://<host>",
+    "unknown_optional_values": "blank",
+    "multi_link_empty_value": "[]"
+  },
+  "twenty_people_csv": {
+    "identity_rule": "WWI External ID = canonical_id; unique in Twenty",
+    "company_relation_rule": "Company WWI External ID = related organization canonical_id; import after Companies and map to the Company relation using the Company's WWI External ID field",
+    "unrelated_people": "leave Company WWI External ID blank"
+  },
+  "notes": [
+    "ERPNext Company is the operating entity and is never mapped from a WWI customer.",
+    "Target CSV files are mapping-stage artifacts. They are not evidence that records were loaded.",
+    "Target IDs stay blank and load_status stays pending until a supported target import and REST readback occurs.",
+    "Do not change Twenty's Company domain unique index; source identity is carried by WWI External ID."
+  ]
+}
