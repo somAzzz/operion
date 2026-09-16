@@ -6,6 +6,8 @@
 
 目标：让人掌握必要的业务判断，让 agent 协助查询、整理、建议和受控执行。
 
+![Operion 系统架构](docs/imgs/pipeline.png)
+
 当前阶段：**WWI 下载、最小 ETL 与 Twenty Company 小批次导入已实现**。
 已生成可复现的公开样例、目标映射文件和验证证据；Twenty Company UUID
 已通过 REST 回读写入 identity map，People CSV 已准备但尚未导入，ERPNext 与

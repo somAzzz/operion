@@ -9,6 +9,8 @@ lightweight ETL pipeline provide governed facts and tools.
 The goal is to keep material business judgment with people while agents help with
 search, consolidation, recommendations, and narrowly controlled execution.
 
+![Operion system architecture](docs/imgs/pipeline.png)
+
 ## Current status
 
 The project currently includes:
