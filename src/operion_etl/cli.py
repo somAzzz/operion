@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .download import download_wwi
+from .erpnext_audit import audit_erpnext
 from .erpnext_preimport import validate_directory
 from .pipeline import run_etl
 from .preimport import validate_files
@@ -34,6 +35,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_erpnext.add_argument("--directory", type=Path, required=True)
     validate_erpnext.add_argument("--report", type=Path)
+    audit = subparsers.add_parser(
+        "audit-erpnext", help="Read back ERPNext through the Frappe API and reconcile a CSV batch"
+    )
+    audit.add_argument("--directory", type=Path, required=True)
+    audit.add_argument("--report", type=Path)
+    audit.add_argument("--site", default="erp.localhost")
+    audit.add_argument("--backend-container", default="erpnext-backend-1")
     load = subparsers.add_parser(
         "load-twenty-companies", help="Load Companies and persist Twenty UUID readback"
     )
@@ -58,6 +66,13 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "validate-erpnext":
         result = validate_directory(args.directory, args.report)
+        print(result)
+        if result["status"] != "passed":
+            raise SystemExit(1)
+    elif args.command == "audit-erpnext":
+        result = audit_erpnext(
+            args.directory, args.backend_container, args.site, args.report
+        )
         print(result)
         if result["status"] != "passed":
             raise SystemExit(1)

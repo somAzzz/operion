@@ -44,6 +44,12 @@ Reference` on Purchase Order. The target already needs Company `AI Demo GmbH`, U
 `Products`, territory `Rest Of The World`, and the standard EUR buying/selling price
 lists.
 
+Create child-table source fields on the child DocTypes themselves. Their Label is
+exactly `Operion Source Key` on `Sales Order Item` and `Purchase Order Item`; do not
+create a parent field whose Label contains `(Items)`. ERPNext adds `(Items)` to the
+CSV header automatically. Contact email and phone are exported through the native
+`Email IDs` and `Contact Numbers` child tables so they survive Contact validation.
+
 Validate the six ERPNext files together:
 
 ```bash
@@ -51,6 +57,19 @@ PYTHONPATH=src python3 -m operion_etl validate-erpnext \
   --directory data/exports/erpnext/<batch-id> \
   --report reports/<batch-id>/erpnext_preimport_validation.json
 ```
+
+After a manual import, read the batch back through the local Frappe server API and
+reconcile master records, contact child tables, order child tables, prices, and the
+Fiscal Year:
+
+```bash
+PYTHONPATH=src python3 -m operion_etl audit-erpnext \
+  --directory data/exports/erpnext/<batch-id> \
+  --report reports/<batch-id>/erpnext_api_audit.json
+```
+
+The command only calls `frappe.get_all`; it does not create, update, or delete
+ERPNext data. It exits nonzero when rows, relations, or values do not match.
 
 Import in this order: `customers.csv`, `suppliers.csv`, `items.csv`, `contacts.csv`,
 `sales_orders.csv`, then `purchase_orders.csv`. Choose **Insert New Records** and do
