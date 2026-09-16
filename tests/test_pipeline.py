@@ -121,6 +121,10 @@ class PipelineTests(unittest.TestCase):
         }], organizations)[0]
         self.assertEqual(item["ID"], "")
         self.assertEqual(item["Default Unit of Measure"], "Unit")
+        self.assertEqual(contact["Email ID (Email IDs)"], "ada@example.test")
+        self.assertEqual(contact["Is Primary (Email IDs)"], "1")
+        self.assertEqual(contact["Number (Contact Numbers)"], "123")
+        self.assertEqual(contact["Is Primary Phone (Contact Numbers)"], "1")
         self.assertEqual(contact["Link Document Type (Links)"], "Customer")
         self.assertEqual(contact["Link Name (Links)"], "Customer A")
 

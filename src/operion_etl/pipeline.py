@@ -60,8 +60,10 @@ ERPNEXT_ITEM_HEADERS = [
     "Maintain Stock", "Standard Selling Rate", "Operion Source Key",
 ]
 ERPNEXT_CONTACT_HEADERS = [
-    "ID", "First Name", "Last Name", "Email Address", "Phone",
-    "Operion Source Key", "Link Document Type (Links)", "Link Name (Links)",
+    "ID", "First Name", "Last Name", "Operion Source Key",
+    "Email ID (Email IDs)", "Is Primary (Email IDs)",
+    "Number (Contact Numbers)", "Is Primary Phone (Contact Numbers)",
+    "Link Document Type (Links)", "Link Name (Links)",
 ]
 ERPNEXT_SALES_ORDER_HEADERS = [
     "ID", "Series", "Customer", "Order Type", "Date", "Delivery Date", "Company",
@@ -665,9 +667,11 @@ def _erpnext_contact_rows(
             "ID": "",
             "First Name": name_parts[0] if name_parts else "",
             "Last Name": name_parts[1] if len(name_parts) > 1 else "",
-            "Email Address": contact["email"],
-            "Phone": contact["phone"],
             "Operion Source Key": contact["canonical_id"],
+            "Email ID (Email IDs)": contact["email"],
+            "Is Primary (Email IDs)": "1" if contact["email"] else "",
+            "Number (Contact Numbers)": contact["phone"],
+            "Is Primary Phone (Contact Numbers)": "1" if contact["phone"] else "",
             "Link Document Type (Links)": link_doctype,
             "Link Name (Links)": link_name,
         })

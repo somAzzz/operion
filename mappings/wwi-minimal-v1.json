@@ -47,6 +47,8 @@
     "uom_rule": "map WWI Each to existing ERPNext UOM Unit with conversion factor 1",
     "customer_territory": "Rest Of The World",
     "order_file_rule": "parent and Items child rows are emitted in one CSV; continuation rows leave every parent column blank",
+    "contact_child_tables": "email uses Email ID (Email IDs) and phone uses Number (Contact Numbers); parent Email Address/Phone fields are not import identities",
+    "date_rule": "Sales Delivery Date must be after Date; Purchase Required By must be on or after Date, including every Items child row",
     "sales_quantity_rule": "import only positive open quantity",
     "purchase_scope": "open commitments only; discard zero-open lines and parents with no remaining lines",
     "required_custom_fields": {

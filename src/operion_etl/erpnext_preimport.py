@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -108,6 +109,16 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
             issue("contacts.csv", index, "Link Name (Links)", "supplier relation does not resolve")
         elif doctype and doctype not in {"Customer", "Supplier"}:
             issue("contacts.csv", index, "Link Document Type (Links)", "unsupported relation type")
+        email = row.get("Email ID (Email IDs)", "").strip()
+        phone = row.get("Number (Contact Numbers)", "").strip()
+        if not email:
+            issue("contacts.csv", index, "Email ID (Email IDs)", "contact email child row is required")
+        if not phone:
+            issue("contacts.csv", index, "Number (Contact Numbers)", "contact phone child row is required")
+        if email and row.get("Is Primary (Email IDs)", "").strip() != "1":
+            issue("contacts.csv", index, "Is Primary (Email IDs)", "primary email flag must be 1")
+        if phone and row.get("Is Primary Phone (Contact Numbers)", "").strip() != "1":
+            issue("contacts.csv", index, "Is Primary Phone (Contact Numbers)", "primary phone flag must be 1")
 
     metrics: dict[str, int] = {
         "customers": len(customers),
@@ -129,6 +140,7 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
         parent_keys: list[str] = []
         child_keys: list[str] = []
         active_parent = ""
+        active_date: date | None = None
         parent_count = 0
         for index, row in enumerate(rows, start=2):
             source_key = row.get(parent_key, "").strip()
@@ -136,6 +148,11 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
                 active_parent = source_key
                 parent_keys.append(source_key)
                 parent_count += 1
+                try:
+                    active_date = date.fromisoformat(row.get("Date", "").strip())
+                except ValueError:
+                    active_date = None
+                    issue(filename, index, "Date", "date must use YYYY-MM-DD")
                 if row.get("ID", "").strip():
                     issue(filename, index, "ID", "leave native ERPNext ID blank for insert")
                 if row.get(relation_field, "").strip() not in valid_relations:
@@ -146,6 +163,19 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
                     issue(filename, index, "Currency", f"expected {ERPNEXT_CURRENCY}")
                 if row.get("Exchange Rate", "").strip() != "1":
                     issue(filename, index, "Exchange Rate", "demo target-currency mapping requires exchange rate 1")
+                parent_due_field = "Delivery Date" if filename == "sales_orders.csv" else "Required By"
+                try:
+                    parent_due = date.fromisoformat(row.get(parent_due_field, "").strip())
+                    invalid_due = active_date is not None and (
+                        parent_due <= active_date
+                        if filename == "sales_orders.csv"
+                        else parent_due < active_date
+                    )
+                    if invalid_due:
+                        relation = "after" if filename == "sales_orders.csv" else "on or after"
+                        issue(filename, index, parent_due_field, f"must be {relation} Date")
+                except ValueError:
+                    issue(filename, index, parent_due_field, "date must use YYYY-MM-DD")
             else:
                 if not active_parent:
                     issue(filename, index, parent_key, "child row appears before a parent row")
@@ -177,6 +207,22 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
                     issue(filename, index, field, "expected existing UOM Unit")
             if row.get("UOM Conversion Factor (Items)", "").strip() != "1":
                 issue(filename, index, "UOM Conversion Factor (Items)", "expected conversion factor 1")
+            child_due_field = (
+                "Delivery Date (Items)" if filename == "sales_orders.csv"
+                else "Required By (Items)"
+            )
+            try:
+                child_due = date.fromisoformat(row.get(child_due_field, "").strip())
+                invalid_due = active_date is not None and (
+                    child_due <= active_date
+                    if filename == "sales_orders.csv"
+                    else child_due < active_date
+                )
+                if invalid_due:
+                    relation = "after" if filename == "sales_orders.csv" else "on or after"
+                    issue(filename, index, child_due_field, f"must be {relation} parent Date")
+            except ValueError:
+                issue(filename, index, child_due_field, "date must use YYYY-MM-DD")
 
         for value, count in Counter(parent_keys).items():
             if count > 1:
