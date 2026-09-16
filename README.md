@@ -1,51 +1,93 @@
 # Operion
 
-建立在 Twenty 和 ERPNext 之上的受控业务 Agent 层。Agent/MCP 是主线，业务系统与轻量 ETL 提供事实和工具支撑。
+English | [中文](README.zh-CN.md)
 
-目标：让人掌握必要的业务判断，让 agent 协助查询、整理、建议和受控执行。
+Operion is a controlled business agent layer built on top of Twenty CRM and
+ERPNext. Agent and MCP workflows are the product focus; the business systems and a
+lightweight ETL pipeline provide governed facts and tools.
 
-当前阶段：**WWI 下载、最小 ETL 与 Twenty Company 小批次导入已实现**。
-已生成可复现的公开样例、目标映射文件和验证证据；Twenty Company UUID
-已通过 REST 回读写入 identity map，People CSV 已准备但尚未导入，ERPNext 与
-agent 尚未实现。
+The goal is to keep material business judgment with people while agents help with
+search, consolidation, recommendations, and narrowly controlled execution.
 
-最小演示：客户概览入口＋履约检查主场景＋15 个评估案例。先以小样本和只读适配器连接 Agent，持续同步后置；首个写操作仅创建内部跟进任务。
+## Current status
 
-推进顺序：用例与预期答案 → 小样本导入 → 只读适配器 → 业务工具/MCP → Agent 与评估 → 单一受控写入 → 按需同步。
+The project currently includes:
 
-## 文档入口
+- a reproducible Wide World Importers download and minimal ETL pipeline;
+- canonical records and target mappings for Twenty and ERPNext;
+- pre-import validation for the generated files;
+- a small Twenty Company import with REST readback into the identity map;
+- an ERPNext readback audit command for reconciling manually imported batches; and
+- an enterprise operating plan with staged security and acceptance gates.
 
-- [完整项目方案](docs/project-plan.md)：目标、数据、ETL、系统职责、阶段与验收。
-- [人工功能与 agent 设计对照](docs/human-functions-agent-map.md)：需要了解哪些业务功能，哪些判断交给人。
-- [Agent / MCP 边界](docs/agent-boundaries.md)：工具范围、权限、审批和验证要求。
-- [最小演示与评估](docs/minimum-demo.md)：固定业务日期、履约口径、15 个案例与退出条件。
-- [执行路线](docs/roadmap.md)：按依赖顺序推进的待办清单。
-- [数据目录说明](data/README.md)：原始数据、加工数据和导出结果的保存规则。
+The Twenty People import, ERPNext business-state setup, read-only business tools,
+MCP layer, and agent are still in progress. Generated exports are evidence of
+mapping, not evidence that the corresponding target records were imported.
 
-## 目录
+The minimum demonstration is a customer overview plus a deterministic order
+fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
+write is deliberately limited to creating one internal follow-up task after an
+exact preview and human approval.
+
+Delivery sequence:
+
+```text
+use cases and expected answers
+  → small linked dataset
+  → read-only adapters
+  → business tools and MCP
+  → agent and evaluations
+  → one controlled write
+  → synchronization when justified
+```
+
+## Documentation
+
+The detailed design documents are currently written in Chinese:
+
+- [Enterprise operating plan and staged subplans](docs/enterprise/README.md)
+- [Agent and MCP boundaries](docs/agent-boundaries.md)
+- [Minimum demonstration and evaluations](docs/minimum-demo.md)
+- [Human functions and agent design map](docs/human-functions-agent-map.md)
+- [Data directory conventions](data/README.md)
+- [WWI download and ETL runbook](ops/data-pipeline.md)
+- [Canonical data contract](contracts/canonical-v1.md)
+
+## Repository layout
 
 ```text
 operion/
-├── docs/                     # 方案、功能对照、边界和路线
-├── data/
-│   ├── raw/                  # 原始来源快照：wwi / adventureworks / ema / openfda
-│   ├── staging/              # 可选中间结果，不要求第一版落盘
-│   ├── canonical/            # 统一业务模型数据
-│   ├── exports/              # erpnext / twenty 导入文件
-│   └── quarantine/           # 错误文件；完整复核工作流后置
-├── mappings/                 # 字段、枚举、单位和标识映射
-├── contracts/                # 数据与工具接口合同
-├── evaluations/              # 业务问题、权限与异常验收案例
-├── reports/                  # 数据质量、对账和 agent 评估结果
-└── ops/                      # 后续环境基线、运行与恢复说明
+├── src/operion_etl/          # Reproducible extraction, mapping, validation, and audits
+├── tests/                    # Deterministic ETL and validation tests
+├── contracts/                # Canonical data and future tool contracts
+├── mappings/                 # Source-to-target mappings and fixed assumptions
+├── docs/                     # Product, safety, evaluation, and operating plans
+├── ops/                      # Runbooks for data preparation and recovery
+├── evaluations/              # Evaluation definitions and fixtures
+├── data/                     # Local source snapshots and generated exports
+└── reports/                  # Local validation and reconciliation evidence
 ```
 
-这些目录用于后续工作归档。当前没有业务代码、运行配置或凭据；实际数据与运行输出默认不纳入版本管理。
+Business data and generated reports are excluded from version control by default.
 
-后续逻辑模块仍按 integrations、业务工具/domain、MCP 和 agent 划分；当前代码仅覆盖独立的数据流水线。
+## ETL quick start
 
-## 数据流水线
+Requirements: Python 3.11+, Docker, and the source/target systems described in the
+[runbook](ops/data-pipeline.md).
 
-运行方式和重跑约束见 [WWI download and ETL runbook](ops/data-pipeline.md)，
-统一模型见 [Canonical data contract](contracts/canonical-v1.md)。生成的数据与报告
-按 `.gitignore` 保持在本地，不纳入版本控制。
+```bash
+PYTHONPATH=src python3 -m operion_etl download-wwi
+scripts/restore_wwi.sh data/raw/wwi/<snapshot>/WideWorldImporters-Full.bak
+PYTHONPATH=src python3 -m operion_etl run \
+  --snapshot data/raw/wwi/<snapshot> \
+  --batch-id <unique-batch-id>
+```
+
+Run the deterministic test suite with:
+
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
+
+See the [runbook](ops/data-pipeline.md) for pre-import validation, Twenty loading,
+ERPNext import prerequisites, and post-import reconciliation.
