@@ -13,7 +13,7 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Current status
 
-E0's experimental environment, permission, and recovery baseline has passed. The
+E0's experimental baseline and E1's read-only business-tool gate have passed. The
 project currently includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
@@ -23,13 +23,15 @@ project currently includes:
   expected Company relations;
 - an ERPNext API audit covering 8 Customers, 2 Suppliers, 9 Items, 25 Contacts,
   8 Sales Orders, and 2 Purchase Orders;
-- an ERPNext readback audit command for reconciling manually imported batches; and
+- a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
+  Twenty target identities matched;
+- deterministic customer-overview and fulfilment services exposed as exactly two
+  read-only MCP tools, with the 15 fixed E1 cases passing; and
 - an enterprise operating plan with staged security and acceptance gates.
 
-Read-only business adapters, the MCP layer, and the Operion agent are still in
-progress. The existing target records and E0 readback do not constitute E1
-acceptance. Generated exports alone remain mapping evidence rather than import
-evidence.
+The Operion agent is the next stage (E2) and is not implemented yet. E1 does not
+enable business writes; generated exports alone remain mapping evidence rather
+than import evidence.
 
 The minimum demonstration is a customer overview plus a deterministic order
 fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated

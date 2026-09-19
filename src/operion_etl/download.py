@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 WWI_URL = (
@@ -13,7 +13,9 @@ WWI_URL = (
     "wide-world-importers-v1.0/WideWorldImporters-Full.bak"
 )
 WWI_RELEASE = "wide-world-importers-v1.0"
-WWI_LICENSE_URL = "https://github.com/microsoft/sql-server-samples/blob/master/license.txt"
+WWI_LICENSE_URL = (
+    "https://github.com/microsoft/sql-server-samples/blob/master/license.txt"
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -25,7 +27,7 @@ def sha256_file(path: Path) -> str:
 
 
 def download_wwi(raw_root: Path, snapshot_id: str | None = None) -> Path:
-    acquired_at = datetime.now(timezone.utc)
+    acquired_at = datetime.now(UTC)
     snapshot_id = snapshot_id or acquired_at.strftime("%Y%m%dT%H%M%SZ")
     snapshot_dir = raw_root / snapshot_id
     backup = snapshot_dir / "WideWorldImporters-Full.bak"
@@ -36,21 +38,34 @@ def download_wwi(raw_root: Path, snapshot_id: str | None = None) -> Path:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             actual = sha256_file(backup)
             if actual != manifest.get("sha256"):
-                raise RuntimeError(f"Existing snapshot checksum mismatch: {snapshot_dir}")
+                raise RuntimeError(
+                    f"Existing snapshot checksum mismatch: {snapshot_dir}"
+                )
             return snapshot_dir
-        raise FileExistsError(f"Refusing to overwrite incomplete snapshot: {snapshot_dir}")
+        raise FileExistsError(
+            f"Refusing to overwrite incomplete snapshot: {snapshot_dir}"
+        )
 
     snapshot_dir.mkdir(parents=True)
-    fd, temporary_name = tempfile.mkstemp(prefix="wwi-", suffix=".part", dir=snapshot_dir)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix="wwi-", suffix=".part", dir=snapshot_dir
+    )
     os.close(fd)
     temporary = Path(temporary_name)
     try:
-        request = urllib.request.Request(WWI_URL, headers={"User-Agent": "operion-etl/0.1"})
-        with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+        request = urllib.request.Request(
+            WWI_URL, headers={"User-Agent": "operion-etl/0.1"}
+        )
+        with (
+            urllib.request.urlopen(request, timeout=60) as response,
+            temporary.open("wb") as output,
+        ):
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)
         if temporary.stat().st_size < 10_000_000:
-            raise RuntimeError("Downloaded file is unexpectedly small; refusing to record it")
+            raise RuntimeError(
+                "Downloaded file is unexpectedly small; refusing to record it"
+            )
         temporary.replace(backup)
     except Exception:
         temporary.unlink(missing_ok=True)

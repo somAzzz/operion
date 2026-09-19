@@ -27,6 +27,9 @@ do not modify or impersonate the historical orders or inventory.
 `reports/<batch-id>/identity_map.csv` permits one canonical record to have rows
 for multiple targets. A blank `target_id` with `load_status=pending` means the
 mapping exists but no target write or readback has occurred.
+`load_status=not_applicable` means the deterministic export rules intentionally
+excluded the record (for example, an order line with no open commitment); it is
+preserved for lineage but is not counted as a missing target during reconciliation.
 
 For Twenty, `canonical_id` is exported as the unique `WWI External ID`. Website
 domains remain business attributes: a domain is emitted only when its normalized

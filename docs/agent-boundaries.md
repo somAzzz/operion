@@ -1,6 +1,6 @@
 # Agent / MCP 边界
 
-状态：设计要求，尚未实现或验证。
+状态：E1 只读 MCP 边界已实现并验证；Agent 与写入边界仍待后续阶段实现。
 
 运行实现与验收细节见 [企业运行总方案](enterprise/operating-plan.md)及 [动作控制子方案 E3](enterprise/phases/e3-action-control.md)。本页继续定义能力边界；工具过滤和模型意图不授予权限，首次写入范围仍仅限内部跟进任务。
 

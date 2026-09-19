@@ -6,7 +6,6 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import urlsplit
 
-
 COMPANY_EXTERNAL_ID = "WWI External ID"
 COMPANY_DOMAIN = "Domain Name / Link URL"
 PERSON_COMPANY_EXTERNAL_ID = "Company WWI External ID"
@@ -60,12 +59,16 @@ def validate_twenty_imports(
             issue("company", index, COMPANY_DOMAIN, "duplicate normalized domain")
         elif raw_domain and raw_domain != f"https://{domain}":
             issue(
-                "company", index, COMPANY_DOMAIN,
+                "company",
+                index,
+                COMPANY_DOMAIN,
                 f"domain must be canonicalized as https://{domain}",
             )
         if row.get("Id", "").strip():
             issue(
-                "company", index, "Id",
+                "company",
+                index,
+                "Id",
                 "leave target Id blank; WWI External ID is the only import identity",
             )
 
@@ -74,7 +77,9 @@ def validate_twenty_imports(
     duplicate_people_ids = {
         value for value, count in Counter(people_ids).items() if value and count > 1
     }
-    for index, (row, external_id) in enumerate(zip(people_rows, people_ids, strict=True), start=2):
+    for index, (row, external_id) in enumerate(
+        zip(people_rows, people_ids, strict=True), start=2
+    ):
         if not row.get("First Name", "").strip():
             issue("person", index, "First Name", "person first name is required")
         if not external_id:
@@ -84,15 +89,20 @@ def validate_twenty_imports(
         relation = row.get(PERSON_COMPANY_EXTERNAL_ID, "").strip()
         if relation and relation not in valid_company_ids:
             issue(
-                "person", index, PERSON_COMPANY_EXTERNAL_ID,
+                "person",
+                index,
+                PERSON_COMPANY_EXTERNAL_ID,
                 "relation does not resolve to a Company WWI External ID",
             )
         if not relation:
-            warnings.append({
-                "entity": "person", "row": index,
-                "field": PERSON_COMPANY_EXTERNAL_ID,
-                "message": "no source company relation; leave Company blank",
-            })
+            warnings.append(
+                {
+                    "entity": "person",
+                    "row": index,
+                    "field": PERSON_COMPANY_EXTERNAL_ID,
+                    "message": "no source company relation; leave Company blank",
+                }
+            )
 
     return {
         "status": "passed" if not errors else "failed",

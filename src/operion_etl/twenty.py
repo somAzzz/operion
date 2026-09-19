@@ -30,7 +30,7 @@ class TwentyClient:
         self.api_key = api_key
 
     @classmethod
-    def from_env(cls, env_file: Path = Path(".env")) -> "TwentyClient":
+    def from_env(cls, env_file: Path = Path(".env")) -> TwentyClient:
         values = read_env(env_file)
         return cls(
             values.get("TWENTY_API_BASE_URL", "http://localhost:3000"),
@@ -42,17 +42,23 @@ class TwentyClient:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         if data is not None:
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.base_url + path, data=data, headers=headers)
+        request = urllib.request.Request(
+            self.base_url + path, data=data, headers=headers
+        )
         try:
             with urllib.request.urlopen(request) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Twenty API {error.code} for {path}: {detail}") from error
+            raise RuntimeError(
+                f"Twenty API {error.code} for {path}: {detail}"
+            ) from error
         return result
 
     def graphql(self, query: str, variables: dict | None = None) -> dict:
-        result = self._request("/graphql", {"query": query, "variables": variables or {}})
+        result = self._request(
+            "/graphql", {"query": query, "variables": variables or {}}
+        )
         if result.get("errors"):
             raise RuntimeError(f"Twenty GraphQL error: {result['errors']}")
         return result["data"]
@@ -130,7 +136,9 @@ def _update_identity_map(path: Path, companies: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def _update_run_manifest(identity_map_path: Path, readback_path: Path, result: dict) -> None:
+def _update_run_manifest(
+    identity_map_path: Path, readback_path: Path, result: dict
+) -> None:
     manifest_path = identity_map_path.parent / "run_manifest.json"
     if not manifest_path.exists():
         return
@@ -161,11 +169,15 @@ def load_companies(
     rows = _read_csv(companies_path)
     existing = client.companies()
     by_external_id = {
-        item.get("wwiExternalId"): item for item in existing if item.get("wwiExternalId")
+        item.get("wwiExternalId"): item
+        for item in existing
+        if item.get("wwiExternalId")
     }
     by_name_and_domain = {}
     for item in existing:
-        domain = normalize_domain((item.get("domainName") or {}).get("primaryLinkUrl", ""))
+        domain = normalize_domain(
+            (item.get("domainName") or {}).get("primaryLinkUrl", "")
+        )
         if domain:
             by_name_and_domain[(item.get("name", "").strip(), domain)] = item
     created = 0
@@ -175,10 +187,12 @@ def load_companies(
         current = by_external_id.get(payload["wwiExternalId"])
         payload_domain = normalize_domain(payload["domainName"]["primaryLinkUrl"])
         if current is None and payload_domain:
-            current = by_name_and_domain.get((
-                payload["name"],
-                payload_domain,
-            ))
+            current = by_name_and_domain.get(
+                (
+                    payload["name"],
+                    payload_domain,
+                )
+            )
         if current:
             client.update_company(current["id"], payload)
             updated += 1
@@ -200,7 +214,7 @@ def load_companies(
     actual = {row["wwiExternalId"] for row in readback}
     if expected != actual:
         raise RuntimeError(
-            f"Twenty readback mismatch; missing={sorted(expected-actual)}, extra={sorted(actual-expected)}"
+            f"Twenty readback mismatch; missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
         )
     _update_identity_map(identity_map_path, readback)
     readback_path.parent.mkdir(parents=True, exist_ok=True)

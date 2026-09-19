@@ -97,3 +97,37 @@ PYTHONPATH=src python3 -m operion_etl load-twenty-companies \
 Import People only after Companies. Map `Company WWI External ID` to the Company
 relation and select the Company's unique `WWI External ID` as the matching field.
 The loader uses supported APIs and never changes Twenty's database indexes.
+
+## E1 identity readback
+
+Use the dedicated read-only key to reconcile both Twenty Companies and People.
+The command follows Twenty's cursor pagination, rejects duplicate source or target
+identities, and writes a new local map instead of changing the input file:
+
+```bash
+PYTHONPATH=src python3 -m operion_etl reconcile-identities \
+  --identity-map reports/<batch-id>/identity_map.csv \
+  --output reports/enterprise/e1/<run-id>/identity_map.twenty.csv \
+  --report reports/enterprise/e1/<run-id>/twenty-identity-readback.json \
+  --target twenty
+```
+
+ERPNext uses `ERPNEXT_API_KEY_READ_ONLY` and is disabled unless
+`--erpnext-permission-evidence` identifies the same API Key and proves that every
+protected business DocType is readable while create, update, delete, submit,
+cancel, and amend are denied. The protected set is Customer, Supplier, Item,
+Sales Order, Purchase Order, Warehouse, Bin, and UOM. Contact and ToDo are recorded
+exceptions and do not make the credential globally read-only. Identity
+reconciliation only issues GET requests; it never imports or changes target
+records.
+
+The E1 MCP server exposes only `get_customer_overview` and `check_fulfillment`.
+Authorization scope is server configuration, not a tool argument:
+
+```bash
+OPERION_CANONICAL_DIR=data/canonical/<batch-id> \
+OPERION_IDENTITY_MAP=reports/enterprise/e1/<run-id>/identity_map.csv \
+OPERION_CUSTOMER_IDS=wwi:organization:customer:11 \
+OPERION_OBSERVED_AT=<ISO-8601-readback-time> \
+operion-mcp
+```

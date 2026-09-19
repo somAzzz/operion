@@ -19,7 +19,6 @@ from .pipeline import (
     ERPNEXT_TERRITORY,
 )
 
-
 FILE_HEADERS = {
     "customers.csv": ERPNEXT_CUSTOMER_HEADERS,
     "suppliers.csv": ERPNEXT_SUPPLIER_HEADERS,
@@ -47,7 +46,9 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
     errors: list[dict[str, object]] = []
 
     def issue(filename: str, row: int, field: str, message: str) -> None:
-        errors.append({"file": filename, "row": row, "field": field, "message": message})
+        errors.append(
+            {"file": filename, "row": row, "field": field, "message": message}
+        )
 
     def check_unique_keys(filename: str, rows: list[dict[str, str]]) -> None:
         keys = [row.get("Operion Source Key", "").strip() for row in rows]
@@ -56,9 +57,13 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
             if row.get("ID", "").strip():
                 issue(filename, index, "ID", "leave native ERPNext ID blank for insert")
             if not key:
-                issue(filename, index, "Operion Source Key", "source identity is required")
+                issue(
+                    filename, index, "Operion Source Key", "source identity is required"
+                )
             elif key in duplicates:
-                issue(filename, index, "Operion Source Key", "duplicate source identity")
+                issue(
+                    filename, index, "Operion Source Key", "duplicate source identity"
+                )
 
     customers = files["customers.csv"]
     suppliers = files["suppliers.csv"]
@@ -77,22 +82,42 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
         if not row.get("Customer Name", "").strip():
             issue("customers.csv", index, "Customer Name", "customer name is required")
         if row.get("Customer Group", "").strip() != "Commercial":
-            issue("customers.csv", index, "Customer Group", "expected existing group Commercial")
+            issue(
+                "customers.csv",
+                index,
+                "Customer Group",
+                "expected existing group Commercial",
+            )
         if row.get("Territory", "").strip() != ERPNEXT_TERRITORY:
-            issue("customers.csv", index, "Territory", f"expected leaf territory {ERPNEXT_TERRITORY}")
+            issue(
+                "customers.csv",
+                index,
+                "Territory",
+                f"expected leaf territory {ERPNEXT_TERRITORY}",
+            )
 
     for index, row in enumerate(suppliers, start=2):
         if not row.get("Supplier Name", "").strip():
             issue("suppliers.csv", index, "Supplier Name", "supplier name is required")
         if row.get("Supplier Group", "").strip() != "All Supplier Groups":
-            issue("suppliers.csv", index, "Supplier Group", "expected existing supplier group")
+            issue(
+                "suppliers.csv",
+                index,
+                "Supplier Group",
+                "expected existing supplier group",
+            )
 
     for index, row in enumerate(items, start=2):
         code = row.get("Item Code", "").strip()
         if not code:
             issue("items.csv", index, "Item Code", "item code is required")
         if row.get("Default Unit of Measure", "").strip() != "Unit":
-            issue("items.csv", index, "Default Unit of Measure", "WWI Each must map to existing UOM Unit")
+            issue(
+                "items.csv",
+                index,
+                "Default Unit of Measure",
+                "WWI Each must map to existing UOM Unit",
+            )
         if row.get("Maintain Stock", "").strip() not in {"1", "Yes"}:
             issue("items.csv", index, "Maintain Stock", "stock item must be enabled")
 
@@ -102,23 +127,63 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
         doctype = row.get("Link Document Type (Links)", "").strip()
         name = row.get("Link Name (Links)", "").strip()
         if bool(doctype) != bool(name):
-            issue("contacts.csv", index, "Link Name (Links)", "link type and link name must both be set or both blank")
+            issue(
+                "contacts.csv",
+                index,
+                "Link Name (Links)",
+                "link type and link name must both be set or both blank",
+            )
         elif doctype == "Customer" and name not in customer_names:
-            issue("contacts.csv", index, "Link Name (Links)", "customer relation does not resolve")
+            issue(
+                "contacts.csv",
+                index,
+                "Link Name (Links)",
+                "customer relation does not resolve",
+            )
         elif doctype == "Supplier" and name not in supplier_names:
-            issue("contacts.csv", index, "Link Name (Links)", "supplier relation does not resolve")
+            issue(
+                "contacts.csv",
+                index,
+                "Link Name (Links)",
+                "supplier relation does not resolve",
+            )
         elif doctype and doctype not in {"Customer", "Supplier"}:
-            issue("contacts.csv", index, "Link Document Type (Links)", "unsupported relation type")
+            issue(
+                "contacts.csv",
+                index,
+                "Link Document Type (Links)",
+                "unsupported relation type",
+            )
         email = row.get("Email ID (Email IDs)", "").strip()
         phone = row.get("Number (Contact Numbers)", "").strip()
         if not email:
-            issue("contacts.csv", index, "Email ID (Email IDs)", "contact email child row is required")
+            issue(
+                "contacts.csv",
+                index,
+                "Email ID (Email IDs)",
+                "contact email child row is required",
+            )
         if not phone:
-            issue("contacts.csv", index, "Number (Contact Numbers)", "contact phone child row is required")
+            issue(
+                "contacts.csv",
+                index,
+                "Number (Contact Numbers)",
+                "contact phone child row is required",
+            )
         if email and row.get("Is Primary (Email IDs)", "").strip() != "1":
-            issue("contacts.csv", index, "Is Primary (Email IDs)", "primary email flag must be 1")
+            issue(
+                "contacts.csv",
+                index,
+                "Is Primary (Email IDs)",
+                "primary email flag must be 1",
+            )
         if phone and row.get("Is Primary Phone (Contact Numbers)", "").strip() != "1":
-            issue("contacts.csv", index, "Is Primary Phone (Contact Numbers)", "primary phone flag must be 1")
+            issue(
+                "contacts.csv",
+                index,
+                "Is Primary Phone (Contact Numbers)",
+                "primary phone flag must be 1",
+            )
 
     metrics: dict[str, int] = {
         "customers": len(customers),
@@ -136,7 +201,7 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
     ) -> None:
         rows = files[filename]
         headers = FILE_HEADERS[filename]
-        parent_headers = headers[:headers.index(child_start)]
+        parent_headers = headers[: headers.index(child_start)]
         parent_keys: list[str] = []
         child_keys: list[str] = []
         active_parent = ""
@@ -154,61 +219,133 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
                     active_date = None
                     issue(filename, index, "Date", "date must use YYYY-MM-DD")
                 if row.get("ID", "").strip():
-                    issue(filename, index, "ID", "leave native ERPNext ID blank for insert")
+                    issue(
+                        filename,
+                        index,
+                        "ID",
+                        "leave native ERPNext ID blank for insert",
+                    )
                 if row.get(relation_field, "").strip() not in valid_relations:
-                    issue(filename, index, relation_field, "parent relation does not resolve to imported master")
+                    issue(
+                        filename,
+                        index,
+                        relation_field,
+                        "parent relation does not resolve to imported master",
+                    )
                 if row.get("Company", "").strip() != ERPNEXT_COMPANY:
                     issue(filename, index, "Company", f"expected {ERPNEXT_COMPANY}")
                 if row.get("Currency", "").strip() != ERPNEXT_CURRENCY:
                     issue(filename, index, "Currency", f"expected {ERPNEXT_CURRENCY}")
                 if row.get("Exchange Rate", "").strip() != "1":
-                    issue(filename, index, "Exchange Rate", "demo target-currency mapping requires exchange rate 1")
-                parent_due_field = "Delivery Date" if filename == "sales_orders.csv" else "Required By"
+                    issue(
+                        filename,
+                        index,
+                        "Exchange Rate",
+                        "demo target-currency mapping requires exchange rate 1",
+                    )
+                parent_due_field = (
+                    "Delivery Date" if filename == "sales_orders.csv" else "Required By"
+                )
                 try:
-                    parent_due = date.fromisoformat(row.get(parent_due_field, "").strip())
+                    parent_due = date.fromisoformat(
+                        row.get(parent_due_field, "").strip()
+                    )
                     invalid_due = active_date is not None and (
                         parent_due <= active_date
                         if filename == "sales_orders.csv"
                         else parent_due < active_date
                     )
                     if invalid_due:
-                        relation = "after" if filename == "sales_orders.csv" else "on or after"
-                        issue(filename, index, parent_due_field, f"must be {relation} Date")
+                        relation = (
+                            "after" if filename == "sales_orders.csv" else "on or after"
+                        )
+                        issue(
+                            filename,
+                            index,
+                            parent_due_field,
+                            f"must be {relation} Date",
+                        )
                 except ValueError:
                     issue(filename, index, parent_due_field, "date must use YYYY-MM-DD")
             else:
                 if not active_parent:
-                    issue(filename, index, parent_key, "child row appears before a parent row")
+                    issue(
+                        filename,
+                        index,
+                        parent_key,
+                        "child row appears before a parent row",
+                    )
                 for field in parent_headers:
                     if row.get(field, "").strip():
-                        issue(filename, index, field, "continuation child row must leave all parent columns blank")
+                        issue(
+                            filename,
+                            index,
+                            field,
+                            "continuation child row must leave all parent columns blank",
+                        )
 
             item_code = row.get("Item Code (Items)", "").strip()
             child_key = row.get("Operion Source Key (Items)", "").strip()
             if item_code not in item_codes:
-                issue(filename, index, "Item Code (Items)", "item relation does not resolve")
+                issue(
+                    filename,
+                    index,
+                    "Item Code (Items)",
+                    "item relation does not resolve",
+                )
             if not child_key:
-                issue(filename, index, "Operion Source Key (Items)", "child source identity is required")
+                issue(
+                    filename,
+                    index,
+                    "Operion Source Key (Items)",
+                    "child source identity is required",
+                )
             child_keys.append(child_key)
             quantity = _decimal(row.get("Quantity (Items)", ""))
             rate = _decimal(row.get("Rate (Items)", ""))
             amount = _decimal(row.get("Amount (Items)", ""))
             if quantity is None or quantity <= 0:
-                issue(filename, index, "Quantity (Items)", "open commitment quantity must be positive")
+                issue(
+                    filename,
+                    index,
+                    "Quantity (Items)",
+                    "open commitment quantity must be positive",
+                )
             if rate is None or rate < 0:
-                issue(filename, index, "Rate (Items)", "rate must be a non-negative number")
+                issue(
+                    filename,
+                    index,
+                    "Rate (Items)",
+                    "rate must be a non-negative number",
+                )
             if quantity is not None and rate is not None and amount is not None:
                 if abs(quantity * rate - amount) > Decimal("0.01"):
-                    issue(filename, index, "Amount (Items)", "amount does not equal quantity times rate")
+                    issue(
+                        filename,
+                        index,
+                        "Amount (Items)",
+                        "amount does not equal quantity times rate",
+                    )
             else:
-                issue(filename, index, "Amount (Items)", "quantity, rate, and amount must be numeric")
+                issue(
+                    filename,
+                    index,
+                    "Amount (Items)",
+                    "quantity, rate, and amount must be numeric",
+                )
             for field in ("Stock UOM (Items)", "UOM (Items)"):
                 if row.get(field, "").strip() != "Unit":
                     issue(filename, index, field, "expected existing UOM Unit")
             if row.get("UOM Conversion Factor (Items)", "").strip() != "1":
-                issue(filename, index, "UOM Conversion Factor (Items)", "expected conversion factor 1")
+                issue(
+                    filename,
+                    index,
+                    "UOM Conversion Factor (Items)",
+                    "expected conversion factor 1",
+                )
             child_due_field = (
-                "Delivery Date (Items)" if filename == "sales_orders.csv"
+                "Delivery Date (Items)"
+                if filename == "sales_orders.csv"
                 else "Required By (Items)"
             )
             try:
@@ -219,27 +356,52 @@ def validate_erpnext_imports(files: dict[str, list[dict[str, str]]]) -> dict:
                     else child_due < active_date
                 )
                 if invalid_due:
-                    relation = "after" if filename == "sales_orders.csv" else "on or after"
-                    issue(filename, index, child_due_field, f"must be {relation} parent Date")
+                    relation = (
+                        "after" if filename == "sales_orders.csv" else "on or after"
+                    )
+                    issue(
+                        filename,
+                        index,
+                        child_due_field,
+                        f"must be {relation} parent Date",
+                    )
             except ValueError:
                 issue(filename, index, child_due_field, "date must use YYYY-MM-DD")
 
         for value, count in Counter(parent_keys).items():
             if count > 1:
-                issue(filename, 0, parent_key, f"duplicate parent source identity: {value}")
+                issue(
+                    filename,
+                    0,
+                    parent_key,
+                    f"duplicate parent source identity: {value}",
+                )
         for value, count in Counter(child_keys).items():
             if value and count > 1:
-                issue(filename, 0, "Operion Source Key (Items)", f"duplicate child source identity: {value}")
-        metric_prefix = "sales_orders" if filename == "sales_orders.csv" else "purchase_orders"
+                issue(
+                    filename,
+                    0,
+                    "Operion Source Key (Items)",
+                    f"duplicate child source identity: {value}",
+                )
+        metric_prefix = (
+            "sales_orders" if filename == "sales_orders.csv" else "purchase_orders"
+        )
         metrics[metric_prefix] = parent_count
         metrics[f"{metric_prefix}_items"] = len(rows)
 
     check_orders(
-        "sales_orders.csv", "Operion Source Key", "Customer", customer_names,
+        "sales_orders.csv",
+        "Operion Source Key",
+        "Customer",
+        customer_names,
         "Item Code (Items)",
     )
     check_orders(
-        "purchase_orders.csv", "Operion Source Key", "Supplier", supplier_names,
+        "purchase_orders.csv",
+        "Operion Source Key",
+        "Supplier",
+        supplier_names,
         "Item Code (Items)",
     )
 
@@ -261,18 +423,27 @@ def validate_directory(directory: Path, report: Path | None = None) -> dict:
     for filename, expected_headers in FILE_HEADERS.items():
         path = directory / filename
         if not path.is_file():
-            header_errors.append({
-                "file": filename, "row": 1, "field": "", "message": "required file is missing",
-            })
+            header_errors.append(
+                {
+                    "file": filename,
+                    "row": 1,
+                    "field": "",
+                    "message": "required file is missing",
+                }
+            )
             files[filename] = []
             continue
         actual_headers, rows = _read_csv(path)
         files[filename] = rows
         if actual_headers != expected_headers:
-            header_errors.append({
-                "file": filename, "row": 1, "field": "headers",
-                "message": "headers do not exactly match the ERPNext import template",
-            })
+            header_errors.append(
+                {
+                    "file": filename,
+                    "row": 1,
+                    "field": "headers",
+                    "message": "headers do not exactly match the ERPNext import template",
+                }
+            )
     result = validate_erpnext_imports(files)
     if header_errors:
         result["errors"] = header_errors + result["errors"]
