@@ -13,18 +13,23 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Current status
 
-The project currently includes:
+E0's experimental environment, permission, and recovery baseline has passed. The
+project currently includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
 - canonical records and target mappings for Twenty and ERPNext;
 - pre-import validation for the generated files;
-- a small Twenty Company import with REST readback into the identity map;
+- Twenty REST readback for 10 WWI Companies and 25 People, including the 18
+  expected Company relations;
+- an ERPNext API audit covering 8 Customers, 2 Suppliers, 9 Items, 25 Contacts,
+  8 Sales Orders, and 2 Purchase Orders;
 - an ERPNext readback audit command for reconciling manually imported batches; and
 - an enterprise operating plan with staged security and acceptance gates.
 
-The Twenty People import, ERPNext business-state setup, read-only business tools,
-MCP layer, and agent are still in progress. Generated exports are evidence of
-mapping, not evidence that the corresponding target records were imported.
+Read-only business adapters, the MCP layer, and the Operion agent are still in
+progress. The existing target records and E0 readback do not constitute E1
+acceptance. Generated exports alone remain mapping evidence rather than import
+evidence.
 
 The minimum demonstration is a customer overview plus a deterministic order
 fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
