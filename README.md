@@ -13,7 +13,7 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Current status
 
-E0's experimental baseline and E1's read-only business-tool gate have passed. The
+E0, E1, and the E2 read-only Agent gate have passed. The
 project currently includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
@@ -26,12 +26,14 @@ project currently includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer-overview and fulfilment services exposed as exactly two
-  read-only MCP tools, with the 15 fixed E1 cases passing; and
+  read-only MCP tools, with the 15 fixed E1 cases passing;
+- a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
+  an AG-UI FastAPI endpoint, and an assistant-ui evidence desk; and
 - an enterprise operating plan with staged security and acceptance gates.
 
-The Operion agent is the next stage (E2) and is not implemented yet. E1 does not
-enable business writes; generated exports alone remain mapping evidence rather
-than import evidence.
+The E2 baseline passes all 15 behavior cases three times and all seven model
+compatibility probes. It still does not enable business writes; E3 is the next
+stage and will add one separately approved action path.
 
 The minimum demonstration is a customer overview plus a deterministic order
 fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
@@ -61,6 +63,7 @@ The detailed design documents are currently written in Chinese:
 - [Data directory conventions](data/README.md)
 - [WWI download and ETL runbook](ops/data-pipeline.md)
 - [Canonical data contract](contracts/canonical-v1.md)
+- [E2 read-only Agent runbook](ops/e2-agent.md)
 
 ## Repository layout
 

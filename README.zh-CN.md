@@ -8,12 +8,14 @@
 
 ![Operion 系统架构](docs/imgs/pipeline.png)
 
-当前阶段：**E0 实验环境基线与 E1 只读业务工具已通过，下一步进入 E2 只读 Agent**。
+当前阶段：**E0、E1 与 E2 只读 Agent 已通过，下一步进入 E3 受控动作**。
 WWI 下载与最小 ETL 已实现；Twenty 已回读 10 个 WWI Company 和 25 个 People，
 其中 18 个 People 具备预期 Company 关联；ERPNext 已回读并核对 8 个客户、2 个供应商、
 9 个商品、25 个联系人、8 张销售订单和 2 张采购订单。双系统 identity map 已完成
 ERPNext 72/72、Twenty 35/35 回读；客户概览和履约检查已作为仅有的两个只读 MCP 工具
-通过 15 个固定 E1 案例。Operion Agent 尚未实现，E1 不开放业务写入。
+通过 15 个固定 E1 案例。E2 已实现本地 SGLang/Pydantic AI Agent、AG-UI
+接入、服务端可信会话与 assistant-ui 证据界面；15 个案例各重复 3 次全部通过，
+且仍不开放业务写入。
 
 最小演示：客户概览入口＋履约检查主场景＋15 个评估案例。先以小样本和只读适配器连接 Agent，持续同步后置；首个写操作仅创建内部跟进任务。
 
@@ -25,6 +27,7 @@ ERPNext 72/72、Twenty 35/35 回读；客户概览和履约检查已作为仅有
 - [人工功能与 agent 设计对照](docs/human-functions-agent-map.md)：需要了解哪些业务功能，哪些判断交给人。
 - [Agent / MCP 边界](docs/agent-boundaries.md)：工具范围、权限、审批和验证要求。
 - [最小演示与评估](docs/minimum-demo.md)：固定业务日期、履约口径、15 个案例与退出条件。
+- [E2 Agent 运行手册](ops/e2-agent.md)：固定版本、启动、评测、恢复与限制。
 - [数据目录说明](data/README.md)：原始数据、加工数据和导出结果的保存规则。
 
 ## 目录

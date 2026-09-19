@@ -7,7 +7,13 @@ name = "operion-etl"
 version = "0.1.0"
 description = "Reproducible Wide World Importers sample ETL for Operion"
 requires-python = ">=3.11"
-dependencies = ["mcp>=2,<3"]
+dependencies = [
+    "fastapi==0.141.1",
+    "httpx2==2.13.0",
+    "mcp>=2,<3",
+    "pydantic-ai-slim[ag-ui,openai]==2.46.0",
+    "uvicorn==0.53.0",
+]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.14,<1"]
@@ -15,6 +21,9 @@ dev = ["ruff>=0.14,<1"]
 [project.scripts]
 operion-etl = "operion_etl.cli:main"
 operion-mcp = "operion_etl.mcp_server:main"
+operion-agent = "operion_etl.agent_app:main"
+operion-evaluate-e2 = "operion_etl.e2_evaluation:main"
+operion-model-compatibility = "operion_etl.model_compatibility:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
