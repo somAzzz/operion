@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .download import download_wwi
+from .e2_data import prepare_e2_batch, seed_e2_targets
 from .erpnext_audit import audit_erpnext
 from .erpnext_preimport import validate_directory
 from .identity_readback import (
@@ -78,6 +80,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reconcile.add_argument("--env-file", type=Path, default=Path(".env"))
     reconcile.add_argument("--erpnext-permission-evidence", type=Path)
+    prepare_e2 = subparsers.add_parser(
+        "prepare-e2-data",
+        help="Build a deterministic E2 evaluation batch from the accepted E1 batch",
+    )
+    prepare_e2.add_argument("--base-directory", type=Path, required=True)
+    prepare_e2.add_argument("--base-identity-map", type=Path, required=True)
+    prepare_e2.add_argument("--output-directory", type=Path, required=True)
+    prepare_e2.add_argument("--output-identity-map", type=Path, required=True)
+    seed_e2 = subparsers.add_parser(
+        "seed-e2-targets",
+        help="Idempotently load the prepared E2 fixtures into target systems",
+    )
+    seed_e2.add_argument("--identity-map", type=Path, required=True)
+    seed_e2.add_argument("--report", type=Path, required=True)
+    seed_e2.add_argument("--env-file", type=Path, default=Path(".env"))
     return parser
 
 
@@ -85,12 +102,14 @@ def reconcile_identities(args: argparse.Namespace) -> dict:
     values = read_env(args.env_file)
     targets = set(args.target)
     readbacks = []
+    source_observed_at: dict[str, str] = {}
     if "twenty" in targets:
         client = TwentyReadClient(
             values.get("TWENTY_API_BASE_URL", "http://localhost:3000"),
             values.get("TWENTY_API_KEY_READ_ONLY", ""),
         )
         readbacks.extend(collect_twenty_readbacks(client))
+        source_observed_at["twenty"] = datetime.now(UTC).isoformat()
     if "erpnext" in targets:
         token = values.get("ERPNEXT_API_KEY_READ_ONLY", "")
         if args.erpnext_permission_evidence is None:
@@ -100,9 +119,17 @@ def reconcile_identities(args: argparse.Namespace) -> dict:
             values.get("ERPNEXT_API_BASE_URL", "http://localhost:8080"), token
         )
         readbacks.extend(collect_erpnext_readbacks(client))
+        source_observed_at["erpnext"] = datetime.now(UTC).isoformat()
     rows, result = reconcile_identity_rows(
         read_identity_map(args.identity_map), readbacks, targets
     )
+    result["source_observed_at"] = source_observed_at
+    if source_observed_at.keys() >= {"twenty", "erpnext"}:
+        twenty_time = datetime.fromisoformat(source_observed_at["twenty"])
+        erpnext_time = datetime.fromisoformat(source_observed_at["erpnext"])
+        result["snapshot_skew_seconds"] = abs(
+            (twenty_time - erpnext_time).total_seconds()
+        )
     write_identity_map(args.output, rows)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -156,3 +183,14 @@ def main() -> None:
         print(result)
         if result["status"] != "passed":
             raise SystemExit(1)
+    elif args.command == "prepare-e2-data":
+        print(
+            prepare_e2_batch(
+                args.base_directory,
+                args.base_identity_map,
+                args.output_directory,
+                args.output_identity_map,
+            )
+        )
+    elif args.command == "seed-e2-targets":
+        print(seed_e2_targets(args.identity_map, args.report, args.env_file))

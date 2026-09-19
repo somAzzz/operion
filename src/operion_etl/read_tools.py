@@ -69,6 +69,18 @@ def _number(value: Decimal) -> str:
     return format(value.normalize(), "f")
 
 
+def _timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise InvalidBusinessInputError(
+            "observed_at must be an ISO-8601 timestamp"
+        ) from error
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 class CanonicalRepository:
     """Allowlisted reader for one immutable public-sample canonical batch."""
 
@@ -87,15 +99,33 @@ class CanonicalRepository:
         directory: Path,
         identity_map: Path | None = None,
         observed_at: str | None = None,
+        twenty_observed_at: str | None = None,
+        erpnext_observed_at: str | None = None,
         stale_after_seconds: int = 3600,
+        max_snapshot_skew_seconds: int = 300,
     ) -> None:
         self.directory = directory
-        self.observed_at = observed_at or datetime.now(UTC).isoformat()
-        observed = datetime.fromisoformat(self.observed_at.replace("Z", "+00:00"))
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=UTC)
-        age = (datetime.now(UTC) - observed).total_seconds()
-        self.source_stale = age > stale_after_seconds
+        fallback_observed_at = observed_at or datetime.now(UTC).isoformat()
+        self.source_observed_at = {
+            "twenty": twenty_observed_at or fallback_observed_at,
+            "erpnext": erpnext_observed_at or fallback_observed_at,
+        }
+        observed = {
+            source: _timestamp(value)
+            for source, value in self.source_observed_at.items()
+        }
+        oldest_observed = min(observed.values())
+        self.observed_at = oldest_observed.isoformat()
+        now = datetime.now(UTC)
+        self.source_stale_by_system = {
+            source: (now - timestamp).total_seconds() > stale_after_seconds
+            for source, timestamp in observed.items()
+        }
+        self.source_stale = any(self.source_stale_by_system.values())
+        self.snapshot_skew_seconds = round(
+            abs((observed["twenty"] - observed["erpnext"]).total_seconds()), 3
+        )
+        self.snapshot_skew = self.snapshot_skew_seconds > max_snapshot_skew_seconds
         self.data = {name: _read_csv(directory / f"{name}.csv") for name in self.FILES}
         self.target_ids: dict[tuple[str, str], str] = {}
         if identity_map is not None:
@@ -119,15 +149,24 @@ class CanonicalRepository:
         customers = [
             row for row in self.data["organizations"] if row["roles"] == "customer"
         ]
-        if customer.startswith("wwi:organization:customer:"):
-            matches = [row for row in customers if row["canonical_id"] == customer]
+        matches = [row for row in customers if row["canonical_id"] == customer]
+        if matches:
+            if not scope.allows_customer(matches[0]["canonical_id"]):
+                raise ScopeDeniedError("customer is outside the authorized scope")
         else:
             needle = customer.strip().casefold()
-            matches = [
+            name_matches = [
                 row for row in customers if row["name"].strip().casefold() == needle
             ]
-        if not matches:
-            raise NotFoundError("customer was not found")
+            if not name_matches:
+                raise NotFoundError("customer was not found")
+            matches = [
+                row
+                for row in name_matches
+                if scope.allows_customer(row["canonical_id"])
+            ]
+            if not matches:
+                raise ScopeDeniedError("customer is outside the authorized scope")
         if len(matches) > 1:
             raise AmbiguousCustomerError(
                 [
@@ -137,8 +176,6 @@ class CanonicalRepository:
             )
         organization = matches[0]
         canonical_id = organization["canonical_id"]
-        if not scope.allows_customer(canonical_id):
-            raise ScopeDeniedError("customer is outside the authorized scope")
 
         contacts = [
             {
@@ -165,6 +202,11 @@ class CanonicalRepository:
         orders.sort(
             key=lambda row: (row["order_date"], row["canonical_id"]), reverse=True
         )
+        warnings = []
+        if self.source_stale:
+            warnings.append("source_stale")
+        if self.snapshot_skew:
+            warnings.append("source_snapshot_skew")
         return {
             "contract_version": "customer-overview-v1",
             "operating_company": scope.operating_company,
@@ -178,9 +220,11 @@ class CanonicalRepository:
             "orders": orders[:max_orders],
             "has_more_orders": len(orders) > max_orders,
             "observed_at": self.observed_at,
+            "source_observed_at": self.source_observed_at,
+            "snapshot_skew_seconds": self.snapshot_skew_seconds,
             "sources": ["canonical-v1", "twenty", "erpnext"],
             "missing": [],
-            "warnings": ["source_stale"] if self.source_stale else [],
+            "warnings": warnings,
         }
 
     def fulfillment_case(self, case_id: str) -> dict[str, Any]:
@@ -192,7 +236,10 @@ class CanonicalRepository:
         if not matches:
             raise NotFoundError("fulfillment case was not found")
         return evaluate_fulfillment(
-            matches[0], observed_at=self.observed_at, source_stale=self.source_stale
+            matches[0],
+            observed_at=self.source_observed_at["erpnext"],
+            source_stale=self.source_stale_by_system["erpnext"],
+            source_observed_at={"erpnext": self.source_observed_at["erpnext"]},
         )
 
 
@@ -201,6 +248,7 @@ def evaluate_fulfillment(
     *,
     observed_at: str,
     source_stale: bool = False,
+    source_observed_at: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     required = {
         "case_id",
@@ -290,5 +338,17 @@ def evaluate_fulfillment(
         ],
         "data_class": scenario["data_class"],
         "observed_at": observed_at,
-        "sources": [str(scenario.get("derived_from") or ""), "fulfillment-v1"],
+        "source_observed_at": source_observed_at or {"erpnext": observed_at},
+        "sources": [
+            source
+            for source in (
+                str(scenario.get("derived_from") or ""),
+                str(scenario.get("on_hand_source") or ""),
+                str(scenario.get("reservation_source") or ""),
+                str(scenario.get("inbound_source") or ""),
+                str(scenario.get("fulfillment_source") or ""),
+                "fulfillment-v1",
+            )
+            if source
+        ],
     }

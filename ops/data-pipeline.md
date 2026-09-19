@@ -131,3 +131,6 @@ OPERION_CUSTOMER_IDS=wwi:organization:customer:11 \
 OPERION_OBSERVED_AT=<ISO-8601-readback-time> \
 operion-mcp
 ```
+
+Before E2, prepare and verify the real ambiguity, no-order, inventory, reservation,
+inbound, and partial-delivery fixtures using the [E2 data runbook](e2-data.md).

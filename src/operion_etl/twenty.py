@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -63,12 +64,35 @@ class TwentyClient:
             raise RuntimeError(f"Twenty GraphQL error: {result['errors']}")
         return result["data"]
 
+    def records(self, resource: str, page_size: int = 60) -> list[dict]:
+        records: list[dict] = []
+        cursor = ""
+        while True:
+            params: dict[str, str | int] = {"limit": page_size}
+            if cursor:
+                params["starting_after"] = cursor
+            payload = self._request(
+                f"/rest/{resource}?{urllib.parse.urlencode(params)}"
+            )
+            data = payload.get("data", [])
+            if isinstance(data, dict):
+                data = data.get(resource, [])
+            if not isinstance(data, list):
+                raise RuntimeError(f"Twenty {resource} response is not a list")
+            records.extend(data)
+            page_info = payload.get("pageInfo") or {}
+            if not page_info.get("hasNextPage"):
+                return records
+            next_cursor = str(page_info.get("endCursor") or "")
+            if not next_cursor or next_cursor == cursor:
+                raise RuntimeError(f"Twenty {resource} cursor did not advance")
+            cursor = next_cursor
+
     def companies(self) -> list[dict]:
-        payload = self._request("/rest/companies?limit=60")
-        data = payload.get("data", [])
-        if isinstance(data, dict):
-            data = data.get("companies", [])
-        return data
+        return self.records("companies")
+
+    def people(self) -> list[dict]:
+        return self.records("people")
 
     def create_company(self, data: dict) -> dict:
         query = """
@@ -89,6 +113,26 @@ mutation UpdateCompany($id: UUID!, $data: CompanyUpdateInput!) {
 }
 """
         return self.graphql(query, {"id": record_id, "data": data})["updateCompany"]
+
+    def create_person(self, data: dict) -> dict:
+        query = """
+mutation CreatePerson($data: PersonCreateInput!) {
+  createPerson(data: $data) {
+    id name { firstName lastName } companyId wwiExternalId
+  }
+}
+"""
+        return self.graphql(query, {"data": data})["createPerson"]
+
+    def update_person(self, record_id: str, data: dict) -> dict:
+        query = """
+mutation UpdatePerson($id: UUID!, $data: PersonUpdateInput!) {
+  updatePerson(id: $id, data: $data) {
+    id name { firstName lastName } companyId wwiExternalId
+  }
+}
+"""
+        return self.graphql(query, {"id": record_id, "data": data})["updatePerson"]
 
 
 def _company_payload(row: dict[str, str]) -> dict:

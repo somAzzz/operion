@@ -79,12 +79,22 @@ def server_from_environment() -> MCPServer:
     if not identity_value:
         raise RuntimeError("OPERION_IDENTITY_MAP is required")
     observed_at = os.environ.get("OPERION_OBSERVED_AT", "").strip()
-    if not observed_at:
-        raise RuntimeError("OPERION_OBSERVED_AT is required")
+    twenty_observed_at = os.environ.get("OPERION_TWENTY_OBSERVED_AT", "").strip()
+    erpnext_observed_at = os.environ.get("OPERION_ERPNEXT_OBSERVED_AT", "").strip()
+    if not observed_at and not (twenty_observed_at and erpnext_observed_at):
+        raise RuntimeError(
+            "set OPERION_OBSERVED_AT or both OPERION_TWENTY_OBSERVED_AT and "
+            "OPERION_ERPNEXT_OBSERVED_AT"
+        )
     repository = CanonicalRepository(
         canonical_dir,
         identity_map=Path(identity_value),
-        observed_at=observed_at,
+        observed_at=observed_at or None,
+        twenty_observed_at=twenty_observed_at or None,
+        erpnext_observed_at=erpnext_observed_at or None,
+        max_snapshot_skew_seconds=int(
+            os.environ.get("OPERION_MAX_SNAPSHOT_SKEW_SECONDS", "300")
+        ),
     )
     scope = AccessScope(
         operating_company=os.environ.get("OPERION_COMPANY", "AI Demo GmbH"),

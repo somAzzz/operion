@@ -71,6 +71,10 @@ class IdentityReadbackError(RuntimeError):
     pass
 
 
+def is_canonical_id(value: str) -> bool:
+    return value.startswith(("wwi:", "operion:"))
+
+
 class JsonReadClient:
     """Small GET-only JSON client used by E1 identity reconciliation."""
 
@@ -203,7 +207,7 @@ def collect_twenty_readbacks(client: TwentyReadClient) -> list[dict[str, str]]:
         for record in client.records(resource):
             canonical_id = str(record.get("wwiExternalId") or "")
             target_id = str(record.get("id") or "")
-            if canonical_id.startswith("wwi:") and target_id:
+            if is_canonical_id(canonical_id) and target_id:
                 readbacks.append(
                     {
                         "target_system": "twenty",
@@ -224,7 +228,7 @@ def collect_erpnext_readbacks(client: ERPNextReadClient) -> list[dict[str, str]]
         for record in records:
             canonical_id = str(record.get(source_field) or "")
             target_id = str(record.get("name") or "")
-            if canonical_id.startswith("wwi:") and target_id:
+            if is_canonical_id(canonical_id) and target_id:
                 readbacks.append(
                     {
                         "target_system": "erpnext",
@@ -244,7 +248,7 @@ def collect_erpnext_readbacks(client: ERPNextReadClient) -> list[dict[str, str]]
             for child in children:
                 canonical_id = str(child.get(source_field) or "")
                 target_id = str(child.get("name") or "")
-                if canonical_id.startswith("wwi:") and target_id:
+                if is_canonical_id(canonical_id) and target_id:
                     readbacks.append(
                         {
                             "target_system": "erpnext",

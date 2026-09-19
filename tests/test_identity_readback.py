@@ -15,6 +15,7 @@ from operion_etl.identity_readback import (
     TwentyReadClient,
     collect_erpnext_readbacks,
     collect_twenty_readbacks,
+    is_canonical_id,
     reconcile_identity_rows,
     verify_erpnext_permission_evidence,
 )
@@ -45,6 +46,11 @@ class FakeResponse(io.StringIO):
 
 
 class IdentityReadbackTests(unittest.TestCase):
+    def test_supported_canonical_namespaces_include_e2_records(self):
+        self.assertTrue(is_canonical_id("wwi:organization:customer:1"))
+        self.assertTrue(is_canonical_id("operion:e2:organization:customer:a"))
+        self.assertFalse(is_canonical_id("external:organization:customer:1"))
+
     def test_identity_map_excludes_orders_without_open_commitments(self):
         canonical = {
             "organizations": [],

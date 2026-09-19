@@ -45,6 +45,18 @@ class ReadToolAcceptanceTests(unittest.TestCase):
             self.repository.customer_overview(original["name"], scope)
         self.assertEqual(2, len(raised.exception.candidates))
 
+    def test_name_resolution_does_not_disclose_out_of_scope_candidates(self):
+        original = next(
+            row
+            for row in self.repository.data["organizations"]
+            if row["canonical_id"] == self.customer_id
+        )
+        duplicate = dict(original)
+        duplicate["canonical_id"] = "wwi:organization:customer:999999"
+        self.repository.data["organizations"].append(duplicate)
+        result = self.repository.customer_overview(original["name"], self.scope)
+        self.assertEqual(self.customer_id, result["customer"]["canonical_id"])
+
     def test_c03_customer_with_no_orders_is_not_a_source_failure(self):
         self.repository.data["sales_orders"] = []
         result = self.repository.customer_overview(self.customer_id, self.scope)
@@ -108,6 +120,36 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         result = repository.fulfillment_case("F01")
         self.assertEqual("insufficient_information", result["result"])
         self.assertIn("source_freshness", result["missing"])
+
+    def test_source_timestamps_are_independent_and_skew_is_visible(self):
+        now = datetime.now(UTC)
+        twenty = now.isoformat()
+        erpnext = (now - timedelta(minutes=10)).isoformat()
+        repository = CanonicalRepository(
+            CANONICAL,
+            twenty_observed_at=twenty,
+            erpnext_observed_at=erpnext,
+            max_snapshot_skew_seconds=300,
+        )
+        result = repository.customer_overview(self.customer_id, self.scope)
+        self.assertEqual(twenty, result["source_observed_at"]["twenty"])
+        self.assertEqual(erpnext, result["source_observed_at"]["erpnext"])
+        self.assertEqual(600, result["snapshot_skew_seconds"])
+        self.assertIn("source_snapshot_skew", result["warnings"])
+
+    def test_fulfillment_freshness_only_depends_on_erpnext(self):
+        repository = CanonicalRepository(
+            CANONICAL,
+            twenty_observed_at=(datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            erpnext_observed_at=datetime.now(UTC).isoformat(),
+            stale_after_seconds=60,
+        )
+        result = repository.fulfillment_case("F01")
+        self.assertEqual("satisfiable", result["result"])
+        self.assertEqual(
+            {"erpnext": repository.source_observed_at["erpnext"]},
+            result["source_observed_at"],
+        )
 
     def test_fulfillment_recomputes_remaining_instead_of_trusting_input(self):
         scenario = dict(self.repository.data["fulfillment_scenarios"][0])
