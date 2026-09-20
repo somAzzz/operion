@@ -8,17 +8,18 @@
 
 ![Operion 系统架构](docs/imgs/pipeline.png)
 
-当前阶段：**E0–E3 已通过，下一步进入 E4 单一受控写入**。
+当前阶段：**E0–E4 已通过，下一步进入 E5 企业试运行**。
 WWI 下载与最小 ETL 已实现；Twenty 已回读 10 个 WWI Company 和 25 个 People，
 其中 18 个 People 具备预期 Company 关联；ERPNext 已回读并核对 8 个客户、2 个供应商、
 9 个商品、25 个联系人、8 张销售订单和 2 张采购订单。双系统 identity map 已完成
 ERPNext 72/72、Twenty 35/35 回读；客户概览和履约检查已作为仅有的两个只读 MCP 工具
 通过 15 个固定 E1 案例。E2 已实现本地 SGLang/Pydantic AI Agent、AG-UI
 接入、服务端可信会话与 assistant-ui 证据界面；15 个案例各重复 3 次全部通过，
-且仍不开放业务写入。E3 已实现 PostgreSQL 动作账本、可信独立审批、租约、
+并在 E2 阶段保持业务写入关闭。E3 已实现 PostgreSQL 动作账本、可信独立审批、租约、
 未知结果对账、W01–W15 故障验证，以及 `/approvals`、`/actions` 状态页面；
-当前执行目标仅为持久化测试桩。Twenty Task 的幂等、关联、通知和故障语义须在
-E4 隔离验证后才能启用真实写入。
+E4 已在隔离 Twenty 2.39.0 的公开/模拟数据上验证单一内部 Task 创建、确定性
+Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实写入仍仅限该隔离演示；
+企业身份、真实数据、告警和发布控制须通过 E5。
 
 最小演示：客户概览入口＋履约检查主场景＋15 个评估案例。先以小样本和只读适配器连接 Agent，持续同步后置；首个写操作仅创建内部跟进任务。
 
@@ -33,6 +34,8 @@ E4 隔离验证后才能启用真实写入。
 - [E2 Agent 运行手册](ops/e2-agent.md)：固定版本、启动、评测、恢复与限制。
 - [E3 动作控制合同](contracts/e3-action-control-v1.md)：动作 schema、状态机、审批与恢复保证。
 - [E3 动作控制运行手册](ops/e3-action-control.md)：部署、验收、暂停与故障处置。
+- [E4 跟进任务合同](contracts/e4-followup-task-v1.md)：唯一真实写入的固定范围与保证。
+- [E4 跟进任务运行手册](ops/e4-followup-task.md)：凭据隔离、审批、恢复与补偿。
 - [数据目录说明](data/README.md)：原始数据、加工数据和导出结果的保存规则。
 
 ## 目录

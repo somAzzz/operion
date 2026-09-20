@@ -69,4 +69,4 @@ PostgreSQL 保存动作、不可变修订、不可变决定、执行尝试、暂
 
 ## E4 放行边界
 
-E3 的成功只证明控制面和持久化测试桩。真实 Twenty Task 创建仍须在隔离对象上证明客户端指定 ID/唯一关联、TaskTarget 原子性、通知副作用、连接丢失语义及精确回读。完成前 `e4_release_allowed=false`，不得把 `stub.followup_task` 替换成真实适配器。
+E3 的成功只证明控制面和持久化测试桩；当时的能力报告保持 `e4_release_allowed=false` 作为历史证据。后续 E4 已在隔离对象上完成客户端指定 ID、TaskTarget 恢复、timeline 副作用、连接丢失及精确回读验证，实际放行范围以 [E4 跟进任务合同](e4-followup-task-v1.md) 为准。

@@ -6,7 +6,7 @@
 
 Operion 是 Twenty 与 ERPNext 之上的受控业务 Agent 层。企业系统保存权威业务事实，确定性业务工具读取和计算，模型解释结果与提出动作，人保留必要业务判断，服务端决定是否执行。
 
-E0 已核验 WWI 最小 ETL、Twenty Company/People 和 ERPNext 小样本的目标回读，并完成实验环境恢复演练；详见 [E0 基线验收结果](e0-baseline-result.md)。E1 确定性业务工具、E2 只读 Agent 和 E3 动作控制测试桩已通过各自验收。E3 已具备 PostgreSQL 动作账本、独立审批、租约、未知结果对账和审批/动作页面，但只执行内部持久化测试桩；Twenty/ERPNext 真实写入仍关闭。E4 必须先完成隔离 Task 能力探针和真实适配器复验。现有通用 GraphQL 调用能力不得直接注册为模型工具。
+E0 已核验 WWI 最小 ETL、Twenty Company/People 和 ERPNext 小样本的目标回读，并完成实验环境恢复演练；详见 [E0 基线验收结果](e0-baseline-result.md)。E1 确定性业务工具、E2 只读 Agent、E3 动作控制测试桩和 E4 单一 Twenty 内部跟进任务已经通过各自验收。E4 只放行公开/模拟数据隔离 workspace：Agent 只能提案，不持有写凭据；独立审批后由 Worker 创建确定性 Task/TaskTarget 并回读。真实企业数据、企业身份、告警和发布控制仍未放行，须完成 E5。现有通用 GraphQL 调用能力不得直接注册为模型工具。
 
 首个业务闭环：客户概览 → 履约规则检查 → 必要时提出内部跟进任务 → 预览并批准 → 确定性创建 → 回读与审计。模型不得承诺实际交付，不推断未知库存，不自动变更客户身份映射。
 

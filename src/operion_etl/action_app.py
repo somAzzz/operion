@@ -28,7 +28,7 @@ class CancelRequest(StrictModel):
 
 
 class PauseRequest(StrictModel):
-    scope: Literal["global", "stub.followup_task"]
+    scope: Literal["global", "stub.followup_task", "twenty.followup_task"]
     paused: bool
     reason: str
 
@@ -101,14 +101,19 @@ def create_action_app(application: ActionApplication) -> FastAPI:
     async def health() -> dict[str, Any]:
         return {
             "status": "ok",
-            "mode": "e3_stub_only",
-            "writes_enabled": False,
-            "action_types": ["stub.followup_task"],
+            "mode": "e4_controlled_followup",
+            "writes_enabled": True,
+            "write_scope": "approved_internal_followup_tasks_only",
+            "action_types": ["stub.followup_task", "twenty.followup_task"],
         }
 
     @app.post("/api/action-proposals")
     async def propose(request: Request, body: ProposalRequest) -> dict[str, Any]:
         principal = application.authenticate(request, mutation=True)
+        if body.action_type == "twenty.followup_task":
+            raise ActionDenied(
+                "Twenty follow-up proposals must use the verified server-side service"
+            )
         return application.store.propose(body, principal)
 
     @app.get("/api/actions")
@@ -207,6 +212,11 @@ def application_from_environment() -> ActionApplication:
             for value in os.environ.get(
                 "OPERION_ACTION_COMPANIES", "AI Demo GmbH"
             ).split(",")
+            if value.strip()
+        ),
+        customer_ids=frozenset(
+            value.strip()
+            for value in os.environ.get("OPERION_ACTION_CUSTOMER_IDS", "").split(",")
             if value.strip()
         ),
         can_approve=os.environ.get("OPERION_ACTION_CAN_APPROVE", "0") == "1",

@@ -21,19 +21,25 @@ from pydantic_ai.exceptions import RunCancelled
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
+from .action_store import ActionStore
 from .agent_runtime import (
+    FOLLOWUP_TOOLS,
+    READ_TOOLS,
     AgentDependencies,
     AgentSettings,
     create_operion_agent,
     repository_from_environment,
     scope_from_environment,
 )
+from .identity_readback import ERPNextReadClient
 from .read_tools import AccessScope, CanonicalRepository
 from .session_store import (
     ConversationStore,
     RunReplayError,
     SessionAccessDenied,
 )
+from .twenty import TwentyClient
+from .twenty_actions import FollowupProposalService, TwentyFollowupGateway
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
@@ -49,6 +55,7 @@ class AgentApplication:
         token: str,
         user_id: str,
         agent: Agent[AgentDependencies, str] | None = None,
+        proposal_service: FollowupProposalService | None = None,
     ) -> None:
         if not token:
             raise RuntimeError("OPERION_AGENT_TOKEN is required")
@@ -58,6 +65,10 @@ class AgentApplication:
         self.store = store
         self.token = token
         self.user_id = user_id
+        self.proposal_service = proposal_service
+        self.allowed_tools = (
+            READ_TOOLS | FOLLOWUP_TOOLS if proposal_service is not None else READ_TOOLS
+        )
         self.agent = agent or create_operion_agent(settings)
         self.semaphore = asyncio.Semaphore(settings.max_concurrent_runs)
         self.conversation_locks: dict[str, asyncio.Lock] = {}
@@ -153,6 +164,10 @@ class AgentApplication:
             repository=self.repository,
             scope=self.scope,
             user_id=owner_id,
+            allowed_tools=self.allowed_tools,
+            proposal_service=self.proposal_service,
+            conversation_id=conversation_id,
+            run_id=run_id,
         )
         completed = False
 
@@ -268,7 +283,7 @@ def create_app(application: AgentApplication) -> FastAPI:
         for _, cancellation in application.active_runs.values():
             cancellation.cancel()
 
-    app = FastAPI(title="Operion read-only Agent", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Operion controlled Agent", version="0.4.0", lifespan=lifespan)
     origins = [
         item.strip()
         for item in os.environ.get(
@@ -288,9 +303,13 @@ def create_app(application: AgentApplication) -> FastAPI:
     async def health() -> dict[str, Any]:
         return {
             "status": "ok",
-            "mode": "read_only",
+            "mode": (
+                "controlled_followup_proposals"
+                if application.proposal_service is not None
+                else "read_only"
+            ),
             "model": application.settings.model_name,
-            "tools": ["get_customer_overview", "check_fulfillment"],
+            "tools": sorted(application.allowed_tools),
         }
 
     @app.post("/api/agent")
@@ -311,15 +330,50 @@ def create_app(application: AgentApplication) -> FastAPI:
 
 
 def application_from_environment() -> AgentApplication:
+    repository = repository_from_environment()
+    scope = scope_from_environment()
+    proposal_service = None
+    if os.environ.get("OPERION_ENABLE_FOLLOWUP_PROPOSALS", "0") == "1":
+        values = os.environ
+        database_url = values.get("OPERION_ACTION_DATABASE_URL", "")
+        assignee_id = values.get("OPERION_FOLLOWUP_ASSIGNEE_ID", "")
+        twenty_key = values.get("TWENTY_API_KEY_READ_ONLY", "")
+        erpnext_key = values.get("ERPNEXT_API_KEY_READ_ONLY", "")
+        if not all((database_url, assignee_id, twenty_key, erpnext_key)):
+            raise RuntimeError(
+                "controlled proposals require the action database, fixed assignee, "
+                "and both read-only business credentials"
+            )
+        proposal_service = FollowupProposalService(
+            store=ActionStore(
+                database_url,
+                values.get("OPERION_ACTION_DATABASE_ROLE") or None,
+            ),
+            repository=repository,
+            scope=scope,
+            gateway=TwentyFollowupGateway(
+                TwentyClient(
+                    values.get("TWENTY_API_BASE_URL", "http://localhost:3000"),
+                    twenty_key,
+                ),
+                ERPNextReadClient(
+                    values.get("ERPNEXT_API_BASE_URL", "http://localhost:8080"),
+                    erpnext_key,
+                ),
+            ),
+            assignee_id=assignee_id,
+            tenant_id=values.get("OPERION_ACTION_TENANT_ID", "operion-demo"),
+        )
     return AgentApplication(
         settings=AgentSettings.from_environment(),
-        repository=repository_from_environment(),
-        scope=scope_from_environment(),
+        repository=repository,
+        scope=scope,
         store=ConversationStore(
             Path(os.environ.get("OPERION_SESSION_DB", "var/operion-agent.sqlite3"))
         ),
         token=os.environ.get("OPERION_AGENT_TOKEN", ""),
         user_id=os.environ.get("OPERION_AGENT_USER_ID", "e2-demo-user"),
+        proposal_service=proposal_service,
     )
 
 

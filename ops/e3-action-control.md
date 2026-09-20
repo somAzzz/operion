@@ -42,7 +42,7 @@ uv run operion-action-worker --once --worker-id e3-worker-1
 恢复所有租约过期的在途动作：
 
 ```bash
-uv run operion-action-worker --once --recover --worker-id e3-recovery-1
+uv run operion-action-worker --recover --worker-id e3-recovery-1
 ```
 
 恢复命令只做对账，不把过期租约当作未提交证据。`UNKNOWN`、`RECONCILING` 或 `MANUAL_REVIEW` 不能由操作员直接重置为待执行。暂停通过 `POST /api/action-pauses` 设置 `global` 或 `stub.followup_task` scope；恢复前记录原因并确认没有未完成对账。

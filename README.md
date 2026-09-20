@@ -13,7 +13,7 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Current status
 
-E0 through E3 have passed. The
+E0 through E4 have passed. The
 project currently includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
@@ -28,17 +28,20 @@ project currently includes:
 - deterministic customer-overview and fulfilment services exposed as exactly two
   read-only MCP tools, with the 15 fixed E1 cases passing;
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
-  an AG-UI FastAPI endpoint, and an assistant-ui evidence desk; and
+  an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and
   decisions, trusted approval, leases, reconciliation, and an idempotent E3
-  fault-injection stub; and
-- approval and action-status pages backed by the server-side action ledger.
+  fault-injection stub;
+- approval and action-status pages backed by the server-side action ledger; and
+- one separately approved Twenty internal follow-up Task path with deterministic
+  IDs, exact readback, and recovery after response loss or worker crashes.
 
 The E2 baseline passes all 15 behavior cases three times and all seven model
-compatibility probes. E3 passes W01-W15 against a persistent stub, but still
-does not enable Twenty or ERPNext writes. E4 is the next stage and must prove
-the target API's idempotency, relation, notification, and failure semantics
-before enabling the single approved follow-up-task path.
+compatibility probes. E3 passes W01-W15 against a persistent stub, and E4
+repeats the applicable gates against Twenty 2.39.0. Writes remain limited to one
+internal Task in the isolated public/simulated demo workspace; E5 enterprise
+identity, real-data controls, monitoring, and release operations are not yet
+approved.
 
 The minimum demonstration is a customer overview plus a deterministic order
 fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
@@ -71,6 +74,8 @@ The detailed design documents are currently written in Chinese:
 - [E2 read-only Agent runbook](ops/e2-agent.md)
 - [E3 action-control contract](contracts/e3-action-control-v1.md)
 - [E3 action-control runbook](ops/e3-action-control.md)
+- [E4 follow-up Task contract](contracts/e4-followup-task-v1.md)
+- [E4 follow-up Task runbook](ops/e4-followup-task.md)
 
 ## Repository layout
 

@@ -21,6 +21,7 @@ from .action_models import (
     Principal,
     ProposalRequest,
     RevisionRequest,
+    validate_action_contract,
 )
 
 POLICY_VERSION = "e3-action-policy-v1"
@@ -121,6 +122,9 @@ class ActionStore:
         company = row["payload_json"]["target"]["company"]
         if company not in principal.companies:
             raise ActionNotFound("action was not found")
+        customer_id = row["payload_json"]["target"].get("customer_canonical_id")
+        if customer_id and customer_id not in principal.customer_ids:
+            raise ActionNotFound("action was not found")
 
     def _select_action(
         self,
@@ -149,6 +153,11 @@ class ActionStore:
     ) -> dict[str, Any]:
         if proposal.target.company not in principal.companies:
             raise ActionDenied("target company is outside the authorized scope")
+        if (
+            proposal.target.customer_canonical_id
+            and proposal.target.customer_canonical_id not in principal.customer_ids
+        ):
+            raise ActionDenied("target customer is outside the authorized scope")
         if proposal.expires_at <= utc_now():
             raise ActionConflict("proposal is already expired")
         payload = proposal.model_dump(mode="json")
@@ -238,7 +247,11 @@ class ActionStore:
     def list(
         self, principal: Principal, state: ActionState | None = None
     ) -> list[dict[str, Any]]:
-        parameters: list[Any] = [principal.tenant_id, list(principal.companies)]
+        parameters: list[Any] = [
+            principal.tenant_id,
+            list(principal.companies),
+            list(principal.customer_ids),
+        ]
         state_clause = ""
         if state is not None:
             state_clause = " AND a.state = %s"
@@ -251,7 +264,11 @@ class ActionStore:
                 JOIN operion_action_revisions r
                   ON r.action_id = a.action_id AND r.revision = a.current_revision
                 WHERE a.tenant_id = %s
-                  AND r.payload_json->'target'->>'company' = ANY(%s){state_clause}
+                  AND r.payload_json->'target'->>'company' = ANY(%s)
+                  AND (
+                    r.payload_json->'target'->>'customer_canonical_id' IS NULL
+                    OR r.payload_json->'target'->>'customer_canonical_id' = ANY(%s)
+                  ){state_clause}
                 ORDER BY a.updated_at DESC, a.action_id
                 """,
                 parameters,
@@ -265,11 +282,20 @@ class ActionStore:
     ) -> dict[str, Any]:
         if revision.target.company not in principal.companies:
             raise ActionDenied("target company is outside the authorized scope")
+        if (
+            revision.target.customer_canonical_id
+            and revision.target.customer_canonical_id not in principal.customer_ids
+        ):
+            raise ActionDenied("target customer is outside the authorized scope")
         if revision.expires_at <= utc_now():
             raise ActionConflict("revision is already expired")
         with self._connect() as connection:
             current = self._select_action(connection, action_id, for_update=True)
             self._require_scope(current, principal)
+            if current["action_type"] == "twenty.followup_task":
+                raise ActionConflict(
+                    "Twenty follow-up proposals must be regenerated from verified facts"
+                )
             if current["owner_id"] != principal.user_id:
                 raise ActionDenied("only the proposal owner may revise it")
             if current["state"] not in {
@@ -277,6 +303,12 @@ class ActionStore:
                 ActionState.APPROVED.value,
             }:
                 raise ActionConflict("action can no longer be revised")
+            try:
+                validate_action_contract(
+                    current["action_type"], revision.target, revision.side_effects
+                )
+            except ValueError as error:
+                raise ActionConflict(str(error)) from error
             payload = {
                 "idempotency_key": current["idempotency_key"],
                 "action_type": current["action_type"],
@@ -463,21 +495,28 @@ class ActionStore:
         lease_token = str(uuid4())
         attempt_id = str(uuid4())
         with self._connect() as connection:
-            paused = connection.execute(
+            expired = connection.execute(
                 """
-                SELECT EXISTS(
-                    SELECT 1 FROM operion_action_pauses
-                    WHERE paused AND scope IN ('global', 'stub.followup_task')
-                ) AS value
+                UPDATE operion_actions SET state = 'EXPIRED',
+                    updated_at = clock_timestamp()
+                WHERE state IN ('PENDING_APPROVAL', 'APPROVED')
+                  AND expires_at <= clock_timestamp()
+                RETURNING action_id
                 """
-            ).fetchone()
-            if paused and paused["value"]:
-                return None
+            ).fetchall()
+            for item in expired:
+                self._append_event(connection, item["action_id"], "EXPIRED", worker_id)
             row = connection.execute(
                 """
                 WITH candidate AS (
-                    SELECT action_id FROM operion_actions
-                    WHERE state = 'APPROVED' AND expires_at > clock_timestamp()
+                    SELECT a0.action_id FROM operion_actions a0
+                    WHERE a0.state = 'APPROVED'
+                      AND a0.expires_at > clock_timestamp()
+                      AND NOT EXISTS (
+                          SELECT 1 FROM operion_action_pauses p
+                          WHERE p.paused
+                            AND p.scope IN ('global', a0.action_type)
+                      )
                     ORDER BY updated_at, action_id
                     FOR UPDATE SKIP LOCKED LIMIT 1
                 )

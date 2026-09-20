@@ -1,6 +1,6 @@
 # E4：单一受控写入——内部跟进任务
 
-状态：PLANNED。责任：开发维护者与 Twenty 系统负责人；业务负责人确认实际效果。
+状态：PASSED（隔离公开/模拟数据，2026-09-20）。责任：开发维护者与 Twenty 系统负责人；业务负责人确认实际效果。
 
 ## 目标与入口
 
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | E4.1 | 固定任务合同 | 关联客户/订单、标题/正文、负责人、截止时间/时区、通知影响和唯一关联方式 | 与部署版本字段一致；不由模型选择任意对象或字段 |
 | E4.2 | 提案工具 | Agent 仅注册 propose_followup_task；服务端保存规范化提案 | 模型提出任务后目标系统任务数不变；提案记录可追踪 |
-| E4.3 | 审批界面闭环 | 展示真实目标、具体内容、时间与副作用；批准/拒绝/过期可见 | 用户批准的修订与执行内容一致；拒绝不创建任务 |
+| E4.3 | 审批界面闭环 | assistant-ui 业务卡片导航到 shadcn/ui `/approvals`；展示服务端真实目标、具体内容、修订、时间与副作用；`/actions` 展示执行事件 | 用户批准的修订与执行内容一致；拒绝不创建任务；聊天关闭或刷新不丢动作 |
 | E4.4 | 受限执行适配器 | 写 Worker 只持任务所需权限，经业务 API 创建并回读 | 创建一条且字段/关联正确；回读不符进入人工检查而非宣告成功 |
 | E4.5 | 故障与安全集成 | W01–W15 的适用项在目标 API 和真实 UI 复验 | 成功后断连、重启、并发及暂停均无重复业务副作用 |
 | E4.6 | 端到端演示与运营交接 | 查询履约缺口 → 建议 → 批准 → 创建 → 链接/事件 → 受限补偿 | 用户可区分待批准/执行中/未知/成功；负责人可按手册处理未知结果 |
@@ -33,12 +33,25 @@
 - 用户确实需要第二条相同任务时形成新 action，并有重复候选提示。
 - 批准前不写业务系统；结果未知时不向用户声称失败并鼓励重新创建。
 - 写入后回读正文、关联、负责人、截止时间和状态；审计能找到申请和批准依据。
+- 浏览器替换提案 payload、重复点击批准、提交旧修订或跨用户重放均被服务端拒绝或幂等处理。
+- `UNKNOWN/RECONCILING` 在聊天卡片和动作页均不显示为成功/失败，也不鼓励用户重新创建。
 
 ## 交付与退出条件
 
-交付任务工具合同、真实验收 API 故障报告、UI 流程证据、按 action_id 查询结果的方法及异常处置手册。原始 15 例与 W01–W15 共同构成至少 30 个案例 ID；按版本能力注明不适用项，模型变体另行记录。
+交付任务工具合同、真实验收 API 故障报告、按 [assistant-ui 前端方案](../frontend-plan.md) 形成的 UI 流程证据、按 action_id 查询结果的方法及异常处置手册。原始 15 例与 W01–W15 共同构成至少 30 个案例 ID；按版本能力注明不适用项，模型变体另行记录。
 
 M2 通过表示公开/模拟数据的受控写入演示完成，不代表真实企业写入已批准运行。进入 [E5](e5-enterprise-pilot.md)前默认继续限制为验收环境。
+
+## 实施与验收结果（2026-09-20）
+
+- Agent 新增唯一的 `propose_followup_task`，只对服务端复核的 shortfall 生成 `PENDING_APPROVAL`；客户、ERPNext order、负责人、副作用、precondition 和有效期均由服务端决定。
+- 提案人和审批人分离；批准后 Worker 再核对 Twenty Company、Workspace Member 和 ERPNext Sales Order 当前版本。
+- Twenty Task 使用 `action_id` 作为确定性 ID；TaskTarget 使用确定性 UUIDv5。正式执行不使用 `upsert`，避免相同内容重放产生额外 timeline update。
+- 真实 Twenty 2.39.0 演练通过：批准前零 Task；响应丢失进入 `UNKNOWN` 后精确对账成功；双 Worker 仅一个领取；远端提交后崩溃由租约恢复；Task/TaskTarget 各唯一且逐字段回读一致。
+- 当前隔离 workspace 只有一个成员，没有 Notification GraphQL 对象或数据库表；每个真实 Task 观察到一条内部 `recordCreated` timeline activity，没有 outbound message。新增成员、邮件、workflow 或通知组件时必须重跑该探针。
+- W01–W15 全部通过；完整 Python 测试 89 项通过，Ruff 和 Next.js production build 通过。测试/probe Task 已按正常业务方式标记 `DONE`，成功演练 Task 保留为 `TODO` 证据。
+
+固定合同见 [E4 跟进任务合同](../../../contracts/e4-followup-task-v1.md)，部署、恢复和补偿步骤见 [E4 运行手册](../../../ops/e4-followup-task.md)。本地报告位于 `reports/enterprise/e4/20260920T-followup-task/`。E4 只放行隔离演示，不放行真实企业数据；下一门禁为 [E5](e5-enterprise-pilot.md)。
 
 ## 失败处理
 

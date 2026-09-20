@@ -14,6 +14,7 @@ import {
   Clock3Icon,
   DatabaseIcon,
   PackageCheckIcon,
+  SendIcon,
   PlusIcon,
   ShieldCheckIcon,
   UserRoundSearchIcon,
@@ -74,6 +75,26 @@ function FulfillmentResultCard({ args, result }: ToolRenderProps) {
   );
 }
 
+function FollowupProposalCard({ result }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  const target = (data.target ?? {}) as Record<string, unknown>;
+  const parameters = (data.parameters ?? {}) as Record<string, unknown>;
+  if (!result) return <div className="result-card is-loading">Saving a reviewable proposal…</div>;
+  if (!result.ok) {
+    return <div className="result-card is-error"><strong>Proposal was not created</strong><span>{String(result.error?.message ?? "Rejected by the action service")}</span></div>;
+  }
+  return (
+    <section className="result-card proposal-result" aria-label="Follow-up task proposal">
+      <div className="result-card__eyebrow"><SendIcon aria-hidden="true" />Pending human approval</div>
+      <h3>{String(parameters.title ?? "Internal follow-up")}</h3>
+      <p>{String(target.order_id ?? "")}</p>
+      <code>{String(data.action_id ?? "")}</code>
+      <Link className="proposal-link" href="/approvals">Review exact revision</Link>
+      <small>No Twenty Task exists until a different authorized user approves it.</small>
+    </section>
+  );
+}
+
 const toolkit = defineToolkit({
   get_customer_overview: {
     description: "Read an authorized customer, contacts, and recent orders.",
@@ -98,6 +119,20 @@ const toolkit = defineToolkit({
       required: ["case_id"],
     },
     render: (props) => <FulfillmentResultCard {...(props as ToolRenderProps)} />,
+  },
+  propose_followup_task: {
+    description: "Save one internal follow-up proposal for separate human approval.",
+    parameters: {
+      type: "object",
+      properties: {
+        case_id: { type: "string" },
+        title: { type: "string" },
+        body: { type: "string" },
+        due_at: { type: "string", description: "ISO-8601 time with timezone" },
+      },
+      required: ["case_id", "title", "body", "due_at"],
+    },
+    render: (props) => <FollowupProposalCard {...(props as ToolRenderProps)} />,
   },
 });
 
@@ -130,6 +165,11 @@ function ThreadWithSuggestions() {
         label: "evaluate case F01",
         prompt: "检查履约场景 F01。",
       },
+      {
+        title: "Propose follow-up",
+        label: "review the F03 shortfall",
+        prompt: "检查 F03，并为这个缺口提出一个两天后到期的内部跟进任务。",
+      },
     ]),
   });
   return (
@@ -154,15 +194,15 @@ export default function Home() {
             <p className="rail-kicker">OPERION</p>
             <h1>Evidence desk</h1>
           </div>
-          <div className="rail-status"><span className="status-dot" />Read-only live</div>
+          <div className="rail-status"><span className="status-dot" />Controlled actions</div>
           <dl>
             <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
-            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>2 reads</dd></div>
+            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>2 reads + 1 proposal</dd></div>
             <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
           </dl>
-          <p className="rail-note">Every business answer is paired with source IDs and an observation time. Writes are unavailable.</p>
+          <p className="rail-note">The Agent can save a proposal, but only a separate approval and deterministic worker can create one internal Task.</p>
         </aside>
-        <section className="chat-workspace" aria-label="Read-only business assistant">
+        <section className="chat-workspace" aria-label="Controlled business assistant">
           <header className="workspace-header">
             <div><p>Operations / inquiry</p><h2>Ask against verified records</h2></div>
             <nav className="workspace-nav" aria-label="Workspace">

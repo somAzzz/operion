@@ -1,7 +1,8 @@
+import hashlib
 import unittest
 from pathlib import Path
 
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from operion_etl.agent_runtime import (
@@ -48,6 +49,68 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(1, limits.tool_calls_limit)
         self.assertEqual(100, limits.input_tokens_limit)
         self.assertEqual(50, limits.output_tokens_limit)
+
+    def test_followup_tool_only_creates_a_server_side_proposal(self):
+        class FakeProposalService:
+            calls = []
+
+            def propose(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "action_id": "action-1",
+                    "current_revision": 1,
+                    "state": "PENDING_APPROVAL",
+                    "expires_at": "2026-09-20T13:00:00Z",
+                    "payload_json": {
+                        "target": {"order_id": "SO-1"},
+                        "parameters": {"title": kwargs["title"]},
+                        "side_effects": ["twenty_internal_task"],
+                    },
+                }
+
+        call_count = 0
+
+        def model_function(messages, info: AgentInfo):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "propose_followup_task",
+                            {
+                                "case_id": "F03",
+                                "title": "Review shortfall",
+                                "body": "Inspect the evidence.",
+                                "due_at": "2026-09-22T12:00:00+00:00",
+                            },
+                            "call-1",
+                        )
+                    ]
+                )
+            return ModelResponse(parts=[TextPart("Proposal saved for approval.")])
+
+        service = FakeProposalService()
+        settings = AgentSettings()
+        agent = create_operion_agent(settings, model=FunctionModel(model_function))
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID})),
+            user_id="requester",
+            allowed_tools=frozenset({"propose_followup_task"}),
+            proposal_service=service,
+            conversation_id="conversation-1",
+            run_id="run-1",
+        )
+        result = agent.run_sync("propose", deps=deps)
+        self.assertEqual("Proposal saved for approval.", result.output)
+        self.assertEqual(1, len(service.calls))
+        self.assertEqual(
+            "agent:" + hashlib.sha256(b"conversation-1\0run-1").hexdigest(),
+            service.calls[0]["idempotency_key"],
+        )
+        self.assertEqual("propose_followup_task", deps.tool_calls[0]["name"])
+        self.assertTrue(deps.tool_calls[0]["result"]["ok"])
 
 
 if __name__ == "__main__":

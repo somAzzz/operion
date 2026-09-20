@@ -30,6 +30,7 @@ operion-action-migrate = "operion_etl.action_store:migration_main"
 operion-action-worker = "operion_etl.action_worker:main"
 operion-evaluate-e3 = "operion_etl.e3_evaluation:main"
 operion-probe-e3 = "operion_etl.e3_capability:main"
+operion-evaluate-e4 = "operion_etl.e4_evaluation:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

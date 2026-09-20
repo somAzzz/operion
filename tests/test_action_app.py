@@ -30,6 +30,7 @@ class ActionAppTests(unittest.TestCase):
             user_id="requester",
             tenant_id="tenant-1",
             companies=frozenset({"AI Demo GmbH"}),
+            customer_ids=frozenset({"customer-canonical-1"}),
         )
         approver = Principal(
             user_id="approver",
@@ -95,6 +96,33 @@ class ActionAppTests(unittest.TestCase):
             "/api/action-proposals", headers=self.request_headers, json=invalid
         )
         self.assertEqual(422, response.status_code)
+
+    def test_raw_twenty_proposals_are_rejected(self):
+        proposal = self.proposal()
+        proposal.update(
+            {
+                "action_type": "twenty.followup_task",
+                "target": {
+                    "system": "twenty",
+                    "company": "AI Demo GmbH",
+                    "customer_id": "company-1",
+                    "order_id": "SO-1",
+                    "customer_canonical_id": "customer-canonical-1",
+                    "order_canonical_id": "order-canonical-1",
+                    "erpnext_customer_id": "ERP-CUSTOMER-1",
+                },
+                "side_effects": [
+                    "twenty_internal_task",
+                    "twenty_company_link",
+                    "twenty_timeline_activity",
+                ],
+            }
+        )
+        response = self.client.post(
+            "/api/action-proposals", headers=self.request_headers, json=proposal
+        )
+        self.assertEqual(403, response.status_code)
+        self.assertEqual("ACTION_DENIED", response.json()["error"]["code"])
 
     def test_decision_uses_server_payload_and_is_idempotent(self):
         created = self.client.post(

@@ -16,6 +16,7 @@ from operion_etl.action_app import (
     create_action_app,
 )
 from operion_etl.action_models import (
+    FOLLOWUP_SIDE_EFFECTS,
     ActionConflict,
     ActionNotFound,
     ActionState,
@@ -27,6 +28,32 @@ from operion_etl.action_store import ActionStore
 from operion_etl.action_worker import ActionWorker, FaultPoint, PreflightPolicy
 
 TEST_DSN = os.environ.get("OPERION_TEST_ACTION_DATABASE_URL", "")
+
+
+class FakeTwentyGateway:
+    def __init__(self):
+        self.effects: dict[str, dict] = {}
+        self.submit_calls = 0
+
+    def preflight(self, action: dict) -> str | None:
+        return None
+
+    def submit(self, action: dict) -> dict:
+        self.submit_calls += 1
+        return self.effects.setdefault(
+            action["action_id"],
+            {
+                "effect_id": action["action_id"],
+                "task_id": action["action_id"],
+                "task_target_id": f"target-{action['action_id']}",
+                "payload_hash": action["payload_hash"],
+                "effect_kind": "twenty.followup_task",
+            },
+        )
+
+    def reconcile(self, action: dict) -> list[dict]:
+        effect = self.effects.get(action["action_id"])
+        return [effect] if effect else []
 
 
 @unittest.skipUnless(TEST_DSN, "requires OPERION_TEST_ACTION_DATABASE_URL")
@@ -42,11 +69,13 @@ class ActionControlTests(unittest.TestCase):
             user_id="requester",
             tenant_id="tenant-1",
             companies=frozenset({"AI Demo GmbH"}),
+            customer_ids=frozenset({"customer-canonical-1"}),
         )
         self.approver = Principal(
             user_id="approver",
             tenant_id="tenant-1",
             companies=frozenset({"AI Demo GmbH"}),
+            customer_ids=frozenset({"customer-canonical-1"}),
             can_approve=True,
         )
 
@@ -82,6 +111,39 @@ class ActionControlTests(unittest.TestCase):
 
     def approved(self, key: str) -> dict:
         action = self.store.propose(self.proposal(key), self.requester)
+        return self.store.decide(
+            action["action_id"],
+            1,
+            "approve",
+            f"decision-{key}",
+            None,
+            self.approver,
+        )
+
+    def approved_twenty(self, key: str) -> dict:
+        proposal = ProposalRequest(
+            idempotency_key=key,
+            action_type="twenty.followup_task",
+            target={
+                "system": "twenty",
+                "company": "AI Demo GmbH",
+                "customer_id": "company-1",
+                "order_id": "SO-1",
+                "customer_canonical_id": "customer-canonical-1",
+                "order_canonical_id": "order-canonical-1",
+                "erpnext_customer_id": "ERP-CUSTOMER-1",
+            },
+            parameters={
+                "title": "Review shortfall",
+                "body": "Internal follow-up",
+                "assignee_id": "member-1",
+                "due_at": datetime.now(UTC) + timedelta(days=2),
+            },
+            preconditions={"target_version": "snapshot-v1"},
+            side_effects=FOLLOWUP_SIDE_EFFECTS,
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        action = self.store.propose(proposal, self.requester)
         return self.store.decide(
             action["action_id"],
             1,
@@ -358,6 +420,41 @@ class ActionControlTests(unittest.TestCase):
                     "WHERE action_id = %s",
                     (action["action_id"],),
                 )
+
+    def test_e4_response_loss_reconciles_same_twenty_task(self):
+        action = self.approved_twenty("e4-response-loss")
+        gateway = FakeTwentyGateway()
+        worker = ActionWorker(self.store, "e4-worker", twenty_gateway=gateway)
+        result = worker.execute_once(FaultPoint.RESPONSE_LOST)
+        self.assertEqual("unknown", result["status"])
+        self.assertEqual("succeeded", worker.reconcile(action["action_id"])["status"])
+        self.assertEqual(1, gateway.submit_calls)
+        completed = self.store.get(action["action_id"], self.requester)
+        self.assertEqual(ActionState.SUCCEEDED.value, completed["state"])
+        self.assertEqual(action["action_id"], completed["remote_ref"])
+
+    def test_e4_verified_proposal_cannot_be_retargeted_by_revision(self):
+        action = self.approved_twenty("e4-no-client-retarget")
+        payload = action["payload_json"]
+        revision = RevisionRequest(
+            request_id="e4-forged-revision",
+            target=payload["target"],
+            parameters={**payload["parameters"], "title": "Changed by client"},
+            preconditions=payload["preconditions"],
+            side_effects=tuple(payload["side_effects"]),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        with self.assertRaises(ActionConflict):
+            self.store.revise(action["action_id"], revision, self.requester)
+        other_customer = Principal(
+            user_id="other-customer-user",
+            tenant_id="tenant-1",
+            companies=frozenset({"AI Demo GmbH"}),
+            customer_ids=frozenset({"other-customer"}),
+        )
+        self.assertEqual([], self.store.list(other_customer))
+        with self.assertRaises(ActionNotFound):
+            self.store.get(action["action_id"], other_customer)
 
 
 if __name__ == "__main__":
