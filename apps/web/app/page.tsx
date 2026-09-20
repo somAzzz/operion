@@ -18,6 +18,7 @@ import {
   ShieldCheckIcon,
   UserRoundSearchIcon,
 } from "lucide-react";
+import Link from "next/link";
 
 type ToolRenderProps = {
   args: Record<string, unknown>;
@@ -164,7 +165,11 @@ export default function Home() {
         <section className="chat-workspace" aria-label="Read-only business assistant">
           <header className="workspace-header">
             <div><p>Operations / inquiry</p><h2>Ask against verified records</h2></div>
-            <NewThreadButton />
+            <nav className="workspace-nav" aria-label="Workspace">
+              <Link href="/approvals">Approvals</Link>
+              <Link href="/actions">Actions</Link>
+              <NewThreadButton />
+            </nav>
           </header>
           <div className="thread-frame"><ThreadWithSuggestions /></div>
         </section>

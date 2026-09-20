@@ -12,6 +12,7 @@ dependencies = [
     "httpx2==2.13.0",
     "mcp>=2,<3",
     "pydantic-ai-slim[ag-ui,openai]==2.46.0",
+    "psycopg[binary]==3.3.6",
     "uvicorn==0.53.0",
 ]
 
@@ -24,9 +25,17 @@ operion-mcp = "operion_etl.mcp_server:main"
 operion-agent = "operion_etl.agent_app:main"
 operion-evaluate-e2 = "operion_etl.e2_evaluation:main"
 operion-model-compatibility = "operion_etl.model_compatibility:main"
+operion-action-api = "operion_etl.action_app:main"
+operion-action-migrate = "operion_etl.action_store:migration_main"
+operion-action-worker = "operion_etl.action_worker:main"
+operion-evaluate-e3 = "operion_etl.e3_evaluation:main"
+operion-probe-e3 = "operion_etl.e3_capability:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+operion_etl = ["migrations/*.sql"]
 
 [tool.ruff]
 target-version = "py311"

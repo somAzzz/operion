@@ -13,7 +13,7 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Current status
 
-E0, E1, and the E2 read-only Agent gate have passed. The
+E0 through E3 have passed. The
 project currently includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
@@ -29,11 +29,16 @@ project currently includes:
   read-only MCP tools, with the 15 fixed E1 cases passing;
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk; and
-- an enterprise operating plan with staged security and acceptance gates.
+- a PostgreSQL-backed action control service with immutable revisions and
+  decisions, trusted approval, leases, reconciliation, and an idempotent E3
+  fault-injection stub; and
+- approval and action-status pages backed by the server-side action ledger.
 
 The E2 baseline passes all 15 behavior cases three times and all seven model
-compatibility probes. It still does not enable business writes; E3 is the next
-stage and will add one separately approved action path.
+compatibility probes. E3 passes W01-W15 against a persistent stub, but still
+does not enable Twenty or ERPNext writes. E4 is the next stage and must prove
+the target API's idempotency, relation, notification, and failure semantics
+before enabling the single approved follow-up-task path.
 
 The minimum demonstration is a customer overview plus a deterministic order
 fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
@@ -64,6 +69,8 @@ The detailed design documents are currently written in Chinese:
 - [WWI download and ETL runbook](ops/data-pipeline.md)
 - [Canonical data contract](contracts/canonical-v1.md)
 - [E2 read-only Agent runbook](ops/e2-agent.md)
+- [E3 action-control contract](contracts/e3-action-control-v1.md)
+- [E3 action-control runbook](ops/e3-action-control.md)
 
 ## Repository layout
 
