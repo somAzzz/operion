@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS operion_action_pauses (
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE TABLE IF NOT EXISTS operion_worker_heartbeats (
+    worker_id text PRIMARY KEY,
+    state text NOT NULL,
+    current_action_id text,
+    release_id text,
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS operion_e3_stub_effects (
     effect_id text PRIMARY KEY,
     action_id text NOT NULL,
@@ -102,7 +110,8 @@ GRANT USAGE ON SCHEMA public TO operion_action_app;
 GRANT SELECT, INSERT, UPDATE ON
     operion_actions,
     operion_action_attempts,
-    operion_action_pauses
+    operion_action_pauses,
+    operion_worker_heartbeats
 TO operion_action_app;
 GRANT SELECT, INSERT ON
     operion_action_revisions,

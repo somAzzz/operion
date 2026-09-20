@@ -25,7 +25,7 @@ from operion_etl.action_models import (
     RevisionRequest,
 )
 from operion_etl.action_store import ActionStore
-from operion_etl.action_worker import ActionWorker, FaultPoint, PreflightPolicy
+from operion_etl.action_worker import ActionWorker, FaultPoint, PreflightPolicy, main
 
 TEST_DSN = os.environ.get("OPERION_TEST_ACTION_DATABASE_URL", "")
 
@@ -432,6 +432,8 @@ class ActionControlTests(unittest.TestCase):
         completed = self.store.get(action["action_id"], self.requester)
         self.assertEqual(ActionState.SUCCEEDED.value, completed["state"])
         self.assertEqual(action["action_id"], completed["remote_ref"])
+        snapshot = self.store.operational_snapshot()
+        self.assertEqual("succeeded", snapshot["workers"][0]["state"])
 
     def test_e4_verified_proposal_cannot_be_retargeted_by_revision(self):
         action = self.approved_twenty("e4-no-client-retarget")
@@ -455,6 +457,18 @@ class ActionControlTests(unittest.TestCase):
         self.assertEqual([], self.store.list(other_customer))
         with self.assertRaises(ActionNotFound):
             self.store.get(action["action_id"], other_customer)
+
+    def test_e5_enterprise_worker_fails_closed_without_release_gate(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"OPERION_ENVIRONMENT": "enterprise", "OPERION_WRITES_ENABLED": "0"},
+                clear=False,
+            ),
+            patch("sys.argv", ["operion-action-worker", "--once"]),
+            self.assertRaisesRegex(SystemExit, "release gate is closed"),
+        ):
+            main()
 
 
 if __name__ == "__main__":

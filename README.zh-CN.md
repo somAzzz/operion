@@ -36,6 +36,8 @@ Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实�
 - [E3 动作控制运行手册](ops/e3-action-control.md)：部署、验收、暂停与故障处置。
 - [E4 跟进任务合同](contracts/e4-followup-task-v1.md)：唯一真实写入的固定范围与保证。
 - [E4 跟进任务运行手册](ops/e4-followup-task.md)：凭据隔离、审批、恢复与补偿。
+- [E5 企业边界合同](contracts/e5-enterprise-boundary-v1.md)：OIDC、服务端范围、撤销、发布锁和证据门禁。
+- [E5 企业试运行手册](ops/e5-enterprise-pilot.md)：告警、备份恢复、容量、回退和 10 日观察。
 - [数据目录说明](data/README.md)：原始数据、加工数据和导出结果的保存规则。
 
 ## 目录

@@ -76,6 +76,8 @@ The detailed design documents are currently written in Chinese:
 - [E3 action-control runbook](ops/e3-action-control.md)
 - [E4 follow-up Task contract](contracts/e4-followup-task-v1.md)
 - [E4 follow-up Task runbook](ops/e4-followup-task.md)
+- [E5 enterprise boundary](contracts/e5-enterprise-boundary-v1.md)
+- [E5 enterprise pilot runbook](ops/e5-enterprise-pilot.md)
 
 ## Repository layout
 

@@ -1,11 +1,13 @@
 import "server-only";
+import { upstreamAuthorization } from "@/lib/upstream-auth";
 
 const actionBase = () =>
   process.env.OPERION_ACTION_URL ?? "http://127.0.0.1:8001/api";
 
 export async function actionServerFetch(path: string, init?: RequestInit) {
   const token = process.env.OPERION_ACTION_TOKEN;
-  if (!token) {
+  const authorization = await upstreamAuthorization(token);
+  if (!authorization) {
     return new Response(JSON.stringify({ error: { detail: "Action service is not configured." } }), {
       status: 503,
       headers: { "Content-Type": "application/json" },
@@ -14,7 +16,7 @@ export async function actionServerFetch(path: string, init?: RequestInit) {
   return fetch(`${actionBase()}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: authorization,
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...(init?.headers ?? {}),
     },

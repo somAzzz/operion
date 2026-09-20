@@ -1,0 +1,70 @@
+{
+  "schema_version": "operion-e5-evidence-v1",
+  "environment": "replace-with-enterprise-pilot-environment",
+  "window_start": "2026-09-21T08:00:00+02:00",
+  "window_end": "2026-10-02T18:00:00+02:00",
+  "identity": {
+    "provider": "replace-with-identity-provider",
+    "pilot_users": 3,
+    "one_company": true,
+    "revocation_minutes": 0,
+    "cross_scope_denied": true
+  },
+  "secrets": {
+    "rotation_passed": false,
+    "old_credential_rejected": false,
+    "private_services_unreachable": false,
+    "repository_scan_passed": false
+  },
+  "dependencies": {
+    "model_outage_degraded": false,
+    "twenty_outage_degraded": false,
+    "erpnext_outage_degraded": false,
+    "no_unknown_write_retry": false
+  },
+  "alerts": {
+    "postgres_failure_received": false,
+    "worker_stall_received": false,
+    "disk_low_received": false,
+    "primary_contact": "replace-with-primary-contact",
+    "backup_contact": "replace-with-backup-contact"
+  },
+  "recovery": {
+    "encrypted": false,
+    "off_host": false,
+    "restore_passed": false,
+    "rpo_minutes": 15,
+    "rto_minutes": 240,
+    "remote_reconciled_before_resume": false,
+    "old_approvals_not_replayed": false
+  },
+  "capacity": {
+    "concurrent_sessions": 5,
+    "read_p95_seconds": 5,
+    "agent_p95_seconds": 60,
+    "task_p95_seconds": 30,
+    "overload_controlled": false
+  },
+  "release": {
+    "rollback_passed": false,
+    "previous_release_healthy": false,
+    "migrations_compatible": false,
+    "full_regression_passed": false
+  },
+  "lifecycle": {
+    "raw_content_hours": 24,
+    "diagnostic_log_days": 14,
+    "trace_days": 7,
+    "action_event_days": 180,
+    "deletion_drill_passed": false,
+    "access_audit_passed": false
+  },
+  "pilot": {
+    "business_days": 10,
+    "legitimate_requests": 0,
+    "unresolved_blockers": 0,
+    "business_signoff": "replace-with-business-owner",
+    "operations_signoff": "replace-with-operations-owner",
+    "governance_signoff": "replace-with-governance-owner"
+  }
+}

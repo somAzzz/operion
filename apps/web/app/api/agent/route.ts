@@ -1,13 +1,16 @@
+import { upstreamAuthorization } from "@/lib/upstream-auth";
+
 const upstream = () =>
   process.env.OPERION_AGENT_URL ?? "http://127.0.0.1:8000/api/agent";
 
 export async function POST(request: Request) {
   const token = process.env.OPERION_AGENT_TOKEN;
-  if (!token) return new Response("Agent service is not configured.", { status: 503 });
+  const authorization = await upstreamAuthorization(token);
+  if (!authorization) return new Response("Authentication is required.", { status: 401 });
   const response = await fetch(upstream(), {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: authorization,
       Accept: "text/event-stream",
       "Content-Type": request.headers.get("content-type") ?? "application/json",
     },

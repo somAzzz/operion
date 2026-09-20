@@ -13,8 +13,27 @@ from operion_etl.action_app import (
 )
 from operion_etl.action_models import Principal
 from operion_etl.action_store import ActionStore
+from operion_etl.enterprise_auth import EnterpriseIdentity
 
 TEST_DSN = os.environ.get("OPERION_TEST_ACTION_DATABASE_URL", "")
+
+
+class FakeEnterpriseAuthenticator:
+    def __init__(self, roles: frozenset[str]):
+        self.roles = roles
+
+    def authenticate(self, authorization: str) -> EnterpriseIdentity:
+        if authorization != "Bearer enterprise-token":
+            raise AssertionError("unexpected test credential")
+        return EnterpriseIdentity(
+            user_id="enterprise-operator",
+            tenant_id="tenant-1",
+            operating_company="AI Demo GmbH",
+            customer_ids=frozenset({"customer-canonical-1"}),
+            roles=self.roles,
+            subject="subject-1",
+            session_id="session-1",
+        )
 
 
 @unittest.skipUnless(TEST_DSN, "requires OPERION_TEST_ACTION_DATABASE_URL")
@@ -160,6 +179,39 @@ class ActionAppTests(unittest.TestCase):
             headers={"Authorization": "Bearer outside-token"},
         )
         self.assertEqual(404, response.status_code)
+
+    def test_enterprise_release_gate_blocks_approval_and_operator_reads_metrics(self):
+        created = self.client.post(
+            "/api/action-proposals",
+            headers=self.request_headers,
+            json=self.proposal(),
+        ).json()
+        application = ActionApplication(
+            self.store,
+            authenticator=FakeEnterpriseAuthenticator(
+                frozenset({"action_reader", "action_approver", "action_operator"})
+            ),
+            csrf_token="enterprise-csrf",
+            writes_enabled=False,
+        )
+        client = TestClient(create_action_app(application))
+        headers = {
+            "Authorization": "Bearer enterprise-token",
+            "X-Operion-CSRF": "enterprise-csrf",
+        }
+        decision = client.post(
+            f"/api/actions/{created['action_id']}/decisions",
+            headers=headers,
+            json={
+                "revision": 1,
+                "decision": "approve",
+                "request_id": "enterprise-approval",
+            },
+        )
+        self.assertEqual(403, decision.status_code)
+        operations = client.get("/api/operations", headers=headers)
+        self.assertEqual(200, operations.status_code)
+        self.assertEqual(1, operations.json()["states"]["PENDING_APPROVAL"])
 
 
 if __name__ == "__main__":

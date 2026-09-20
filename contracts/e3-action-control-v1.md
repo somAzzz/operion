@@ -8,7 +8,7 @@
 - 客户端只提交动作引用、修订号和决定，不能提交审批人、租户、公司范围或替换执行参数。
 - 身份、租户、经营主体范围和审批资格由 Action Service 的服务端凭据解析。
 - 提案人不能审批或拒绝自己的提案；审批人与执行 Worker 分离。
-- 所有 mutation 同时要求 bearer credential 和 `X-Operion-CSRF`。E3 的静态服务凭据只用于隔离验收；企业 Cookie/OIDC 会话留到 E5。
+- 所有 mutation 同时要求 bearer credential 和 `X-Operion-CSRF`。E3 的静态服务凭据只用于隔离验收；后续 E5 已实现 OIDC 与服务端权限映射，实际 IdP/ingress 仍须现场验收。
 - Agent、浏览器和 Next.js 客户端都没有下游写凭据。E3 Worker 只能写 PostgreSQL 中的幂等测试桩。
 
 ## 固定动作结构

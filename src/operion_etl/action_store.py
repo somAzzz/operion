@@ -69,6 +69,76 @@ class ActionStore:
         with self._connect(privileged=True) as connection:
             connection.execute(migration)
 
+    def worker_heartbeat(
+        self,
+        worker_id: str,
+        state: str,
+        action_id: str | None = None,
+        release_id: str | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO operion_worker_heartbeats(
+                    worker_id, state, current_action_id, release_id, updated_at
+                ) VALUES (%s, %s, %s, %s, clock_timestamp())
+                ON CONFLICT (worker_id) DO UPDATE SET
+                    state = EXCLUDED.state,
+                    current_action_id = EXCLUDED.current_action_id,
+                    release_id = EXCLUDED.release_id,
+                    updated_at = clock_timestamp()
+                """,
+                (worker_id, state, action_id, release_id),
+            )
+
+    def operational_snapshot(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            states = connection.execute(
+                """
+                SELECT state, count(*) AS count FROM operion_actions
+                GROUP BY state ORDER BY state
+                """
+            ).fetchall()
+            oldest_unknown = connection.execute(
+                """
+                SELECT EXTRACT(EPOCH FROM (clock_timestamp() - min(updated_at)))
+                    AS seconds
+                FROM operion_actions
+                WHERE state IN ('UNKNOWN', 'RECONCILING')
+                """
+            ).fetchone()
+            expired_leases = connection.execute(
+                """
+                SELECT count(*) AS count FROM operion_actions
+                WHERE state IN ('EXECUTING', 'UNKNOWN', 'RECONCILING')
+                  AND lease_until <= clock_timestamp()
+                """
+            ).fetchone()
+            workers = connection.execute(
+                """
+                SELECT worker_id, state, current_action_id, release_id, updated_at
+                FROM operion_worker_heartbeats ORDER BY worker_id
+                """
+            ).fetchall()
+            pauses = connection.execute(
+                """
+                SELECT scope, paused, reason, updated_at
+                FROM operion_action_pauses ORDER BY scope
+                """
+            ).fetchall()
+        return {
+            "states": {row["state"]: row["count"] for row in states},
+            "oldest_unknown_seconds": (
+                float(oldest_unknown["seconds"])
+                if oldest_unknown and oldest_unknown["seconds"] is not None
+                else None
+            ),
+            "expired_leases": expired_leases["count"] if expired_leases else 0,
+            "workers": workers,
+            "pauses": pauses,
+            "observed_at": utc_now(),
+        }
+
     def _append_event(
         self,
         connection: psycopg.Connection[dict[str, Any]],

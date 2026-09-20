@@ -14,9 +14,9 @@ This contract defines the local, read-only Agent boundary used by the E2 demo.
 - The only executable business tools are `get_customer_overview` and
   `check_fulfillment`; the per-run allowlist is resolved on the server.
 
-E2 is a single-user local demo boundary. A multi-user deployment must replace
-the fixed service identity with authenticated per-user identity and tenant
-claims before exposing the Next.js proxy publicly.
+E2 is a single-user local demo boundary. E5 adds the required per-user OIDC,
+server-side tenant/customer policy and revocation path; enterprise deployments
+must use that mode and the trusted ingress described in the E5 contract.
 
 ## Endpoints
 

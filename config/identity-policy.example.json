@@ -1,0 +1,16 @@
+{
+  "schema_version": "operion-identity-policy-v1",
+  "policy_version": 1,
+  "revoked_sessions": [],
+  "users": {
+    "replace-with-oidc-subject": {
+      "active": false,
+      "valid_after": 0,
+      "user_id": "replace-with-stable-user-id",
+      "tenant_id": "replace-with-tenant-id",
+      "companies": ["replace-with-company"],
+      "customer_ids": ["replace-with-canonical-customer-id"],
+      "roles": ["agent_read", "action_reader"]
+    }
+  }
+}

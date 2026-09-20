@@ -21,6 +21,11 @@ from .action_models import (
     StrictModel,
 )
 from .action_store import ActionStore
+from .enterprise_auth import (
+    AuthenticationError,
+    AuthorizationError,
+    OIDCAuthenticator,
+)
 
 
 class CancelRequest(StrictModel):
@@ -44,15 +49,42 @@ class ActionApplication:
     def __init__(
         self,
         store: ActionStore,
-        credentials: list[ActionCredential],
+        credentials: list[ActionCredential] | None = None,
+        *,
+        authenticator: OIDCAuthenticator | None = None,
+        csrf_token: str = "",
+        writes_enabled: bool = True,
     ) -> None:
-        if not credentials:
-            raise RuntimeError("at least one action credential is required")
+        if not credentials and authenticator is None:
+            raise RuntimeError("an action authenticator is required")
         self.store = store
-        self.credentials = credentials
+        self.credentials = credentials or []
+        self.authenticator = authenticator
+        self.csrf_token = csrf_token
+        self.writes_enabled = writes_enabled
 
     def authenticate(self, request: Request, *, mutation: bool = False) -> Principal:
         authorization = request.headers.get("authorization", "")
+        if self.authenticator is not None:
+            try:
+                identity = self.authenticator.authenticate(authorization)
+                identity.require("action_reader", "action_approver", "action_operator")
+            except AuthenticationError as error:
+                raise HTTPException(status_code=401, detail=str(error)) from error
+            except AuthorizationError as error:
+                raise HTTPException(status_code=403, detail=str(error)) from error
+            if mutation and not secrets.compare_digest(
+                request.headers.get("x-operion-csrf", ""), self.csrf_token
+            ):
+                raise HTTPException(status_code=403, detail="invalid CSRF token")
+            return Principal(
+                user_id=identity.user_id,
+                tenant_id=identity.tenant_id,
+                companies=frozenset({identity.operating_company}),
+                customer_ids=identity.customer_ids,
+                can_approve="action_approver" in identity.roles,
+                can_operate="action_operator" in identity.roles,
+            )
         supplied = authorization.removeprefix("Bearer ")
         for credential in self.credentials:
             if secrets.compare_digest(supplied, credential.token):
@@ -101,8 +133,12 @@ def create_action_app(application: ActionApplication) -> FastAPI:
     async def health() -> dict[str, Any]:
         return {
             "status": "ok",
-            "mode": "e4_controlled_followup",
-            "writes_enabled": True,
+            "mode": (
+                "enterprise_pilot"
+                if application.authenticator is not None
+                else "e4_controlled_followup"
+            ),
+            "writes_enabled": application.writes_enabled,
             "write_scope": "approved_internal_followup_tasks_only",
             "action_types": ["stub.followup_task", "twenty.followup_task"],
         }
@@ -110,6 +146,10 @@ def create_action_app(application: ActionApplication) -> FastAPI:
     @app.post("/api/action-proposals")
     async def propose(request: Request, body: ProposalRequest) -> dict[str, Any]:
         principal = application.authenticate(request, mutation=True)
+        if application.authenticator is not None:
+            raise ActionDenied(
+                "enterprise follow-up proposals must use the verified Agent service"
+            )
         if body.action_type == "twenty.followup_task":
             raise ActionDenied(
                 "Twenty follow-up proposals must use the verified server-side service"
@@ -134,6 +174,13 @@ def create_action_app(application: ActionApplication) -> FastAPI:
         principal = application.authenticate(request)
         return {"events": application.store.events(action_id, principal)}
 
+    @app.get("/api/operations")
+    async def operations(request: Request) -> dict[str, Any]:
+        principal = application.authenticate(request)
+        if not principal.can_operate:
+            raise ActionDenied("principal cannot read operational telemetry")
+        return application.store.operational_snapshot()
+
     @app.post("/api/actions/{action_id}/decisions")
     async def decide(
         request: Request,
@@ -141,6 +188,8 @@ def create_action_app(application: ActionApplication) -> FastAPI:
         body: DecisionRequest,
     ) -> dict[str, Any]:
         principal = application.authenticate(request, mutation=True)
+        if body.decision == "approve" and not application.writes_enabled:
+            raise ActionDenied("enterprise write release gate is closed")
         return application.store.decide(
             action_id,
             body.revision,
@@ -173,7 +222,7 @@ def create_action_app(application: ActionApplication) -> FastAPI:
     @app.post("/api/action-pauses")
     async def set_pause(request: Request, body: PauseRequest) -> dict[str, Any]:
         principal = application.authenticate(request, mutation=True)
-        if not principal.can_approve:
+        if not (principal.can_approve or principal.can_operate):
             raise ActionDenied("principal cannot operate the pause switch")
         application.store.set_pause(
             body.scope, body.paused, body.reason, principal.user_id
@@ -193,9 +242,10 @@ def _error(status: int, code: str, detail: str):
 
 def application_from_environment() -> ActionApplication:
     dsn = os.environ.get("OPERION_ACTION_DATABASE_URL", "")
-    token = os.environ.get("OPERION_ACTION_TOKEN", "")
     csrf_token = os.environ.get("OPERION_ACTION_CSRF_TOKEN", "")
-    if not dsn or not token or not csrf_token:
+    enterprise = os.environ.get("OPERION_ENVIRONMENT") == "enterprise"
+    token = "" if enterprise else os.environ.get("OPERION_ACTION_TOKEN", "")
+    if not dsn or not csrf_token or (not enterprise and not token):
         raise RuntimeError(
             "OPERION_ACTION_DATABASE_URL, OPERION_ACTION_TOKEN, and "
             "OPERION_ACTION_CSRF_TOKEN are required"
@@ -220,7 +270,15 @@ def application_from_environment() -> ActionApplication:
             if value.strip()
         ),
         can_approve=os.environ.get("OPERION_ACTION_CAN_APPROVE", "0") == "1",
+        can_operate=os.environ.get("OPERION_ACTION_CAN_OPERATE", "0") == "1",
     )
+    if enterprise:
+        return ActionApplication(
+            store,
+            authenticator=OIDCAuthenticator.from_environment(),
+            csrf_token=csrf_token,
+            writes_enabled=os.environ.get("OPERION_WRITES_ENABLED") == "1",
+        )
     return ActionApplication(store, [ActionCredential(token, csrf_token, principal)])
 
 

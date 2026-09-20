@@ -303,7 +303,11 @@ class FollowupProposalService:
         due_at: datetime,
         idempotency_key: str,
         user_id: str,
+        scope: AccessScope | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
+        effective_scope = scope or self.scope
+        effective_tenant_id = tenant_id or self.tenant_id
         case = self.repository.fulfillment_case(case_id)
         if case["result"] != "shortfall":
             raise InvalidBusinessInputError(
@@ -325,7 +329,9 @@ class FollowupProposalService:
         if len(orders) != 1:
             raise InvalidBusinessInputError("case does not resolve to one sales order")
         customer_canonical_id = orders[0]["customer_canonical_id"]
-        overview = self.repository.customer_overview(customer_canonical_id, self.scope)
+        overview = self.repository.customer_overview(
+            customer_canonical_id, effective_scope
+        )
         customer = overview["customer"]
         matching_orders = [
             row
@@ -336,7 +342,7 @@ class FollowupProposalService:
             raise InvalidBusinessInputError("order is outside the authorized scope")
         target = {
             "system": "twenty",
-            "company": self.scope.operating_company,
+            "company": effective_scope.operating_company,
             "customer_id": customer["twenty_id"],
             "order_id": matching_orders[0]["erpnext_id"],
             "customer_canonical_id": customer_canonical_id,
@@ -365,8 +371,8 @@ class FollowupProposalService:
         )
         principal = Principal(
             user_id=user_id,
-            tenant_id=self.tenant_id,
-            companies=frozenset({self.scope.operating_company}),
-            customer_ids=self.scope.customer_ids,
+            tenant_id=effective_tenant_id,
+            companies=frozenset({effective_scope.operating_company}),
+            customer_ids=effective_scope.customer_ids,
         )
         return self.store.propose(proposal, principal)

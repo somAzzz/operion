@@ -130,6 +130,7 @@ class AgentDependencies:
     proposal_service: FollowupProposalService | None = None
     conversation_id: str = ""
     run_id: str = ""
+    tenant_id: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -248,6 +249,8 @@ def propose_followup_task(
                     f"{ctx.deps.conversation_id}\0{ctx.deps.run_id}".encode()
                 ).hexdigest(),
                 user_id=ctx.deps.user_id,
+                scope=ctx.deps.scope,
+                tenant_id=ctx.deps.tenant_id or None,
             )
             payload = {
                 "ok": True,

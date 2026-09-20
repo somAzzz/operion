@@ -132,6 +132,7 @@ class Principal(StrictModel):
     companies: frozenset[str]
     customer_ids: frozenset[str] = frozenset()
     can_approve: bool = False
+    can_operate: bool = False
 
 
 def validate_action_contract(

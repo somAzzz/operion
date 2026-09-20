@@ -96,13 +96,32 @@ class ActionWorker:
         """Normalize gateway evidence before it is persisted to JSONB."""
         return json.loads(json.dumps(effect, default=str))
 
+    def _outcome(
+        self, status: str, action_id: str | None = None, **details: Any
+    ) -> dict[str, Any]:
+        self.store.worker_heartbeat(
+            self.worker_id,
+            status,
+            action_id if status == "crashed" else None,
+            os.environ.get("OPERION_RELEASE_ID") or None,
+        )
+        return {
+            "status": status,
+            **({"action_id": action_id} if action_id else {}),
+            **details,
+        }
+
     def execute_once(self, fault: FaultPoint = FaultPoint.NONE) -> dict[str, Any]:
+        release_id = os.environ.get("OPERION_RELEASE_ID") or None
+        self.store.worker_heartbeat(self.worker_id, "polling", release_id=release_id)
         action = self.store.claim(self.worker_id)
         if action is None:
+            self.store.worker_heartbeat(self.worker_id, "idle", release_id=release_id)
             return {"status": "idle"}
         action_id = action["action_id"]
         attempt_id = action["attempt_id"]
         lease_token = action["lease_token"]
+        self.store.worker_heartbeat(self.worker_id, "executing", action_id, release_id)
         try:
             preflight_error = self._preflight(action)
         except TwentyActionUnavailable:
@@ -115,7 +134,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code="PREFLIGHT_SOURCE_UNAVAILABLE",
             )
-            return {"status": "safe_retry", "action_id": action_id}
+            return self._outcome("safe_retry", action_id)
         if preflight_error:
             self.store.transition_attempt(
                 action_id,
@@ -126,7 +145,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code=preflight_error,
             )
-            return {"status": "conflict", "action_id": action_id}
+            return self._outcome("conflict", action_id)
         if self.store.is_paused(action["action_type"]):
             self.store.transition_attempt(
                 action_id,
@@ -136,7 +155,7 @@ class ActionWorker:
                 event_type="PAUSED_BEFORE_SEND",
                 actor=self.worker_id,
             )
-            return {"status": "paused", "action_id": action_id}
+            return self._outcome("paused", action_id)
         if fault == FaultPoint.BEFORE_SEND:
             self.store.transition_attempt(
                 action_id,
@@ -147,7 +166,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code="INJECTED_BEFORE_SEND",
             )
-            return {"status": "safe_retry", "action_id": action_id}
+            return self._outcome("safe_retry", action_id)
 
         try:
             effect = self._submit(action)
@@ -161,7 +180,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code=str(error),
             )
-            return {"status": "manual_review", "action_id": action_id}
+            return self._outcome("manual_review", action_id)
         except TwentyActionUnavailable:
             self.store.transition_attempt(
                 action_id,
@@ -172,7 +191,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code="TWENTY_RESULT_UNKNOWN",
             )
-            return {"status": "unknown", "action_id": action_id}
+            return self._outcome("unknown", action_id)
         remote_ref = effect["effect_id"]
         if fault == FaultPoint.RESPONSE_LOST:
             self.store.transition_attempt(
@@ -185,16 +204,12 @@ class ActionWorker:
                 remote_ref=remote_ref,
                 error_code="INJECTED_RESPONSE_LOSS",
             )
-            return {"status": "unknown", "action_id": action_id}
+            return self._outcome("unknown", action_id)
         if fault in {
             FaultPoint.AFTER_REMOTE_COMMIT_CRASH,
             FaultPoint.BEFORE_SUCCESS_PERSIST,
         }:
-            return {
-                "status": "crashed",
-                "action_id": action_id,
-                "fault": fault.value,
-            }
+            return self._outcome("crashed", action_id, fault=fault.value)
 
         self.store.transition_attempt(
             action_id,
@@ -206,9 +221,15 @@ class ActionWorker:
             remote_ref=remote_ref,
             result=self._json_result(effect),
         )
-        return {"status": "succeeded", "action_id": action_id}
+        return self._outcome("succeeded", action_id)
 
     def reconcile(self, action_id: str) -> dict[str, Any]:
+        self.store.worker_heartbeat(
+            self.worker_id,
+            "reconciling",
+            action_id,
+            os.environ.get("OPERION_RELEASE_ID") or None,
+        )
         action = self.store.mark_reconciling(action_id, self.worker_id)
         attempt_id = self._latest_attempt(action_id)
         lease_token = action["lease_token"]
@@ -226,7 +247,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code=str(error),
             )
-            return {"status": "manual_review", "action_id": action_id}
+            return self._outcome("manual_review", action_id)
         except TwentyActionUnavailable:
             self.store.transition_attempt(
                 action_id,
@@ -237,7 +258,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code="TWENTY_UNAVAILABLE",
             )
-            return {"status": "reconciling", "action_id": action_id}
+            return self._outcome("reconciling", action_id)
         if len(effects) == 0:
             self.store.transition_attempt(
                 action_id,
@@ -247,7 +268,7 @@ class ActionWorker:
                 event_type="RECONCILED_NO_SUBMIT_SAFE_RETRY",
                 actor=self.worker_id,
             )
-            return {"status": "safe_retry", "action_id": action_id}
+            return self._outcome("safe_retry", action_id)
         if len(effects) > 1:
             self.store.transition_attempt(
                 action_id,
@@ -258,7 +279,7 @@ class ActionWorker:
                 actor=self.worker_id,
                 error_code="MULTIPLE_REMOTE_RESULTS",
             )
-            return {"status": "manual_review", "action_id": action_id}
+            return self._outcome("manual_review", action_id)
         effect = effects[0]
         if effect["payload_hash"] != action["payload_hash"]:
             self.store.transition_attempt(
@@ -271,7 +292,7 @@ class ActionWorker:
                 remote_ref=effect["effect_id"],
                 error_code="REMOTE_CONTENT_MISMATCH",
             )
-            return {"status": "manual_review", "action_id": action_id}
+            return self._outcome("manual_review", action_id)
         self.store.transition_attempt(
             action_id,
             attempt_id,
@@ -282,7 +303,7 @@ class ActionWorker:
             remote_ref=effect["effect_id"],
             result=self._json_result(effect),
         )
-        return {"status": "succeeded", "action_id": action_id}
+        return self._outcome("succeeded", action_id)
 
     def recover_expired(self) -> list[dict[str, Any]]:
         return [
@@ -310,6 +331,11 @@ def main() -> None:
     mode.add_argument("--reconcile", metavar="ACTION_ID")
     parser.add_argument("--worker-id", default="operion-e3-worker")
     args = parser.parse_args()
+    if os.environ.get("OPERION_ENVIRONMENT") == "enterprise":
+        if os.environ.get("OPERION_WRITES_ENABLED") != "1":
+            raise SystemExit("enterprise write release gate is closed")
+        if not os.environ.get("OPERION_RELEASE_ID", "").strip():
+            raise SystemExit("OPERION_RELEASE_ID is required for enterprise writes")
     dsn = os.environ.get("OPERION_ACTION_DATABASE_URL", "")
     if not dsn:
         raise SystemExit("OPERION_ACTION_DATABASE_URL is required")

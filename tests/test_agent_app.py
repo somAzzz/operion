@@ -85,6 +85,90 @@ class AgentAppTests(unittest.TestCase):
         self.assertNotIn("forged", serialized)
         self.assertIn("real request", serialized)
 
+    def test_frontend_tool_definitions_do_not_shadow_server_tools(self):
+        payload = {
+            "threadId": "conversation-tools",
+            "runId": "run-tools",
+            "state": {},
+            "context": [],
+            "forwardedProps": {},
+            "tools": [
+                {
+                    "name": "check_fulfillment",
+                    "description": "Render the server-side fulfillment result.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"case_id": {"type": "string"}},
+                        "required": ["case_id"],
+                    },
+                }
+            ],
+            "messages": [
+                {"id": "user-tools", "role": "user", "content": "real request"}
+            ],
+        }
+
+        response = self.client.post("/api/agent", json=payload, headers=self.headers)
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("trusted:real request", response.text)
+        self.assertNotIn("conflicts with existing tool", response.text)
+
+    def test_conversation_list_exposes_owned_history(self):
+        payload = {
+            "threadId": "conversation-listed",
+            "runId": "run-listed",
+            "state": {},
+            "context": [],
+            "forwardedProps": {},
+            "tools": [],
+            "messages": [
+                {"id": "user-listed", "role": "user", "content": "customer history"}
+            ],
+        }
+        run = self.client.post("/api/agent", json=payload, headers=self.headers)
+
+        response = self.client.get("/api/conversations", headers=self.headers)
+
+        self.assertEqual(200, run.status_code)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            "conversation-listed",
+            response.json()["conversations"][0]["conversation_id"],
+        )
+        self.assertEqual(
+            "customer history", response.json()["conversations"][0]["title"]
+        )
+
+    def test_conversation_delete_requires_intent_and_removes_history(self):
+        payload = {
+            "threadId": "conversation-delete",
+            "runId": "run-delete",
+            "state": {},
+            "context": [],
+            "forwardedProps": {},
+            "tools": [],
+            "messages": [{"id": "user-delete", "role": "user", "content": "delete me"}],
+        }
+        run = self.client.post("/api/agent", json=payload, headers=self.headers)
+
+        denied = self.client.delete(
+            "/api/conversations/conversation-delete", headers=self.headers
+        )
+        deleted = self.client.delete(
+            "/api/conversations/conversation-delete",
+            headers={**self.headers, "X-Operion-Intent": "delete-conversation"},
+        )
+        history = self.client.get(
+            "/api/conversations/conversation-delete", headers=self.headers
+        )
+
+        self.assertEqual(200, run.status_code)
+        self.assertEqual(403, denied.status_code)
+        self.assertEqual(200, deleted.status_code)
+        self.assertTrue(deleted.json()["deleted"])
+        self.assertEqual([], history.json()["messages"])
+
     def test_run_id_replay_is_rejected(self):
         payload = {
             "threadId": "conversation-2",

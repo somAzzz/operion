@@ -1,6 +1,6 @@
 # E5：企业试运行与运维
 
-状态：PLANNED。责任：运维负责人协调；业务、系统和权限/数据治理负责人共同复核。
+状态：TECHNICAL CONTROLS IMPLEMENTED / PILOT BLOCKED（2026-09-20）。责任：运维负责人协调；业务、系统和权限/数据治理负责人共同复核。
 
 ## 目标与入口
 
@@ -44,6 +44,20 @@
 
 - M3：只读相关要求全部通过，写入口禁用，公开列出写能力未放行。
 - M4：M2 与本阶段全部适用要求通过，仅开放内部跟进任务；新工具仍默认拒绝。
+
+## 当前实施结果（2026-09-20）
+
+已实现企业 OIDC token 校验、服务端用户/tenant/company/customer/role 映射、用户与 session 撤销、Web 服务端令牌转发、企业写入 release gate、会话访问审计与 24 小时内容清理、Action 运维快照、Worker heartbeat/release ID，以及严格的 O01–O08/10 日试运行证据校验器。合同见 [E5 企业边界](../../../contracts/e5-enterprise-boundary-v1.md)，部署与取证见 [E5 运行手册](../../../ops/e5-enterprise-pilot.md)。
+
+本地确定性测试和构建不能完成以下真实环境条件，因此当前不得标为 PASSED，也不得开放企业真实数据或写入：
+
+- 尚未配置实际 OIDC issuer/audience/JWKS、3–5 名试运行用户和生产 ingress 网络边界；
+- 尚未填写主/备值班人并实际接收 PostgreSQL、Worker stall、磁盘不足告警；
+- 尚未配置加密异机 backup/WAL 归档并完成隔离恢复，无法证明 RPO ≤ 15 分钟、RTO ≤ 4 小时；
+- 尚未完成五并发真实容量与发布回退演练；
+- 自 2026-09-20 起尚未经过至少 10 个业务日的非零真实流量观察，也没有业务、运维、治理三方签署。
+
+`operion-evaluate-e5` 对缺失、模拟、含占位符或未达到上述门槛的 evidence 返回 `blocked` 和非零退出码，防止把技术准备误报为企业试运行通过。
 
 ## 停止与恢复条件
 

@@ -11,6 +11,7 @@ dependencies = [
     "fastapi==0.141.1",
     "httpx2==2.13.0",
     "mcp>=2,<3",
+    "pyjwt[crypto]==2.14.0",
     "pydantic-ai-slim[ag-ui,openai]==2.46.0",
     "psycopg[binary]==3.3.6",
     "uvicorn==0.53.0",
@@ -31,6 +32,8 @@ operion-action-worker = "operion_etl.action_worker:main"
 operion-evaluate-e3 = "operion_etl.e3_evaluation:main"
 operion-probe-e3 = "operion_etl.e3_capability:main"
 operion-evaluate-e4 = "operion_etl.e4_evaluation:main"
+operion-evaluate-e5 = "operion_etl.e5_evaluation:main"
+operion-session-purge = "operion_etl.session_store:purge_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
