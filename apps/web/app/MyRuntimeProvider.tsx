@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AssistantRuntimeProvider,
   ExportedMessageRepository,
@@ -12,6 +18,14 @@ import {
 } from "@assistant-ui/react-ag-ui";
 
 const THREAD_STORAGE_KEY = "operion.active-thread";
+
+type ConversationSummary = {
+  conversation_id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+};
 
 function initialThreadId() {
   if (typeof window === "undefined") return "operion-new-thread";
@@ -29,6 +43,44 @@ export function MyRuntimeProvider({
   children,
 }: Readonly<{ children: ReactNode }>) {
   const [currentThreadId, setCurrentThreadId] = useState(initialThreadId);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+
+  const fetchHistory = useCallback(async (threadId: string) => {
+    const response = await fetch(
+      `/api/conversations/${encodeURIComponent(threadId)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      if (response.status === 404) {
+        return ExportedMessageRepository.fromArray([]);
+      }
+      throw new Error("Unable to restore the trusted conversation history.");
+    }
+    const data = (await response.json()) as { messages: readonly unknown[] };
+    return ExportedMessageRepository.fromArray(
+      fromAgUiMessages(data.messages, { showThinking: false }),
+    );
+  }, []);
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/conversations", { cache: "no-store" });
+      if (!response.ok) throw new Error("Unable to list conversations.");
+      const data = (await response.json()) as {
+        conversations: ConversationSummary[];
+      };
+      setConversations(data.conversations);
+    } catch {
+      setConversations([]);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshConversations();
+  }, [refreshConversations]);
 
   const agent = useMemo(() => {
     return new HttpAgent({
@@ -43,37 +95,65 @@ export function MyRuntimeProvider({
   const historyAdapter = useMemo(
     () => ({
       load: async () => {
-        const response = await fetch(`/api/conversations/${currentThreadId}`, {
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          if (response.status === 404) {
-            return ExportedMessageRepository.fromArray([]);
-          }
-          throw new Error("Unable to restore the trusted conversation history.");
-        }
-        const data = (await response.json()) as { messages: readonly unknown[] };
-        return ExportedMessageRepository.fromArray(
-          fromAgUiMessages(data.messages, { showThinking: false }),
-        );
+        return fetchHistory(currentThreadId);
       },
       append: async () => {
-        // The Agent API saves the completed run. Browser history is not authoritative.
+        // The Agent API remains authoritative; this only refreshes its index.
+        await refreshConversations();
       },
     }),
-    [currentThreadId],
+    [currentThreadId, fetchHistory, refreshConversations],
   );
 
   const threadListAdapter = useMemo(
     () => ({
       threadId: currentThreadId,
+      isLoading: isLoadingConversations,
+      threads: conversations.map((conversation) => ({
+        status: "regular" as const,
+        id: conversation.conversation_id,
+        remoteId: conversation.conversation_id,
+        title: conversation.title,
+        custom: {
+          messageCount: conversation.message_count,
+          updatedAt: conversation.updated_at,
+        },
+      })),
       onSwitchToNewThread: async () => {
         const newId = crypto.randomUUID();
         window.localStorage.setItem(THREAD_STORAGE_KEY, newId);
         setCurrentThreadId(newId);
       },
+      onSwitchToThread: async (threadId: string) => {
+        const history = await fetchHistory(threadId);
+        window.localStorage.setItem(THREAD_STORAGE_KEY, threadId);
+        setCurrentThreadId(threadId);
+        return { messages: history.messages.map((item) => item.message) };
+      },
+      onDelete: async (threadId: string) => {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(threadId)}`,
+          {
+            method: "DELETE",
+            headers: { "X-Operion-Intent": "delete-conversation" },
+          },
+        );
+        if (!response.ok) {
+          throw new Error("Unable to delete the conversation.");
+        }
+        setConversations((current) =>
+          current.filter(
+            (conversation) => conversation.conversation_id !== threadId,
+          ),
+        );
+        if (threadId === currentThreadId) {
+          const newId = crypto.randomUUID();
+          window.localStorage.setItem(THREAD_STORAGE_KEY, newId);
+          setCurrentThreadId(newId);
+        }
+      },
     }),
-    [currentThreadId],
+    [conversations, currentThreadId, fetchHistory, isLoadingConversations],
   );
 
   const runtime = useAgUiRuntime({

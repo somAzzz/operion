@@ -3,9 +3,12 @@
 import {
   defineToolkit,
   useAui,
+  useAuiState,
   AuiProvider,
   AuiConfig,
   Suggestions,
+  ThreadListItemPrimitive,
+  ThreadListPrimitive,
   Tools,
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
@@ -13,10 +16,13 @@ import {
   ArchiveIcon,
   Clock3Icon,
   DatabaseIcon,
+  HistoryIcon,
+  MessageSquareTextIcon,
   PackageCheckIcon,
   SendIcon,
   PlusIcon,
   ShieldCheckIcon,
+  Trash2Icon,
   UserRoundSearchIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -151,6 +157,57 @@ function NewThreadButton() {
   );
 }
 
+function ConversationHistoryItem() {
+  return (
+    <ThreadListItemPrimitive.Root className="conversation-history__item">
+      <ThreadListItemPrimitive.Trigger className="conversation-history__trigger">
+        <MessageSquareTextIcon aria-hidden="true" />
+        <span>
+          <ThreadListItemPrimitive.Title fallback="New conversation" />
+        </span>
+      </ThreadListItemPrimitive.Trigger>
+      <ThreadListItemPrimitive.Delete
+        className="conversation-history__delete"
+        aria-label="Delete conversation"
+        title="Delete conversation"
+        onClick={(event) => {
+          if (!window.confirm("Delete this conversation and its saved messages?")) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <Trash2Icon aria-hidden="true" />
+      </ThreadListItemPrimitive.Delete>
+    </ThreadListItemPrimitive.Root>
+  );
+}
+
+function ConversationHistory() {
+  const isLoading = useAuiState((state) => state.threads.isLoading);
+  const threadCount = useAuiState((state) => state.threads.threadIds.length);
+  return (
+    <section className="conversation-history" aria-label="Conversation history">
+      <div className="conversation-history__header">
+        <span><HistoryIcon aria-hidden="true" />History</span>
+        <ThreadListPrimitive.New aria-label="Start a new conversation">
+          <PlusIcon aria-hidden="true" />
+        </ThreadListPrimitive.New>
+      </div>
+      <ThreadListPrimitive.Root className="conversation-history__list">
+        <ThreadListPrimitive.Items
+          components={{ ThreadListItem: ConversationHistoryItem }}
+        />
+      </ThreadListPrimitive.Root>
+      {isLoading ? (
+        <p className="conversation-history__empty">Loading history…</p>
+      ) : null}
+      {!isLoading && threadCount === 0 ? (
+        <p className="conversation-history__empty">No saved conversations yet.</p>
+      ) : null}
+    </section>
+  );
+}
+
 function ThreadWithSuggestions() {
   const aui = useAui();
   const config = AuiConfig({
@@ -200,6 +257,7 @@ export default function Home() {
             <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>2 reads + 1 proposal</dd></div>
             <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
           </dl>
+          <ConversationHistory />
           <p className="rail-note">The Agent can save a proposal, but only a separate approval and deterministic worker can create one internal Task.</p>
         </aside>
         <section className="chat-workspace" aria-label="Controlled business assistant">
