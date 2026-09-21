@@ -34,8 +34,8 @@ export function ActionShell({
 export function ServiceUnavailable() {
   return (
     <div className="empty-panel" role="status">
-      <strong>Action service unavailable</strong>
-      <p>No decision was sent. Start the E3 action API and refresh this page.</p>
+      <strong>Action data is temporarily unavailable</strong>
+      <p>No decision was sent. Refresh this page or try again later.</p>
     </div>
   );
 }

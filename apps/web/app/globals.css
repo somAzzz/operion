@@ -292,20 +292,26 @@
 
 .conversation-history__list {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 0.25rem;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
 .conversation-history__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 0.2rem;
 }
 
 .conversation-history__trigger {
+  width: 100%;
   min-width: 0;
-  flex: 1;
   padding: 0.55rem 0.6rem;
   border-radius: 0.38rem;
   color: oklch(0.73 0.028 222);
@@ -316,13 +322,12 @@
 
 .conversation-history__delete {
   display: grid;
-  width: 1.8rem;
-  height: 1.8rem;
-  flex: none;
+  width: 2rem;
+  height: 2rem;
   place-items: center;
   border-radius: 0.35rem;
   color: oklch(0.62 0.035 220);
-  opacity: 0;
+  opacity: 0.68;
   transition: color 120ms ease, background 120ms ease, opacity 120ms ease;
 }
 
@@ -338,6 +343,7 @@
 }
 
 .conversation-history__trigger span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -466,6 +472,13 @@
 .result-card h3 { margin-top: 0.55rem; font-weight: 650; letter-spacing: -0.02em; }
 .result-card p, .result-card small { display: block; margin-top: 0.45rem; color: var(--muted-foreground); }
 .result-card code { display: block; margin-top: 0.6rem; font-size: 0.72rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+
+.result-list { display: grid; gap: 0.65rem; margin-top: 0.75rem; }
+.result-list__item { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.75rem; border: 1px solid color-mix(in oklab, var(--border) 78%, transparent); border-radius: 0.75rem; background: color-mix(in oklab, var(--muted) 35%, transparent); }
+.result-list__item > div { display: grid; min-width: 0; gap: 0.2rem; }
+.result-list__item span, .result-list__item code { font-size: 0.75rem; }
+.result-card__select { flex: none; border: 1px solid var(--border); border-radius: 999px; padding: 0.35rem 0.65rem; font-size: 0.72rem; font-weight: 650; background: var(--background); }
+.result-card__select:hover { background: var(--accent); }
 .metric-row { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.75rem; }
 .metric-row strong { font: 650 1.8rem/1 ui-monospace, monospace; }
 .metric-row span { color: var(--muted-foreground); font-size: 0.78rem; }
@@ -576,6 +589,7 @@
 .preview-grid div { min-width: 0; padding: 0.85rem; background: var(--card); }
 .preview-grid dt { color: var(--muted-foreground); font: 0.65rem/1.2 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; }
 .preview-grid dd { margin-top: 0.35rem; font-size: 0.8rem; overflow-wrap: anywhere; }
+.approval-preview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .remote-link { color: oklch(0.43 0.11 211); text-decoration: underline; text-underline-offset: 0.2em; }
 
 .side-effect-box {
@@ -594,7 +608,33 @@
 .decision-row button:disabled { opacity: 0.55; }
 .approve-button { color: white; background: oklch(0.42 0.1 211); }
 .reject-button { color: oklch(0.48 0.16 30); background: white; }
-.decision-message { padding: 0.8rem 1rem; border-left: 3px solid oklch(0.58 0.14 158); background: oklch(0.96 0.03 158); font-size: 0.8rem; }
+.decision-message { position: sticky; top: 1rem; z-index: 5; padding: 0.8rem 1rem; border-left: 3px solid oklch(0.58 0.14 158); background: oklch(0.96 0.03 158); box-shadow: 0 0.5rem 1.5rem oklch(0.25 0.03 240 / 0.12); font-size: 0.8rem; }
+
+.technical-details {
+  margin-top: 0.85rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.technical-details summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.technical-details dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+}
+
+.technical-details dt { font: 0.63rem/1.2 ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+.technical-details dd { margin-top: 0.25rem; overflow-wrap: anywhere; color: var(--foreground); }
 
 .action-list { display: grid; gap: 0.7rem; }
 .action-list__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.8rem 1.5rem; padding: 1rem 1.15rem; transition: border-color 120ms ease, transform 120ms ease; }

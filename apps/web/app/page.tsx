@@ -10,6 +10,7 @@ import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
   Tools,
+  unstable_useComposerInput,
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import {
@@ -39,8 +40,115 @@ function EvidenceRows({ data }: { data: Record<string, unknown> }) {
     <div className="evidence-meta">
       <span><DatabaseIcon aria-hidden="true" />{sources.length} sources</span>
       <span><Clock3Icon aria-hidden="true" />{observedAt}</span>
+      <span>{String(data.data_mode ?? "snapshot")} · {String(data.data_class ?? "—")}</span>
     </div>
   );
+}
+
+function SelectStableId({ id, noun }: { id: string; noun: string }) {
+  const composer = unstable_useComposerInput();
+  return (
+    <button
+      type="button"
+      className="result-card__select"
+      onClick={() => composer.setText(`Show me ${noun} ${id}.`)}
+    >
+      Use this {noun}
+    </button>
+  );
+}
+
+function ResultError({ result, label }: { result?: ToolRenderProps["result"]; label: string }) {
+  if (result?.ok !== false) return null;
+  const candidates = Array.isArray(result.error?.candidates) ? result.error.candidates : [];
+  return (
+    <div className="result-card is-error">
+      <strong>{label}</strong>
+      <span>{String(result.error?.message ?? "Source unavailable")}</span>
+      {candidates.map((candidate, index) => {
+        const row = candidate as Record<string, unknown>;
+        const id = String(row.canonical_id ?? "");
+        return <div key={id || index}><span>{String(row.name ?? id)}</span>{id ? <SelectStableId id={id} noun="customer" /> : null}</div>;
+      })}
+    </div>
+  );
+}
+
+function SearchResultsCard({ result, kind }: ToolRenderProps & { kind: "customer" | "supplier" }) {
+  const data = result?.data ?? {};
+  const rows = Array.isArray(data.results) ? data.results : [];
+  const pagination = (data.pagination ?? {}) as Record<string, unknown>;
+  if (!result) return <div className="result-card is-loading">Searching {kind}s…</div>;
+  if (!result.ok) return <ResultError result={result} label={`${kind} search unavailable`} />;
+  return (
+    <section className="result-card" aria-label={`${kind} search results`}>
+      <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />{kind} results</div>
+      <h3>{rows.length ? `${rows.length} on this page` : `No ${kind}s found`}</h3>
+      <div className="result-list">
+        {rows.map((item) => {
+          const row = item as Record<string, unknown>;
+          const id = String(row.canonical_id ?? "");
+          return <div className="result-list__item" key={id}><div><strong>{String(row.name ?? id)}</strong><span>{String(row.city ?? "")} · {String(row.country ?? "")}</span><code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
+        })}
+      </div>
+      {pagination.has_more ? <small>More results are available; use the returned cursor to continue.</small> : null}
+      <EvidenceRows data={data} />
+    </section>
+  );
+}
+
+function OrderListCard({ result, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
+  const data = result?.data ?? {};
+  const orders = Array.isArray(data.orders) ? data.orders : [];
+  const pagination = (data.pagination ?? {}) as Record<string, unknown>;
+  if (!result) return <div className="result-card is-loading">Loading {kind}s…</div>;
+  if (!result.ok) return <ResultError result={result} label={`${kind} list unavailable`} />;
+  return (
+    <section className="result-card" aria-label={`${kind} list`}>
+      <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind}s</div>
+      <h3>{orders.length ? `${orders.length} on this page` : `No matching ${kind}s`}</h3>
+      <div className="result-list">
+        {orders.map((item) => {
+          const row = item as Record<string, unknown>;
+          const id = String(row.canonical_id ?? "");
+          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · {String(row.business_status ?? row.source_status ?? "")}</span><code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
+        })}
+      </div>
+      {pagination.has_more ? <small>Results are truncated; continue with next_cursor.</small> : null}
+      <EvidenceRows data={data} />
+    </section>
+  );
+}
+
+function OrderDetailCard({ result, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
+  const data = result?.data ?? {};
+  const order = (data.order ?? {}) as Record<string, unknown>;
+  const lines = Array.isArray(data.lines) ? data.lines : [];
+  if (!result) return <div className="result-card is-loading">Loading {kind} details…</div>;
+  if (!result.ok) return <ResultError result={result} label={`${kind} unavailable`} />;
+  return (
+    <section className="result-card" aria-label={`${kind} detail`}>
+      <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind} detail</div>
+      <h3>{String(order.order_number ?? order.canonical_id ?? kind)}</h3>
+      <p>{String(order.customer_name ?? order.supplier_name ?? "")} · {String(order.order_date ?? "")} · {String(order.business_status ?? order.source_status ?? "")}</p>
+      <div className="result-list">
+        {lines.map((item) => {
+          const row = item as Record<string, unknown>;
+          return <div className="result-list__item" key={String(row.canonical_id)}><div><strong>{String(row.product_name ?? row.description ?? "Item")}</strong><span>{String(row.quantity)} {String(row.uom)} × {String(row.unit_price_ex_tax)} {String(row.currency)}</span><span>{String(row.net_amount)} {String(row.currency)} · due {String(row.delivery_date ?? "—")}</span></div></div>;
+        })}
+      </div>
+      <EvidenceRows data={data} />
+    </section>
+  );
+}
+
+function SupplierOverviewCard({ args, result }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  const supplier = (data.supplier ?? {}) as Record<string, unknown>;
+  const orders = Array.isArray(data.orders) ? data.orders : [];
+  if (!result) return <div className="result-card is-loading">Loading supplier evidence…</div>;
+  if (!result.ok) return <ResultError result={result} label="Supplier lookup needs attention" />;
+  return <section className="result-card"><div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Supplier overview</div><h3>{String(supplier.name ?? args.supplier_id ?? "Supplier")}</h3><div className="metric-row"><strong>{orders.length}</strong><span>recent purchase orders in scope</span></div><code>{String(supplier.canonical_id ?? "")}</code><EvidenceRows data={data} /></section>;
 }
 
 function CustomerOverviewCard({ args, result }: ToolRenderProps) {
@@ -57,6 +165,23 @@ function CustomerOverviewCard({ args, result }: ToolRenderProps) {
       <h3>{String(customer.name ?? args.customer ?? "Customer")}</h3>
       <div className="metric-row"><strong>{orders.length}</strong><span>recent orders in scope</span></div>
       <code>{String(customer.canonical_id ?? "")}</code>
+      <EvidenceRows data={data} />
+    </section>
+  );
+}
+
+function CustomerPortfolioCard({ result }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  if (!result) return <div className="result-card is-loading">Counting authorized customers…</div>;
+  if (!result.ok) {
+    return <div className="result-card is-error"><strong>Customer count unavailable</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
+  }
+  return (
+    <section className="result-card" aria-label="Authorized customer portfolio summary">
+      <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Authorized customer scope</div>
+      <h3>{String(data.operating_company ?? "Operating company")}</h3>
+      <div className="metric-row"><strong>{String(data.customer_count ?? 0)}</strong><span>customers in your scope</span></div>
+      <p>{String(data.customers_with_orders ?? 0)} with orders · {String(data.open_order_count ?? 0)} open orders</p>
       <EvidenceRows data={data} />
     </section>
   );
@@ -102,6 +227,20 @@ function FollowupProposalCard({ result }: ToolRenderProps) {
 }
 
 const toolkit = defineToolkit({
+  get_customer_portfolio_summary: {
+    description: "Count and summarize customers in the authorized scope.",
+    parameters: {
+      type: "object",
+      properties: {
+        customer: {
+          type: "string",
+          enum: ["*"],
+          description: "All customers already authorized by the server.",
+        },
+      },
+    },
+    render: (props) => <CustomerPortfolioCard {...(props as ToolRenderProps)} />,
+  },
   get_customer_overview: {
     description: "Read an authorized customer, contacts, and recent orders.",
     parameters: {
@@ -116,6 +255,41 @@ const toolkit = defineToolkit({
       required: ["customer"],
     },
     render: (props) => <CustomerOverviewCard {...(props as ToolRenderProps)} />,
+  },
+  search_customers: {
+    description: "Search or list customers in the authorized scope.",
+    parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
+    render: (props) => <SearchResultsCard {...(props as ToolRenderProps)} kind="customer" />,
+  },
+  list_sales_orders: {
+    description: "List authorized sales orders by customer, date, and status.",
+    parameters: { type: "object", properties: { customer_id: { type: ["string", "null"] }, date_from: { type: ["string", "null"] }, date_to: { type: ["string", "null"] }, status: { type: ["string", "null"] }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
+    render: (props) => <OrderListCard {...(props as ToolRenderProps)} kind="sales order" />,
+  },
+  get_sales_order: {
+    description: "Read one authorized sales order and its item lines.",
+    parameters: { type: "object", properties: { order_id: { type: "string" } }, required: ["order_id"] },
+    render: (props) => <OrderDetailCard {...(props as ToolRenderProps)} kind="sales order" />,
+  },
+  search_suppliers: {
+    description: "Search or list suppliers in the authorized scope.",
+    parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
+    render: (props) => <SearchResultsCard {...(props as ToolRenderProps)} kind="supplier" />,
+  },
+  get_supplier_overview: {
+    description: "Read one authorized supplier and recent purchase orders.",
+    parameters: { type: "object", properties: { supplier_id: { type: "string" }, max_orders: { type: "integer", minimum: 1, maximum: 50 } }, required: ["supplier_id"] },
+    render: (props) => <SupplierOverviewCard {...(props as ToolRenderProps)} />,
+  },
+  list_purchase_orders: {
+    description: "List authorized purchase orders by supplier, date, and status.",
+    parameters: { type: "object", properties: { supplier_id: { type: ["string", "null"] }, date_from: { type: ["string", "null"] }, date_to: { type: ["string", "null"] }, status: { type: ["string", "null"] }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
+    render: (props) => <OrderListCard {...(props as ToolRenderProps)} kind="purchase order" />,
+  },
+  get_purchase_order: {
+    description: "Read one authorized purchase order and its item lines.",
+    parameters: { type: "object", properties: { order_id: { type: "string" } }, required: ["order_id"] },
+    render: (props) => <OrderDetailCard {...(props as ToolRenderProps)} kind="purchase order" />,
   },
   check_fulfillment: {
     description: "Evaluate a frozen fulfillment case with deterministic rules.",
@@ -151,16 +325,23 @@ function NewThreadButton() {
       onClick={() => aui.threads.switchToNewThread()}
       className="bg-background hover:bg-accent absolute top-4 right-4 z-10 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition-colors"
     >
-      <PlusIcon className="size-4" />
+      <PlusIcon className="size-4" aria-hidden="true" />
       New inquiry
     </button>
   );
 }
 
 function ConversationHistoryItem() {
+  const title = useAuiState(
+    (state) => state.threadListItem.title ?? "Untitled conversation",
+  );
+
   return (
     <ThreadListItemPrimitive.Root className="conversation-history__item">
-      <ThreadListItemPrimitive.Trigger className="conversation-history__trigger">
+      <ThreadListItemPrimitive.Trigger
+        className="conversation-history__trigger"
+        title={title}
+      >
         <MessageSquareTextIcon aria-hidden="true" />
         <span>
           <ThreadListItemPrimitive.Title fallback="New conversation" />
@@ -168,10 +349,10 @@ function ConversationHistoryItem() {
       </ThreadListItemPrimitive.Trigger>
       <ThreadListItemPrimitive.Delete
         className="conversation-history__delete"
-        aria-label="Delete conversation"
-        title="Delete conversation"
+        aria-label={`Delete conversation: ${title}`}
+        title={`Delete conversation: ${title}`}
         onClick={(event) => {
-          if (!window.confirm("Delete this conversation and its saved messages?")) {
+          if (!window.confirm(`Delete “${title}” and its saved messages?`)) {
             event.preventDefault();
           }
         }}
@@ -189,9 +370,6 @@ function ConversationHistory() {
     <section className="conversation-history" aria-label="Conversation history">
       <div className="conversation-history__header">
         <span><HistoryIcon aria-hidden="true" />History</span>
-        <ThreadListPrimitive.New aria-label="Start a new conversation">
-          <PlusIcon aria-hidden="true" />
-        </ThreadListPrimitive.New>
       </div>
       <ThreadListPrimitive.Root className="conversation-history__list">
         <ThreadListPrimitive.Items
@@ -213,9 +391,19 @@ function ThreadWithSuggestions() {
   const config = AuiConfig({
     suggestions: Suggestions([
       {
-        title: "Customer overview",
-        label: "review orders and source IDs",
-        prompt: "概览客户 operion:e2:organization:customer:ambiguous-a。",
+        title: "Customer count",
+        label: "summarize the authorized portfolio",
+        prompt: "How many customers do we have?",
+      },
+      {
+        title: "Find customers",
+        label: "search the Northstar demo accounts",
+        prompt: "查找名称包含 Northstar 的客户。",
+      },
+      {
+        title: "Purchase orders",
+        label: "review confirmed orders to receive",
+        prompt: "列出所有已确认待收货的采购订单。",
       },
       {
         title: "Fulfillment check",
@@ -254,7 +442,7 @@ export default function Home() {
           <div className="rail-status"><span className="status-dot" />Controlled actions</div>
           <dl>
             <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
-            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>2 reads + 1 proposal</dd></div>
+            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>10 reads + 1 proposal</dd></div>
             <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
           </dl>
           <ConversationHistory />
