@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx2
 from openai import AsyncOpenAI
@@ -17,15 +17,31 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.toolsets import FunctionToolset
 
 from .action_models import ActionConflict, ActionDenied, ActionUnavailable
+from .identity_readback import ERPNextReadClient, TwentyReadClient
 from .read_tools import (
     AccessScope,
     AmbiguousCustomerError,
+    AmbiguousSupplierError,
     CanonicalRepository,
+    LiveReadRepository,
     ReadToolError,
 )
 from .twenty_actions import FollowupProposalService, TwentyActionError
 
-READ_TOOLS = frozenset({"get_customer_overview", "check_fulfillment"})
+READ_TOOLS = frozenset(
+    {
+        "get_customer_portfolio_summary",
+        "search_customers",
+        "get_customer_overview",
+        "list_sales_orders",
+        "get_sales_order",
+        "search_suppliers",
+        "get_supplier_overview",
+        "list_purchase_orders",
+        "get_purchase_order",
+        "check_fulfillment",
+    }
+)
 FOLLOWUP_TOOLS = frozenset({"propose_followup_task"})
 
 AGENT_INSTRUCTIONS = """
@@ -34,6 +50,12 @@ You are Operion, a business assistant for customer and order questions.
 Rules:
 - Use the supplied business tools for customer and fulfillment facts. Never invent
   target records, stock quantities, dates, source IDs, or successful actions.
+- Use get_customer_portfolio_summary for customer totals. Describe its result as
+  the authorized customer scope, not as an unrestricted company-wide total.
+- Search before resolving partial names. If more than one candidate is returned,
+  present the candidates and ask the user to choose a stable canonical ID.
+- Keep sales-order and purchase-order questions distinct. Draft orders are not
+  confirmed open orders. Preserve native docstatus, business status, and source status.
 - You have no direct business write capability. The only possible action is
   propose_followup_task for a verified shortfall. It creates a server-side
   proposal, not a Twenty Task. A different human must approve the exact revision
@@ -139,7 +161,7 @@ def _tool_error(error: ReadToolError) -> dict[str, Any]:
         "ok": False,
         "error": {"code": error.code, "message": str(error)},
     }
-    if isinstance(error, AmbiguousCustomerError):
+    if isinstance(error, (AmbiguousCustomerError, AmbiguousSupplierError)):
         payload["error"]["candidates"] = error.candidates
     return payload
 
@@ -168,6 +190,178 @@ def get_customer_overview(
         }
     )
     return payload
+
+
+def get_customer_portfolio_summary(
+    ctx: RunContext[AgentDependencies],
+    customer: Literal["*"] = "*",
+) -> dict[str, Any]:
+    """Count and summarize customers in the server-defined authorized scope.
+
+    Args:
+        customer: Constant ``*`` meaning every customer already authorized by the
+            server. It cannot expand the server-defined access scope.
+    """
+    try:
+        result = ctx.deps.repository.customer_portfolio_summary(ctx.deps.scope)
+        payload = {"ok": True, "data": result}
+    except ReadToolError as error:
+        payload = _tool_error(error)
+    ctx.deps.tool_calls.append(
+        {
+            "name": "get_customer_portfolio_summary",
+            "arguments": {"customer": customer},
+            "result": payload,
+        }
+    )
+    return payload
+
+
+def _record_tool(
+    ctx: RunContext[AgentDependencies],
+    name: str,
+    arguments: dict[str, Any],
+    call: Any,
+) -> dict[str, Any]:
+    try:
+        payload = {"ok": True, "data": call()}
+    except ReadToolError as error:
+        payload = _tool_error(error)
+    ctx.deps.tool_calls.append(
+        {"name": name, "arguments": arguments, "result": payload}
+    )
+    return payload
+
+
+def search_customers(
+    ctx: RunContext[AgentDependencies],
+    query: str = "",
+    limit: int = 10,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Search or list authorized customers by partial name with stable pagination."""
+    args = {"query": query, "limit": limit, "cursor": cursor}
+    return _record_tool(
+        ctx,
+        "search_customers",
+        args,
+        lambda: ctx.deps.repository.search_customers(
+            query, ctx.deps.scope, limit, cursor
+        ),
+    )
+
+
+def list_sales_orders(
+    ctx: RunContext[AgentDependencies],
+    customer_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    limit: int = 10,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """List authorized sales orders using validated business filters."""
+    args = {
+        "customer_id": customer_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "status": status,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    return _record_tool(
+        ctx,
+        "list_sales_orders",
+        args,
+        lambda: ctx.deps.repository.list_sales_orders(
+            ctx.deps.scope, customer_id, date_from, date_to, status, limit, cursor
+        ),
+    )
+
+
+def get_sales_order(
+    ctx: RunContext[AgentDependencies], order_id: str
+) -> dict[str, Any]:
+    """Read one authorized sales order and its item lines."""
+    return _record_tool(
+        ctx,
+        "get_sales_order",
+        {"order_id": order_id},
+        lambda: ctx.deps.repository.get_sales_order(order_id, ctx.deps.scope),
+    )
+
+
+def search_suppliers(
+    ctx: RunContext[AgentDependencies],
+    query: str = "",
+    limit: int = 10,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Search or list authorized suppliers by partial name with stable pagination."""
+    args = {"query": query, "limit": limit, "cursor": cursor}
+    return _record_tool(
+        ctx,
+        "search_suppliers",
+        args,
+        lambda: ctx.deps.repository.search_suppliers(
+            query, ctx.deps.scope, limit, cursor
+        ),
+    )
+
+
+def get_supplier_overview(
+    ctx: RunContext[AgentDependencies], supplier_id: str, max_orders: int = 20
+) -> dict[str, Any]:
+    """Read one authorized supplier, contacts, and recent purchase orders."""
+    args = {"supplier_id": supplier_id, "max_orders": max_orders}
+    return _record_tool(
+        ctx,
+        "get_supplier_overview",
+        args,
+        lambda: ctx.deps.repository.supplier_overview(
+            supplier_id, ctx.deps.scope, max_orders
+        ),
+    )
+
+
+def list_purchase_orders(
+    ctx: RunContext[AgentDependencies],
+    supplier_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    limit: int = 10,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """List authorized purchase orders using validated business filters."""
+    args = {
+        "supplier_id": supplier_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "status": status,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    return _record_tool(
+        ctx,
+        "list_purchase_orders",
+        args,
+        lambda: ctx.deps.repository.list_purchase_orders(
+            ctx.deps.scope, supplier_id, date_from, date_to, status, limit, cursor
+        ),
+    )
+
+
+def get_purchase_order(
+    ctx: RunContext[AgentDependencies], order_id: str
+) -> dict[str, Any]:
+    """Read one authorized purchase order and its item lines."""
+    return _record_tool(
+        ctx,
+        "get_purchase_order",
+        {"order_id": order_id},
+        lambda: ctx.deps.repository.get_purchase_order(order_id, ctx.deps.scope),
+    )
 
 
 def check_fulfillment(
@@ -339,7 +533,19 @@ def create_operion_agent(
     model: Model | None = None,
 ) -> Agent[AgentDependencies, str]:
     toolset = FunctionToolset(
-        [get_customer_overview, check_fulfillment, propose_followup_task]
+        [
+            get_customer_portfolio_summary,
+            search_customers,
+            get_customer_overview,
+            list_sales_orders,
+            get_sales_order,
+            search_suppliers,
+            get_supplier_overview,
+            list_purchase_orders,
+            get_purchase_order,
+            check_fulfillment,
+            propose_followup_task,
+        ]
     )
     filtered_tools = toolset.filtered(
         lambda ctx, tool: tool.name in ctx.deps.allowed_tools
@@ -371,9 +577,38 @@ def repository_from_environment() -> CanonicalRepository:
     erpnext_observed_at = (
         os.environ.get("OPERION_ERPNEXT_OBSERVED_AT", "").strip() or None
     )
+    data_mode = os.environ.get("OPERION_DATA_MODE", "snapshot").strip().casefold()
+    common = {
+        "stale_after_seconds": int(
+            os.environ.get("OPERION_STALE_AFTER_SECONDS", "3600")
+        ),
+        "max_snapshot_skew_seconds": int(
+            os.environ.get("OPERION_MAX_SNAPSHOT_SKEW_SECONDS", "300")
+        ),
+    }
+    if data_mode == "live":
+        twenty_key = os.environ.get("TWENTY_API_KEY_READ_ONLY", "")
+        erpnext_key = os.environ.get("ERPNEXT_API_KEY_READ_ONLY", "")
+        if not twenty_key or not erpnext_key:
+            raise RuntimeError("live mode requires both read-only source credentials")
+        return LiveReadRepository(
+            directory,
+            identity_map=Path(identity_map),
+            twenty=TwentyReadClient(
+                os.environ.get("TWENTY_API_BASE_URL", "http://localhost:3000"),
+                twenty_key,
+            ),
+            erpnext=ERPNextReadClient(
+                os.environ.get("ERPNEXT_API_BASE_URL", "http://localhost:8080"),
+                erpnext_key,
+            ),
+            **common,
+        )
+    if data_mode != "snapshot":
+        raise RuntimeError("OPERION_DATA_MODE must be snapshot or live")
     if observed_at is None and not (twenty_observed_at and erpnext_observed_at):
         raise RuntimeError(
-            "set OPERION_OBSERVED_AT or both source-specific observation times"
+            "snapshot mode requires OPERION_OBSERVED_AT or both source-specific times"
         )
     return CanonicalRepository(
         directory,
@@ -381,10 +616,8 @@ def repository_from_environment() -> CanonicalRepository:
         observed_at=observed_at,
         twenty_observed_at=twenty_observed_at,
         erpnext_observed_at=erpnext_observed_at,
-        stale_after_seconds=int(os.environ.get("OPERION_STALE_AFTER_SECONDS", "3600")),
-        max_snapshot_skew_seconds=int(
-            os.environ.get("OPERION_MAX_SNAPSHOT_SKEW_SECONDS", "300")
-        ),
+        data_mode="snapshot",
+        **common,
     )
 
 
@@ -396,4 +629,13 @@ def scope_from_environment() -> AccessScope:
     )
     if not customer_ids:
         raise RuntimeError("OPERION_CUSTOMER_IDS must define the server-side scope")
-    return AccessScope(os.environ.get("OPERION_COMPANY", "AI Demo GmbH"), customer_ids)
+    supplier_ids = frozenset(
+        item.strip()
+        for item in os.environ.get("OPERION_SUPPLIER_IDS", "").split(",")
+        if item.strip()
+    )
+    return AccessScope(
+        os.environ.get("OPERION_COMPANY", "AI Demo GmbH"),
+        customer_ids,
+        supplier_ids,
+    )

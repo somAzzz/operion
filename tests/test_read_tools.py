@@ -29,6 +29,22 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         self.assertTrue(result["orders"])
         self.assertEqual("customer-overview-v1", result["contract_version"])
 
+    def test_customer_portfolio_summary_only_counts_authorized_customers(self):
+        result = self.repository.customer_portfolio_summary(self.scope)
+        self.assertEqual("customer-portfolio-v1", result["contract_version"])
+        self.assertEqual("authorized_customers", result["scope"])
+        self.assertEqual(1, result["customer_count"])
+        self.assertEqual(1, result["customers_with_orders"])
+        self.assertGreater(result["open_order_count"], 0)
+
+    def test_customer_portfolio_summary_reports_unknown_scoped_ids(self):
+        scope = AccessScope(
+            "AI Demo GmbH", frozenset({self.customer_id, "unknown-customer"})
+        )
+        result = self.repository.customer_portfolio_summary(scope)
+        self.assertEqual(1, result["customer_count"])
+        self.assertEqual(["customer:unknown-customer"], result["missing"])
+
     def test_c02_ambiguous_name_requires_clarification(self):
         original = next(
             row

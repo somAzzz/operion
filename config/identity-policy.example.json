@@ -10,6 +10,7 @@
       "tenant_id": "replace-with-tenant-id",
       "companies": ["replace-with-company"],
       "customer_ids": ["replace-with-canonical-customer-id"],
+      "supplier_ids": ["replace-with-canonical-supplier-id"],
       "roles": ["agent_read", "action_reader"]
     }
   }

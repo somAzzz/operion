@@ -16,10 +16,21 @@ class MCPServerAcceptanceTests(unittest.TestCase):
         scope = AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID}))
         self.server = create_server(repository, scope)
 
-    def test_exposes_exactly_two_read_only_business_tools(self):
+    def test_exposes_exactly_ten_read_only_business_tools(self):
         tools = asyncio.run(self.server.list_tools())
         self.assertEqual(
-            {"get_customer_overview", "check_fulfillment"},
+            {
+                "get_customer_portfolio_summary",
+                "get_customer_overview",
+                "check_fulfillment",
+                "search_customers",
+                "list_sales_orders",
+                "get_sales_order",
+                "search_suppliers",
+                "get_supplier_overview",
+                "list_purchase_orders",
+                "get_purchase_order",
+            },
             {tool.name for tool in tools},
         )
         for tool in tools:
@@ -31,13 +42,22 @@ class MCPServerAcceptanceTests(unittest.TestCase):
 
     def test_customer_scope_is_not_a_tool_argument(self):
         tools = asyncio.run(self.server.list_tools())
+        summary = next(
+            tool for tool in tools if tool.name == "get_customer_portfolio_summary"
+        )
         overview = next(tool for tool in tools if tool.name == "get_customer_overview")
+        self.assertEqual({"customer"}, set(summary.input_schema["properties"]))
+        self.assertEqual("*", summary.input_schema["properties"]["customer"]["const"])
+        self.assertNotIn("customer", summary.input_schema.get("required", []))
         self.assertEqual(
             {"customer", "max_orders"},
             set(overview.input_schema["properties"]),
         )
 
     def test_mcp_results_reuse_the_domain_implementation(self):
+        summary = asyncio.run(
+            self.server.call_tool("get_customer_portfolio_summary", {"customer": "*"})
+        )
         overview = asyncio.run(
             self.server.call_tool(
                 "get_customer_overview",
@@ -49,6 +69,8 @@ class MCPServerAcceptanceTests(unittest.TestCase):
         )
         self.assertFalse(overview.is_error)
         self.assertFalse(fulfillment.is_error)
+        self.assertFalse(summary.is_error)
+        self.assertEqual(1, summary.structured_content["customer_count"])
         self.assertEqual(
             CUSTOMER_ID,
             overview.structured_content["customer"]["canonical_id"],

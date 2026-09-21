@@ -17,6 +17,39 @@ CUSTOMER_ID = "wwi:organization:customer:11"
 
 
 class AgentRuntimeTests(unittest.TestCase):
+    def test_customer_portfolio_summary_is_available_as_a_server_tool(self):
+        call_count = 0
+
+        def model_function(messages, info: AgentInfo):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "get_customer_portfolio_summary",
+                            {},
+                            "call-summary",
+                        )
+                    ]
+                )
+            return ModelResponse(parts=[TextPart("One authorized customer.")])
+
+        settings = AgentSettings()
+        agent = create_operion_agent(settings, model=FunctionModel(model_function))
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID})),
+            user_id="user-1",
+            allowed_tools=frozenset({"get_customer_portfolio_summary"}),
+        )
+
+        result = agent.run_sync("how many customers do we have", deps=deps)
+
+        self.assertEqual("One authorized customer.", result.output)
+        self.assertEqual("get_customer_portfolio_summary", deps.tool_calls[0]["name"])
+        self.assertEqual(1, deps.tool_calls[0]["result"]["data"]["customer_count"])
+
     def test_tools_are_filtered_by_server_dependencies(self):
         observed_tools = []
 

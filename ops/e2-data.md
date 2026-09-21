@@ -111,6 +111,6 @@ depends only on the ERPNext timestamp because Twenty does not contribute stock.
 
 Run the 15 cases in `evaluations/e2/cases.json` three times each during E2. Data
 preparation is complete when the seed is ID-stable, identity and permission gates
-pass, the MCP exposes exactly two read-only tools, and F01–F06 resolve respectively
+pass, the MCP exposes exactly ten read-only tools, and F01–F06 resolve respectively
 to satisfiable, satisfiable, shortfall, shortfall, satisfiable, and
 insufficient-information.

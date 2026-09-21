@@ -27,6 +27,7 @@ class EnterpriseIdentity:
     roles: frozenset[str]
     subject: str
     session_id: str
+    supplier_ids: frozenset[str] = frozenset()
 
     def require(self, *allowed_roles: str) -> None:
         if not self.roles.intersection(allowed_roles):
@@ -135,6 +136,7 @@ class IdentityPolicy:
             roles=roles,
             subject=subject,
             session_id=session_id,
+            supplier_ids=frozenset(str(item) for item in user.get("supplier_ids", [])),
         )
 
 

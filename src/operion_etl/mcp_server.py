@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
+from .agent_runtime import repository_from_environment, scope_from_environment
 from .read_tools import AccessScope, CanonicalRepository
 
 
@@ -14,7 +13,7 @@ def create_server(
     repository: CanonicalRepository,
     scope: AccessScope,
 ) -> MCPServer:
-    """Expose exactly the two E1 business tools over MCP."""
+    """Expose the shared, read-only business query service over MCP."""
     server = MCPServer(
         "operion-read-tools",
         instructions=(
@@ -31,6 +30,25 @@ def create_server(
     )
 
     @server.tool(
+        name="get_customer_portfolio_summary",
+        description=(
+            "Count and summarize customers within the server-defined customer "
+            "scope. Has no side effects."
+        ),
+        annotations=read_only,
+        structured_output=True,
+    )
+    def get_customer_portfolio_summary(customer: Literal["*"] = "*") -> dict[str, Any]:
+        return repository.customer_portfolio_summary(scope)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def search_customers(
+        query: str = "", limit: int = 10, cursor: str | None = None
+    ) -> dict[str, Any]:
+        """Search or list authorized customers; partial names are supported."""
+        return repository.search_customers(query, scope, limit, cursor)
+
+    @server.tool(
         name="get_customer_overview",
         description=(
             "Return an allowlisted customer, contacts, and recent orders within "
@@ -44,6 +62,56 @@ def create_server(
         max_orders: int = 20,
     ) -> dict[str, Any]:
         return repository.customer_overview(customer, scope, max_orders)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def list_sales_orders(
+        customer_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        status: str | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """List authorized sales orders with validated customer/date/status filters."""
+        return repository.list_sales_orders(
+            scope, customer_id, date_from, date_to, status, limit, cursor
+        )
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_sales_order(order_id: str) -> dict[str, Any]:
+        """Return one authorized sales order and its item lines."""
+        return repository.get_sales_order(order_id, scope)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def search_suppliers(
+        query: str = "", limit: int = 10, cursor: str | None = None
+    ) -> dict[str, Any]:
+        """Search or list authorized suppliers; partial names are supported."""
+        return repository.search_suppliers(query, scope, limit, cursor)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_supplier_overview(supplier_id: str, max_orders: int = 20) -> dict[str, Any]:
+        """Return an authorized supplier, contacts, and recent purchase orders."""
+        return repository.supplier_overview(supplier_id, scope, max_orders)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def list_purchase_orders(
+        supplier_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        status: str | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """List authorized purchase orders with supplier/date/status filters."""
+        return repository.list_purchase_orders(
+            scope, supplier_id, date_from, date_to, status, limit, cursor
+        )
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_purchase_order(order_id: str) -> dict[str, Any]:
+        """Return one authorized purchase order and its item lines."""
+        return repository.get_purchase_order(order_id, scope)
 
     @server.tool(
         name="check_fulfillment",
@@ -61,46 +129,7 @@ def create_server(
 
 
 def server_from_environment() -> MCPServer:
-    canonical_dir = Path(
-        os.environ.get(
-            "OPERION_CANONICAL_DIR",
-            "data/canonical/wwi-v1-small-20260913-v4",
-        )
-    )
-    raw_customer_ids = os.environ.get("OPERION_CUSTOMER_IDS", "")
-    customer_ids = frozenset(
-        value.strip() for value in raw_customer_ids.split(",") if value.strip()
-    )
-    if not customer_ids:
-        raise RuntimeError(
-            "OPERION_CUSTOMER_IDS must define the server-side customer scope"
-        )
-    identity_value = os.environ.get("OPERION_IDENTITY_MAP", "").strip()
-    if not identity_value:
-        raise RuntimeError("OPERION_IDENTITY_MAP is required")
-    observed_at = os.environ.get("OPERION_OBSERVED_AT", "").strip()
-    twenty_observed_at = os.environ.get("OPERION_TWENTY_OBSERVED_AT", "").strip()
-    erpnext_observed_at = os.environ.get("OPERION_ERPNEXT_OBSERVED_AT", "").strip()
-    if not observed_at and not (twenty_observed_at and erpnext_observed_at):
-        raise RuntimeError(
-            "set OPERION_OBSERVED_AT or both OPERION_TWENTY_OBSERVED_AT and "
-            "OPERION_ERPNEXT_OBSERVED_AT"
-        )
-    repository = CanonicalRepository(
-        canonical_dir,
-        identity_map=Path(identity_value),
-        observed_at=observed_at or None,
-        twenty_observed_at=twenty_observed_at or None,
-        erpnext_observed_at=erpnext_observed_at or None,
-        max_snapshot_skew_seconds=int(
-            os.environ.get("OPERION_MAX_SNAPSHOT_SKEW_SECONDS", "300")
-        ),
-    )
-    scope = AccessScope(
-        operating_company=os.environ.get("OPERION_COMPANY", "AI Demo GmbH"),
-        customer_ids=customer_ids,
-    )
-    return create_server(repository, scope)
+    return create_server(repository_from_environment(), scope_from_environment())
 
 
 def main() -> None:

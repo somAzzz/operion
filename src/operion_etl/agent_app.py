@@ -110,6 +110,7 @@ class AgentApplication:
             ),
             subject=self.user_id,
             session_id="static-local-session",
+            supplier_ids=self.scope.supplier_ids,
         )
 
     def _validate_id(self, value: str, label: str) -> str:
@@ -210,7 +211,11 @@ class AgentApplication:
             allowed_tools |= FOLLOWUP_TOOLS
         deps = AgentDependencies(
             repository=self.repository,
-            scope=AccessScope(identity.operating_company, identity.customer_ids),
+            scope=AccessScope(
+                identity.operating_company,
+                identity.customer_ids,
+                identity.supplier_ids,
+            ),
             user_id=identity.user_id,
             allowed_tools=allowed_tools,
             proposal_service=self.proposal_service,

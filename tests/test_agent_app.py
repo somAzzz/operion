@@ -59,6 +59,25 @@ class AgentAppTests(unittest.TestCase):
         response = self.client.post("/api/agent", json={})
         self.assertEqual(401, response.status_code)
 
+    def test_health_lists_the_ten_server_side_read_tools(self):
+        response = self.client.get("/health")
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            [
+                "check_fulfillment",
+                "get_customer_overview",
+                "get_customer_portfolio_summary",
+                "get_purchase_order",
+                "get_sales_order",
+                "get_supplier_overview",
+                "list_purchase_orders",
+                "list_sales_orders",
+                "search_customers",
+                "search_suppliers",
+            ],
+            response.json()["tools"],
+        )
+
     def test_client_history_is_discarded_and_server_history_is_restored(self):
         payload = {
             "threadId": "conversation-1",

@@ -11,8 +11,9 @@ This contract defines the local, read-only Agent boundary used by the E2 demo.
 - The Python service binds a conversation to its server-configured user, loads
   history from SQLite, and replaces client history with only the latest user
   prompt.
-- The only executable business tools are `get_customer_overview` and
-  `check_fulfillment`; the per-run allowlist is resolved on the server.
+- The executable business tools are the ten read-only portfolio, customer,
+  supplier, sales-order, purchase-order, and frozen fulfillment operations in
+  `e1-read-tools-v1`; the per-run allowlist is resolved on the server.
 
 E2 is a single-user local demo boundary. E5 adds the required per-user OIDC,
 server-side tenant/customer policy and revocation path; enterprise deployments
@@ -40,7 +41,7 @@ identity. Completed runs return their stored status and unknown runs return 404.
 
 ### `GET /health`
 
-Returns mode, model name, and the exact two-tool list. It contains no secret or
+Returns mode, model name, and the exact ten-tool read list. It contains no secret or
 upstream credential.
 
 ## Failure contract
