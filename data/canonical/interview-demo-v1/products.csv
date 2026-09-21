@@ -1,0 +1,13 @@
+canonical_id,source_system,source_id,name,supplier_source_id,uom,outer_uom,units_per_outer,brand,size,barcode,unit_price_ex_tax,tax_rate_percent,quantity_on_hand,warehouse,bin_location,currency,data_class,dataset_version,business_date,seed
+operion:demo:interview-v1:product:001,operion,product-001,DEMO Recycled shipping carton S,supplier-001,Unit,Unit,1,DEMO Neutral Supply,,,1.85,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:002,operion,product-002,DEMO Recycled shipping carton M,supplier-002,Unit,Unit,1,DEMO Neutral Supply,,,2.40,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:003,operion,product-003,DEMO Recycled shipping carton L,supplier-003,Unit,Unit,1,DEMO Neutral Supply,,,3.20,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:004,operion,product-004,DEMO Paper packing tape 50 mm,supplier-004,Roll,Roll,1,DEMO Neutral Supply,,,3.75,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:005,operion,product-005,DEMO Water-activated tape 70 mm,supplier-001,Roll,Roll,1,DEMO Neutral Supply,,,5.60,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:006,operion,product-006,DEMO Kraft void-fill paper,supplier-002,Kilogram,Kilogram,1,DEMO Neutral Supply,,,2.95,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:007,operion,product-007,DEMO Reusable pallet wrap,supplier-003,Roll,Roll,1,DEMO Neutral Supply,,,8.40,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:008,operion,product-008,DEMO Compostable mailer S,supplier-004,Unit,Unit,1,DEMO Neutral Supply,,,0.48,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:009,operion,product-009,DEMO Compostable mailer L,supplier-001,Unit,Unit,1,DEMO Neutral Supply,,,0.72,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:010,operion,product-010,DEMO Thermal shipping label,supplier-002,Pack,Pack,1,DEMO Neutral Supply,,,12.50,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:011,operion,product-011,DEMO Corner protector set,supplier-003,Pack,Pack,1,DEMO Neutral Supply,,,6.80,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42
+operion:demo:interview-v1:product:012,operion,product-012,DEMO Document pouch,supplier-004,Pack,Pack,1,DEMO Neutral Supply,,,9.90,19,,,,EUR,simulated,interview-demo-v1,2026-09-15,42

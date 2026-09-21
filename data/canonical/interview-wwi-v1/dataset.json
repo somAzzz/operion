@@ -1,0 +1,72 @@
+{
+  "dataset_version": "interview-wwi-v1",
+  "source_system": "wwi",
+  "data_class": "public_sample",
+  "seed": 42,
+  "business_date": "2016-05-31",
+  "source_observed_at": "2026-09-12T10:03:59.810871+00:00",
+  "source_snapshot": {
+    "data_version": "wide-world-importers-v1.0",
+    "sha256": "e842bad6ce02f74f166947e559dab1b476edd7eaae3da2ab9e3f522f1dd87124",
+    "usage_class": "public_sample"
+  },
+  "source_profile": {
+    "customers": 663,
+    "suppliers": 13,
+    "products": 227,
+    "sales_orders": 73595,
+    "purchase_orders": 2074,
+    "sales_order_max_date": "2016-05-31",
+    "purchase_order_max_date": "2016-05-31"
+  },
+  "selection": {
+    "customer_order_counts": {
+      "58": 4,
+      "60": 0,
+      "65": 10,
+      "88": 0,
+      "183": 4,
+      "463": 3,
+      "840": 3,
+      "935": 2,
+      "961": 2,
+      "1011": 2
+    },
+    "supplier_ids": [
+      3,
+      6,
+      7,
+      8,
+      9
+    ],
+    "product_ids": [
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      189,
+      193,
+      203,
+      204
+    ],
+    "purchase_order_rule": "latest 15 complete 1-4-line orders using only selected products"
+  },
+  "currency": "USD",
+  "currency_basis": "dataset-level assumption for the US-oriented WWI v1 sample; WWI order rows do not store a currency code",
+  "amount_basis": "tax_exclusive",
+  "counts": {
+    "organizations": 15,
+    "contacts": 20,
+    "products": 12,
+    "sales_orders": 30,
+    "sales_order_lines": 31,
+    "purchase_orders": 15,
+    "purchase_order_lines": 43,
+    "fulfillment_scenarios": 0
+  },
+  "identity_rows": 190
+}

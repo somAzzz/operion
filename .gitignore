@@ -9,16 +9,18 @@ __pycache__/
 *.egg-info/
 .DS_Store
 
-# Local planning documents
-docs/project-plan.md
-docs/roadmap.md
-
 # Business data and generated outputs
 data/**
 !data/**/
 !data/README.md
 !data/**/.gitkeep
+!data/canonical/interview-demo-v1/*.csv
+!data/canonical/interview-demo-v1/dataset.json
+!data/canonical/interview-wwi-v1/*.csv
+!data/canonical/interview-wwi-v1/dataset.json
 reports/**
 !reports/**/
 !reports/**/.gitkeep
+!reports/interview-demo-v1/identity_map.csv
+!reports/interview-wwi-v1/identity_map.csv
 *.log

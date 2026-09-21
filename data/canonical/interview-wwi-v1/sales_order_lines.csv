@@ -1,0 +1,32 @@
+canonical_id,source_system,source_id,sales_order_canonical_id,product_canonical_id,description,uom,ordered_quantity,delivered_quantity,open_quantity,unit_price_ex_tax,tax_rate_percent,net_amount,currency,data_class,dataset_version,business_date,seed
+wwi:sales_order_line:99059,wwi,99059,wwi:sales_order:31349,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,120,120,0,3.70,15,444.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:114873,wwi,114873,wwi:sales_order:36352,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,25,25,0,3.50,15,87.50,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:127165,wwi,127165,wwi:sales_order:40304,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,150,150,0,3.50,15,525.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:128923,wwi,128923,wwi:sales_order:40787,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,50,50,0,3.50,15,175.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:131045,wwi,131045,wwi:sales_order:41481,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,150,150,0,3.50,15,525.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:127162,wwi,127162,wwi:sales_order:42411,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,192,0,192,3.70,15,710.40,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:135309,wwi,135309,wwi:sales_order:42840,wwi:product:204,Tape dispenser (Red),Each,20,20,0,32.00,15,640.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:136235,wwi,136235,wwi:sales_order:43195,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,72,72,0,3.70,15,266.40,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:150541,wwi,150541,wwi:sales_order:47710,wwi:product:204,Tape dispenser (Red),Each,60,60,0,32.00,15,1920.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:158700,wwi,158700,wwi:sales_order:50258,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,168,0,168,3.70,15,621.60,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:159927,wwi,159927,wwi:sales_order:50679,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,150,150,0,3.50,15,525.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:161218,wwi,161218,wwi:sales_order:51106,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,125,125,0,3.50,15,437.50,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:167892,wwi,167892,wwi:sales_order:53222,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,168,0,168,3.70,15,621.60,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:170193,wwi,170193,wwi:sales_order:53965,wwi:product:204,Tape dispenser (Red),Each,20,20,0,32.00,15,640.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:174925,wwi,174925,wwi:sales_order:55518,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,150,150,0,3.50,15,525.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:175151,wwi,175151,wwi:sales_order:55522,wwi:product:204,Tape dispenser (Red),Each,60,0,60,32.00,15,1920.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:176761,wwi,176761,wwi:sales_order:56074,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,100,100,0,3.50,15,350.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:181087,wwi,181087,wwi:sales_order:57457,wwi:product:204,Tape dispenser (Red),Each,80,0,80,32.00,15,2560.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:182357,wwi,182357,wwi:sales_order:57891,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,192,0,192,3.70,15,710.40,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:184549,wwi,184549,wwi:sales_order:58562,wwi:product:204,Tape dispenser (Red),Each,80,0,80,32.00,15,2560.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:189475,wwi,189475,wwi:sales_order:60139,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,75,75,0,3.50,15,262.50,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:197021,wwi,197021,wwi:sales_order:62581,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,192,0,192,3.70,15,710.40,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:199798,wwi,199798,wwi:sales_order:63469,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,175,0,175,3.50,15,612.50,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:209802,wwi,209802,wwi:sales_order:66694,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,144,0,144,3.70,15,532.80,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:210128,wwi,210128,wwi:sales_order:66823,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,48,48,0,3.70,15,177.60,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:217016,wwi,217016,wwi:sales_order:69034,wwi:product:204,Tape dispenser (Red),Each,60,0,60,32.00,15,1920.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:219734,wwi,219734,wwi:sales_order:69872,wwi:product:204,Tape dispenser (Red),Each,90,0,90,32.00,15,2880.00,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:223750,wwi,223750,wwi:sales_order:71206,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,192,0,192,3.70,15,710.40,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:226850,wwi,226850,wwi:sales_order:72172,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,168,0,168,3.70,15,621.60,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:230350,wwi,230350,wwi:sales_order:73279,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,168,0,168,3.70,15,621.60,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:sales_order_line:230352,wwi,230352,wwi:sales_order:73279,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,150,0,150,3.50,15,525.00,USD,public_sample,interview-wwi-v1,2016-05-31,42

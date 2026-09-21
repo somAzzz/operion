@@ -1,0 +1,21 @@
+{
+  "dataset_version": "interview-demo-v1",
+  "source_system": "operion",
+  "data_class": "simulated",
+  "seed": 42,
+  "business_date": "2026-09-15",
+  "source_observed_at": null,
+  "currency": "EUR",
+  "amount_basis": "tax_exclusive",
+  "counts": {
+    "organizations": 15,
+    "contacts": 20,
+    "products": 12,
+    "sales_orders": 30,
+    "sales_order_lines": 65,
+    "purchase_orders": 15,
+    "purchase_order_lines": 46,
+    "fulfillment_scenarios": 0
+  },
+  "identity_rows": 228
+}

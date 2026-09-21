@@ -1,0 +1,13 @@
+canonical_id,source_system,source_id,name,supplier_source_id,uom,outer_uom,units_per_outer,brand,size,barcode,unit_price_ex_tax,tax_rate_percent,quantity_on_hand,warehouse,bin_location,currency,data_class,dataset_version,business_date,seed
+wwi:product:177,wwi,177,Shipping carton (Brown) 413x285x187mm,7,Each,Each,25,,413x285x187mm,,1.05,15,58292,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:178,wwi,178,Shipping carton (Brown) 500x310x310mm,7,Each,Each,25,,500x310x310mm,,2.55,15,117043,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:179,wwi,179,Shipping carton (Brown) 229x229x229mm,7,Each,Each,25,,229x229x229mm,,1.05,15,214030,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:180,wwi,180,Shipping carton (Brown) 279x254x217mm,7,Each,Each,25,,279x254x217mm,,1.11,15,318572,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:181,wwi,181,Shipping carton (Brown) 356x229x229mm,7,Each,Each,25,,356x229x229mm,,1.14,15,64432,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:182,wwi,182,Shipping carton (Brown) 457x279x279mm,7,Each,Each,25,,457x279x279mm,,1.28,15,326007,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:183,wwi,183,Shipping carton (Brown) 480x270x320mm,7,Each,Each,25,,480x270x320mm,,2.74,15,62224,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:184,wwi,184,Shipping carton (Brown) 305x305x305mm,7,Each,Each,25,,305x305x305mm,,3.50,15,38,WWI Main Warehouse,D-3,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:189,wwi,189,Clear packaging tape 48mmx75m,7,Each,Each,26,,48mmx75m,,2.90,15,324375,WWI Main Warehouse,D-4,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:193,wwi,193,Black and orange glass with care despatch tape 48mmx75m,7,Each,Each,24,,48mmx75m,,3.70,15,50,WWI Main Warehouse,D-4,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:203,wwi,203,Tape dispenser (Black),7,Each,Each,10,,,,32.00,15,4253,WWI Main Warehouse,D-4,USD,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:product:204,wwi,204,Tape dispenser (Red),7,Each,Each,10,,,,32.00,15,24,WWI Main Warehouse,D-4,USD,public_sample,interview-wwi-v1,2016-05-31,42

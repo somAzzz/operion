@@ -1,0 +1,21 @@
+canonical_id,source_system,source_id,full_name,preferred_name,email,phone,company_canonical_id,is_employee,is_salesperson,relationship,data_class,dataset_version,business_date,seed
+wwi:contact:2,wwi,2,Kayla Woodcock,Kayla,kaylaw@wideworldimporters.com,(415) 555-0102,,true,true,internal purchasing contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:25,wwi,25,Kerstin Parn,Kerstin,kerstin@consolidatedmessenger.com,(415) 555-0100,wwi:organization:supplier:3,false,false,supplier primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:31,wwi,31,Madelaine  Cartier,Madelaine,madelainec@humongousinsurance.com,(423) 555-0101,wwi:organization:supplier:6,false,false,supplier primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:33,wwi,33,Elias Myllari,Elias,eliasm@litwareinc.com,(209) 555-0101,wwi:organization:supplier:7,false,false,supplier primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:35,wwi,35,Prem Prabhu,Prem,premp@lucernepublishing.com,(423) 555-0102,wwi:organization:supplier:8,false,false,supplier primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:37,wwi,37,Marcos Costa,Marcos,marcosc@nodpublishers.com,(252) 555-0106,wwi:organization:supplier:9,false,false,supplier primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1115,wwi,1115,Pratap Varghese,Pratap,pratap@tailspintoys.com,(276) 555-0100,wwi:organization:customer:58,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1116,wwi,1116,Marcel Marquis,Marcel,marcel@tailspintoys.com,(276) 555-0100,wwi:organization:customer:58,false,false,customer alternate contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1119,wwi,1119,Lekha Mitra,Lekha,lekha@tailspintoys.com,(304) 555-0100,wwi:organization:customer:60,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1120,wwi,1120,Seeta Bose,Seeta,seeta@tailspintoys.com,(304) 555-0100,wwi:organization:customer:60,false,false,customer alternate contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1129,wwi,1129,Hanuman Dubey,Hanuman,hanuman@tailspintoys.com,(210) 555-0100,wwi:organization:customer:65,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1130,wwi,1130,Paola Loggia,Paola,paola@tailspintoys.com,(210) 555-0100,wwi:organization:customer:65,false,false,customer alternate contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1175,wwi,1175,Amarendra Ankitham,Amarendra,amarendra@tailspintoys.com,(339) 555-0100,wwi:organization:customer:88,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1176,wwi,1176,Isak Berggren,Isak,isak@tailspintoys.com,(339) 555-0100,wwi:organization:customer:88,false,false,customer alternate contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:1365,wwi,1365,Kaan Tekin,Kaan,kaan@tailspintoys.com,(239) 555-0100,wwi:organization:customer:183,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:2125,wwi,2125,Daedeepya Thota,Daedeepya,daedeepya@wingtiptoys.com,(405) 555-0100,wwi:organization:customer:463,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:3040,wwi,3040,Rodrigo Figueiredo,Rodrigo,rodrigo@example.com,(803) 555-0100,wwi:organization:customer:840,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:3135,wwi,3135,Daevasree Samavedam,Daevasree,daevasree@example.com,(201) 555-0100,wwi:organization:customer:935,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:3161,wwi,3161,Rani Ganguly,Rani,rani@example.com,(209) 555-0100,wwi:organization:customer:961,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:contact:3211,wwi,3211,Rajeev Sandhu,Rajeev,rajeev@example.com,(458) 555-0100,wwi:organization:customer:1011,false,false,customer primary contact,public_sample,interview-wwi-v1,2016-05-31,42

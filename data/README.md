@@ -23,6 +23,15 @@ WWI 下载与最小 ETL 已落地；实际快照和生成物按 `.gitignore` 仅
 
 数据和运行结果默认不纳入版本管理。可复用且不含敏感数据的模型、映射、合同及评估案例分别存入项目对应目录。
 
+`canonical/interview-demo-v1/` 是明确的例外：它是固定 seed 生成、仅含虚构
+`DEMO` 对象的版本化面试数据集，因此与其空 target ID 的初始 identity map 一同
+纳入版本管理；任何实际回读 ID 和运行报告仍留在独立运行目录，不提交。
+
+`canonical/interview-wwi-v1/` 是第二个明确例外：它从 SHA-256 固定的 WWI v1
+公开样例快照按版本化 ID 和完整订单规则确定性抽取，保留 `wwi:*` 来源键和
+`data_class=public_sample`。提交的 identity map 仍只有空 target ID；实际目标回读
+结果不得提交。
+
 ## 第一版最小要求
 
 流程可以直接采用 Raw → Canonical → Target Mapping → Load；校验与回读嵌入其中。现有目录是归档位置，不代表需要实现多个服务。

@@ -25,8 +25,8 @@ project currently includes:
   8 Sales Orders, and 2 Purchase Orders;
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
-- deterministic customer-overview and fulfilment services exposed as exactly two
-  read-only MCP tools, with the 15 fixed E1 cases passing;
+- deterministic customer, supplier, sales-order, purchase-order, portfolio, and
+  fulfilment services exposed as exactly ten read-only MCP tools;
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and
@@ -43,8 +43,11 @@ internal Task in the isolated public/simulated demo workspace; E5 enterprise
 identity, real-data controls, monitoring, and release operations are not yet
 approved.
 
-The minimum demonstration is a customer overview plus a deterministic order
-fulfilment check, backed by 15 fixed evaluation cases. The first agent-initiated
+The interview demonstration adds scoped customer/supplier search and order
+listing/detail. It includes both a separate simulated dataset and a pinned,
+deterministically extracted WWI public-sample dataset at the same demonstration
+scale, while retaining the deterministic fulfilment check and its 15 fixed
+evaluation cases. The first agent-initiated
 write is deliberately limited to creating one internal follow-up task after an
 exact preview and human approval.
 
@@ -72,6 +75,11 @@ The detailed design documents are currently written in Chinese:
 - [WWI download and ETL runbook](ops/data-pipeline.md)
 - [Canonical data contract](contracts/canonical-v1.md)
 - [E2 read-only Agent runbook](ops/e2-agent.md)
+- [Interview demo data runbook](ops/interview-demo-data.md)
+- [WWI interview dataset runbook](ops/interview-wwi-data.md)
+- [Interview demo questions and expected answers](docs/interview-demo.md)
+- [WWI interview questions and expected answers](docs/interview-wwi.md)
+- [Current data/scope diagnostic](docs/interview-demo-diagnostic.md)
 - [E3 action-control contract](contracts/e3-action-control-v1.md)
 - [E3 action-control runbook](ops/e3-action-control.md)
 - [E4 follow-up Task contract](contracts/e4-followup-task-v1.md)

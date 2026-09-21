@@ -1,0 +1,16 @@
+canonical_id,source_system,source_id,supplier_canonical_id,contact_canonical_id,order_date,expected_delivery_date,supplier_reference,source_status,docstatus,business_status,currency,net_total_ex_tax,data_class,dataset_version,business_date,seed
+wwi:purchase_order:2044,wwi,2044,wwi:organization:supplier:7,wwi:contact:2,2016-05-12,2016-06-01,BC0280982,finalized,,finalized,USD,723322.40,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2046,wwi,2046,wwi:organization:supplier:7,wwi:contact:2,2016-05-13,2016-06-02,BC0280982,finalized,,finalized,USD,723181.50,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2049,wwi,2049,wwi:organization:supplier:7,wwi:contact:2,2016-05-16,2016-06-05,BC0280982,finalized,,finalized,USD,722585.40,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2051,wwi,2051,wwi:organization:supplier:7,wwi:contact:2,2016-05-17,2016-06-06,BC0280982,finalized,,finalized,USD,722733.50,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2053,wwi,2053,wwi:organization:supplier:7,wwi:contact:2,2016-05-18,2016-06-07,BC0280982,finalized,,finalized,USD,723976.40,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2055,wwi,2055,wwi:organization:supplier:7,wwi:contact:2,2016-05-19,2016-06-08,BC0280982,finalized,,finalized,USD,729688.30,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2057,wwi,2057,wwi:organization:supplier:7,wwi:contact:2,2016-05-20,2016-06-09,BC0280982,finalized,,finalized,USD,732075.50,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2059,wwi,2059,wwi:organization:supplier:7,wwi:contact:2,2016-05-21,2016-06-04,BC0280982,finalized,,finalized,USD,384.00,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2061,wwi,2061,wwi:organization:supplier:7,wwi:contact:2,2016-05-23,2016-06-12,BC0280982,finalized,,finalized,USD,732580.40,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2063,wwi,2063,wwi:organization:supplier:7,wwi:contact:2,2016-05-24,2016-06-13,BC0280982,finalized,,finalized,USD,732686.10,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2065,wwi,2065,wwi:organization:supplier:7,wwi:contact:2,2016-05-25,2016-06-14,BC0280982,finalized,,finalized,USD,732774.00,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2067,wwi,2067,wwi:organization:supplier:7,wwi:contact:2,2016-05-26,2016-06-15,BC0280982,finalized,,finalized,USD,736375.00,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2069,wwi,2069,wwi:organization:supplier:7,wwi:contact:2,2016-05-27,2016-06-16,BC0280982,finalized,,finalized,USD,737158.80,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2072,wwi,2072,wwi:organization:supplier:7,wwi:contact:2,2016-05-30,2016-06-19,BC0280982,finalized,,finalized,USD,738942.70,public_sample,interview-wwi-v1,2016-05-31,42
+wwi:purchase_order:2074,wwi,2074,wwi:organization:supplier:7,wwi:contact:2,2016-05-31,2016-06-20,BC0280982,open,,open,USD,741388.60,public_sample,interview-wwi-v1,2016-05-31,42
