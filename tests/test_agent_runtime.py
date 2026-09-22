@@ -1,11 +1,14 @@
 import hashlib
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from operion_etl.agent_runtime import (
+    AGENT_INSTRUCTIONS,
     AgentDependencies,
     AgentSettings,
     create_operion_agent,
@@ -17,6 +20,13 @@ CUSTOMER_ID = "wwi:organization:customer:11"
 
 
 class AgentRuntimeTests(unittest.TestCase):
+    def test_instructions_keep_wwi_source_and_delivery_semantics_distinct(self):
+        self.assertIn("Picked quantity is not delivered quantity", AGENT_INSTRUCTIONS)
+        self.assertIn("ERPNext native status", AGENT_INSTRUCTIONS)
+        self.assertIn("server-authorized scope", AGENT_INSTRUCTIONS)
+        self.assertIn("authoritative ambiguous_customer", AGENT_INSTRUCTIONS)
+        self.assertIn("unverified scenario", AGENT_INSTRUCTIONS)
+
     def test_customer_portfolio_summary_is_available_as_a_server_tool(self):
         call_count = 0
 
@@ -82,6 +92,21 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(1, limits.tool_calls_limit)
         self.assertEqual(100, limits.input_tokens_limit)
         self.assertEqual(50, limits.output_tokens_limit)
+
+    def test_settings_read_explicit_interview_token_budgets(self):
+        with patch.dict(
+            os.environ,
+            {
+                "OPERION_MAX_INPUT_TOKENS": "40000",
+                "OPERION_MAX_OUTPUT_TOKENS": "3000",
+            },
+        ):
+            settings = AgentSettings.from_environment()
+
+        self.assertEqual(40_000, settings.max_input_tokens)
+        self.assertEqual(3_000, settings.max_output_tokens)
+        self.assertEqual(40_000, settings.usage_limits().input_tokens_limit)
+        self.assertEqual(3_000, settings.model_settings()["max_tokens"])
 
     def test_followup_tool_only_creates_a_server_side_proposal(self):
         class FakeProposalService:

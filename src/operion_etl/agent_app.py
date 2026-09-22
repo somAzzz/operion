@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from ag_ui.core import EventType, RunErrorEvent
+from ag_ui.core import (
+    EventType,
+    RunErrorEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallResultEvent,
+    ToolCallStartEvent,
+)
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -49,6 +56,54 @@ from .twenty import TwentyClient
 from .twenty_actions import FollowupProposalService, TwentyFollowupGateway
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+
+
+async def _ordered_tool_events(source: AsyncIterator[Any]) -> AsyncIterator[Any]:
+    """Keep late streamed tool arguments before their AG-UI end event.
+
+    SGLang can finish a tool-call chunk before the final JSON fragment is exposed
+    by the model adapter. AG-UI clients correctly reject arguments received after
+    ``TOOL_CALL_END``, so hold that end marker until the next definite boundary.
+    Intervening text events are held as well to preserve their relative order.
+    """
+    pending_end: ToolCallEndEvent | None = None
+    pending_after_end: list[Any] = []
+
+    async for event in source:
+        if pending_end is not None:
+            if (
+                isinstance(event, ToolCallArgsEvent)
+                and event.tool_call_id == pending_end.tool_call_id
+            ):
+                yield event
+                continue
+            boundary = (
+                isinstance(
+                    event,
+                    (ToolCallStartEvent, ToolCallEndEvent, ToolCallResultEvent),
+                )
+                or isinstance(event, ToolCallArgsEvent)
+                or getattr(event, "type", None)
+                in {EventType.RUN_FINISHED, EventType.RUN_ERROR}
+            )
+            if not boundary:
+                pending_after_end.append(event)
+                continue
+            yield pending_end
+            for delayed in pending_after_end:
+                yield delayed
+            pending_end = None
+            pending_after_end = []
+
+        if isinstance(event, ToolCallEndEvent):
+            pending_end = event
+        else:
+            yield event
+
+    if pending_end is not None:
+        yield pending_end
+    for delayed in pending_after_end:
+        yield delayed
 
 
 class AgentApplication:
@@ -253,7 +308,7 @@ class AgentApplication:
             nonlocal completed
             try:
                 async with asyncio.timeout(self.settings.run_timeout_seconds):
-                    async for event in adapter.run_stream(
+                    source = adapter.run_stream(
                         message_history=history,
                         conversation_id=conversation_id,
                         run_id=run_id,
@@ -262,7 +317,8 @@ class AgentApplication:
                         cancellation_token=cancellation,
                         on_complete=on_complete,
                         on_cancel=on_cancel,
-                    ):
+                    )
+                    async for event in _ordered_tool_events(source):
                         if isinstance(event, RunErrorEvent) and not completed:
                             completed = True
                             self.store.finish_run(

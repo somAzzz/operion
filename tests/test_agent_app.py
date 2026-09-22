@@ -1,14 +1,16 @@
+import asyncio
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from ag_ui.core import ToolCallArgsEvent, ToolCallEndEvent, ToolCallStartEvent
 from fastapi.testclient import TestClient
 from pydantic_ai import CancellationToken
 from pydantic_ai.messages import ModelMessage, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from operion_etl.agent_app import AgentApplication, create_app
+from operion_etl.agent_app import AgentApplication, _ordered_tool_events, create_app
 from operion_etl.agent_runtime import AgentSettings, create_operion_agent
 from operion_etl.read_tools import AccessScope, CanonicalRepository
 from operion_etl.session_store import ConversationStore
@@ -26,6 +28,33 @@ def last_user_text(messages: list[ModelMessage]) -> str:
 
 
 class AgentAppTests(unittest.TestCase):
+    def test_late_tool_arguments_are_emitted_before_tool_end(self):
+        start = ToolCallStartEvent(tool_call_id="call-1", tool_call_name="lookup")
+        opening = ToolCallArgsEvent(tool_call_id="call-1", delta="{")
+        end = ToolCallEndEvent(tool_call_id="call-1")
+        interleaved_text = object()
+        closing = ToolCallArgsEvent(tool_call_id="call-1", delta="}")
+        next_start = ToolCallStartEvent(tool_call_id="call-2", tool_call_name="detail")
+
+        async def source():
+            for event in (
+                start,
+                opening,
+                end,
+                interleaved_text,
+                closing,
+                next_start,
+            ):
+                yield event
+
+        async def collect():
+            return [event async for event in _ordered_tool_events(source())]
+
+        ordered = asyncio.run(collect())
+        self.assertEqual(
+            [start, opening, closing, end, interleaved_text, next_start], ordered
+        )
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         settings = AgentSettings(run_timeout_seconds=5)
