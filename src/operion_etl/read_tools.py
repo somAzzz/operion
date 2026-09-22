@@ -219,9 +219,46 @@ class CanonicalRepository:
         )
         observed = {source: self.source_observed_at[source] for source in source_system}
         oldest = min(self._observed_datetimes[source] for source in source_system)
+        dataset_versions = sorted(
+            {
+                row.get("dataset_version", "")
+                for name, rows in self.data.items()
+                if name != "fulfillment_scenarios"
+                for row in rows
+                if row.get("dataset_version")
+            }
+        )
+        business_dates = sorted(
+            {
+                row.get("business_date", "")
+                for name, rows in self.data.items()
+                if name != "fulfillment_scenarios"
+                for row in rows
+                if row.get("business_date")
+            }
+        )
+        record_sources = sorted(
+            {
+                row.get("source_system", "")
+                for name, rows in self.data.items()
+                if name != "fulfillment_scenarios"
+                for row in rows
+                if row.get("source_system")
+            }
+        )
         return {
             "data_mode": self.data_mode,
             "data_class": classes[0] if len(classes) == 1 else classes,
+            "dataset_version": (
+                dataset_versions[0] if len(dataset_versions) == 1 else dataset_versions
+            ),
+            "business_date": (
+                business_dates[0] if len(business_dates) == 1 else business_dates
+            ),
+            "record_source_system": (
+                record_sources[0] if len(record_sources) == 1 else record_sources
+            ),
+            "query_scope": "current dataset and server-authorized IDs only",
             "source_system": source_system,
             "observed_at": oldest.isoformat(),
             "source_observed_at": observed,
@@ -529,6 +566,11 @@ class CanonicalRepository:
             "docstatus": row.get("docstatus", ""),
             "business_status": row.get("business_status", row["source_status"]),
             "source_status": row["source_status"],
+            "native_status": (
+                {"system": "erpnext", "docstatus": row["docstatus"]}
+                if row.get("docstatus", "")
+                else None
+            ),
             "data_class": row.get("data_class", ""),
             "source_system": row.get("source_system", ""),
         }
@@ -555,6 +597,11 @@ class CanonicalRepository:
             "docstatus": row.get("docstatus", ""),
             "business_status": row.get("business_status", row["source_status"]),
             "source_status": row["source_status"],
+            "native_status": (
+                {"system": "erpnext", "docstatus": row["docstatus"]}
+                if row.get("docstatus", "")
+                else None
+            ),
             "data_class": row.get("data_class", ""),
             "source_system": row.get("source_system", ""),
         }
@@ -616,11 +663,11 @@ class CanonicalRepository:
             raise ScopeDeniedError(
                 f"{kind} order organization is outside the authorized scope or unavailable"
             )
+        scoped_orders = [row for row in orders if allows(row[relation])]
         matches = [
             summary(row)
-            for row in orders
-            if allows(row[relation])
-            and (not organization_id or row[relation] == organization_id)
+            for row in scoped_orders
+            if (not organization_id or row[relation] == organization_id)
             and (not date_from or row["order_date"] >= date_from)
             and (not date_to or row["order_date"] <= date_to)
             and self._status_matches(row, status, kind)
@@ -647,6 +694,11 @@ class CanonicalRepository:
                     if kind == "sales"
                     else "native docstatus=1 and business_status=to_receive"
                 ),
+            },
+            "available_order_date_range": {
+                "from": min((row["order_date"] for row in scoped_orders), default=None),
+                "to": max((row["order_date"] for row in scoped_orders), default=None),
+                "scope": "current dataset and server-authorized IDs only",
             },
             "pagination": pagination,
             "missing": [],
@@ -740,26 +792,43 @@ class CanonicalRepository:
                 uom = item["uom"]
                 rate = item["unit_price_ex_tax"]
             else:
-                quantity = item["ordered_outers"]
+                quantity = _number(
+                    Decimal(item["ordered_outers"]) * Decimal(item["units_per_outer"])
+                )
                 uom = item["canonical_uom"]
                 rate = item["expected_unit_price_each"]
-            lines.append(
-                {
-                    "canonical_id": item["canonical_id"],
-                    "target_id": self.target_ids.get(
-                        ("erpnext", item["canonical_id"]), ""
-                    ),
-                    "product_id": item["product_canonical_id"],
-                    "product_name": product_names.get(item["product_canonical_id"], ""),
-                    "description": item["description"],
-                    "quantity": quantity,
-                    "uom": uom,
-                    "unit_price_ex_tax": rate,
-                    "net_amount": item.get("net_amount", ""),
-                    "currency": item.get("currency", row.get("currency", "")),
-                    "delivery_date": row["expected_delivery_date"],
-                }
-            )
+            line = {
+                "canonical_id": item["canonical_id"],
+                "target_id": self.target_ids.get(("erpnext", item["canonical_id"]), ""),
+                "product_id": item["product_canonical_id"],
+                "product_name": product_names.get(item["product_canonical_id"], ""),
+                "description": item["description"],
+                "quantity": quantity,
+                "uom": uom,
+                "unit_price_ex_tax": rate,
+                "net_amount": item.get("net_amount", ""),
+                "currency": item.get("currency", row.get("currency", "")),
+                "delivery_date": row["expected_delivery_date"],
+            }
+            if kind == "sales":
+                line.update(
+                    {
+                        "ordered_quantity": item["ordered_quantity"],
+                        "picked_quantity": item.get("picked_quantity", ""),
+                        "unpicked_quantity": item.get("unpicked_quantity", ""),
+                        "delivered_quantity": item.get("delivered_quantity", ""),
+                        "delivery_evidence": item.get("delivery_evidence", ""),
+                    }
+                )
+            else:
+                line.update(
+                    {
+                        "ordered_outers": item["ordered_outers"],
+                        "units_per_outer": item["units_per_outer"],
+                        "base_quantity": quantity,
+                    }
+                )
+            lines.append(line)
         return {
             "contract_version": f"{kind}-order-detail-v1",
             "order": summary(row),
@@ -1054,7 +1123,10 @@ class LiveReadRepository(CanonicalRepository):
                             "sales_order_canonical_id": canonical_id,
                             "uom": str(item.get("uom") or ""),
                             "ordered_quantity": _text(item.get("qty")),
+                            "picked_quantity": "",
+                            "unpicked_quantity": "",
                             "delivered_quantity": _text(item.get("delivered_qty")),
+                            "delivery_evidence": "erpnext_delivered_qty",
                             "open_quantity": str(
                                 Decimal(str(item.get("qty") or 0))
                                 - Decimal(str(item.get("delivered_qty") or 0))

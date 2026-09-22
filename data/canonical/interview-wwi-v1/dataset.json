@@ -1,5 +1,6 @@
 {
   "dataset_version": "interview-wwi-v1",
+  "mapping_revision": "interview-wwi-v1.1",
   "source_system": "wwi",
   "data_class": "public_sample",
   "seed": 42,
@@ -58,6 +59,11 @@
   "currency": "USD",
   "currency_basis": "dataset-level assumption for the US-oriented WWI v1 sample; WWI order rows do not store a currency code",
   "amount_basis": "tax_exclusive",
+  "mapping_changes": [
+    "PickedQuantity is mapped to picked_quantity, never delivered_quantity",
+    "delivered_quantity is blank without delivery evidence",
+    "purchase imports convert outer quantities to base-unit quantities"
+  ],
   "counts": {
     "organizations": 15,
     "contacts": 20,

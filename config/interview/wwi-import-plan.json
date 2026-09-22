@@ -1,0 +1,74 @@
+{
+  "report_version": "interview-wwi-import-plan-v1",
+  "dataset_version": "interview-wwi-v1",
+  "mapping_revision": "interview-wwi-v1.1",
+  "observed_at": "2026-09-22T00:14:38+02:00",
+  "mode": "read_only_plan",
+  "target_instances": {
+    "twenty": "http://localhost:3000",
+    "erpnext": "http://localhost:8080",
+    "erpnext_company": "AI Demo GmbH"
+  },
+  "identity_map": {
+    "path": "reports/interview-wwi-v1/identity_map.csv",
+    "rows": 190,
+    "target_ids_populated": 0,
+    "note": "pending IDs remain blank and are not represented as target links"
+  },
+  "full_batch": {
+    "totals": {"REUSE": 3, "CREATE": 180, "CONFLICT": 7},
+    "twenty": {"REUSE": 0, "CREATE": 24, "CONFLICT": 0},
+    "erpnext": {"REUSE": 3, "CREATE": 156, "CONFLICT": 7},
+    "reuse": [
+      "wwi:organization:supplier:7",
+      "wwi:contact:2",
+      "wwi:contact:33"
+    ],
+    "conflicts": [
+      {
+        "canonical_ids": [
+          "wwi:product:184",
+          "wwi:product:193",
+          "wwi:product:204"
+        ],
+        "reason": "existing ERPNext Items are stock items; the current interview loader proposes non-stock items"
+      },
+      {
+        "canonical_id": "wwi:purchase_order:2074",
+        "reason": "existing native document currency is EUR while the current dataset carries an unverified USD assumption"
+      },
+      {
+        "canonical_ids": [
+          "wwi:purchase_order_line:8365",
+          "wwi:purchase_order_line:8366",
+          "wwi:purchase_order_line:8367"
+        ],
+        "reason": "line values match the corrected base-unit mapping, but reuse is blocked by the conflicting parent relationship"
+      }
+    ]
+  },
+  "first_batch": {
+    "selection_file": "config/interview/wwi-first-batch-selection.json",
+    "sales_order": "wwi:sales_order:66823",
+    "purchase_order": "wwi:purchase_order:2044",
+    "dependency_closure": {
+      "customers": ["wwi:organization:customer:65"],
+      "suppliers": ["wwi:organization:supplier:7"],
+      "contacts": ["wwi:contact:2", "wwi:contact:33", "wwi:contact:1129"],
+      "products": ["wwi:product:184", "wwi:product:193", "wwi:product:204"],
+      "sales_order_lines": ["wwi:sales_order_line:210128"],
+      "purchase_order_lines": [
+        "wwi:purchase_order_line:8240",
+        "wwi:purchase_order_line:8241",
+        "wwi:purchase_order_line:8242"
+      ]
+    },
+    "totals": {"REUSE": 3, "CREATE": 10, "CONFLICT": 3},
+    "status": "BLOCKED",
+    "blockers": [
+      "three referenced ERPNext Items have incompatible native stock-item semantics",
+      "target company and price lists are EUR while WWI USD is only a dataset assumption"
+    ]
+  },
+  "writes_performed": 0
+}

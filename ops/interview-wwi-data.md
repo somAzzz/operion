@@ -58,8 +58,14 @@ cp reports/interview-wwi-v1/identity_map.csv \
 
 .venv/bin/operion-etl provision-interview-wwi \
   --identity-map reports/interview-wwi-v1/<run-id>/identity_map.prepared.csv \
+  --selection-plan config/interview/wwi-first-batch-selection.json \
   --apply --admin-env /absolute/path/to/interview-wwi-admin.env
 ```
+
+`--selection-plan` accepts sales- and purchase-order canonical IDs only. The
+loader expands them to complete lines and the exact customer, supplier,
+contacts, and products they depend on; unknown IDs and empty selections fail
+closed. It never truncates an order.
 
 For snapshot queries, set `OPERION_CANONICAL_DIR` and `OPERION_IDENTITY_MAP` to
 the WWI v1 paths and authorize the canonical customer/supplier IDs listed in

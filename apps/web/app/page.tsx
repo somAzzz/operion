@@ -38,9 +38,11 @@ function EvidenceRows({ data }: { data: Record<string, unknown> }) {
   const observedAt = typeof data.observed_at === "string" ? data.observed_at : "—";
   return (
     <div className="evidence-meta">
-      <span><DatabaseIcon aria-hidden="true" />{sources.length} sources</span>
-      <span><Clock3Icon aria-hidden="true" />{observedAt}</span>
+      <span><DatabaseIcon aria-hidden="true" />{String(data.dataset_version ?? "dataset not reported")}</span>
       <span>{String(data.data_mode ?? "snapshot")} · {String(data.data_class ?? "—")}</span>
+      <span>Business date {String(data.business_date ?? "—")}</span>
+      <span><Clock3Icon aria-hidden="true" />Observed {observedAt}</span>
+      <span>{String(data.query_scope ?? `${sources.length} sources`)}</span>
     </div>
   );
 }
@@ -83,7 +85,7 @@ function SearchResultsCard({ result, kind }: ToolRenderProps & { kind: "customer
   return (
     <section className="result-card" aria-label={`${kind} search results`}>
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />{kind} results</div>
-      <h3>{rows.length ? `${rows.length} on this page` : `No ${kind}s found`}</h3>
+      <h3>{rows.length ? `${rows.length} on this page` : `No ${kind}s in the current dataset and authorized scope`}</h3>
       <div className="result-list">
         {rows.map((item) => {
           const row = item as Record<string, unknown>;
@@ -106,12 +108,13 @@ function OrderListCard({ result, kind }: ToolRenderProps & { kind: "sales order"
   return (
     <section className="result-card" aria-label={`${kind} list`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind}s</div>
-      <h3>{orders.length ? `${orders.length} on this page` : `No matching ${kind}s`}</h3>
+      <h3>{orders.length ? `${orders.length} on this page` : `No matching ${kind}s in the current dataset and authorized scope`}</h3>
       <div className="result-list">
         {orders.map((item) => {
           const row = item as Record<string, unknown>;
           const id = String(row.canonical_id ?? "");
-          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · {String(row.business_status ?? row.source_status ?? "")}</span><code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
+          const nativeStatus = row.native_status as Record<string, unknown> | null;
+          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · source status: {String(row.source_status ?? "unknown")}</span>{nativeStatus ? <span>ERPNext docstatus: {String(nativeStatus.docstatus)}</span> : <span>No ERPNext native status in this snapshot</span>}<code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
         })}
       </div>
       {pagination.has_more ? <small>Results are truncated; continue with next_cursor.</small> : null}
@@ -130,11 +133,13 @@ function OrderDetailCard({ result, kind }: ToolRenderProps & { kind: "sales orde
     <section className="result-card" aria-label={`${kind} detail`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind} detail</div>
       <h3>{String(order.order_number ?? order.canonical_id ?? kind)}</h3>
-      <p>{String(order.customer_name ?? order.supplier_name ?? "")} · {String(order.order_date ?? "")} · {String(order.business_status ?? order.source_status ?? "")}</p>
+      <p>{String(order.customer_name ?? order.supplier_name ?? "")} · {String(order.order_date ?? "")} · source status: {String(order.source_status ?? "unknown")}</p>
       <div className="result-list">
         {lines.map((item) => {
           const row = item as Record<string, unknown>;
-          return <div className="result-list__item" key={String(row.canonical_id)}><div><strong>{String(row.product_name ?? row.description ?? "Item")}</strong><span>{String(row.quantity)} {String(row.uom)} × {String(row.unit_price_ex_tax)} {String(row.currency)}</span><span>{String(row.net_amount)} {String(row.currency)} · due {String(row.delivery_date ?? "—")}</span></div></div>;
+          const isSales = kind === "sales order";
+          const delivered = String(row.delivered_quantity ?? "");
+          return <div className="result-list__item" key={String(row.canonical_id)}><div><strong>{String(row.product_name ?? row.description ?? "Item")}</strong><span>{String(row.quantity)} {String(row.uom)} × {String(row.unit_price_ex_tax)} {String(row.currency)}</span>{isSales ? <><span>Picked: {String(row.picked_quantity || "unknown")} · unpicked: {String(row.unpicked_quantity || "unknown")}</span><span>Delivered: {delivered || "unknown — no delivery evidence in this dataset"}</span></> : <span>Base quantity: {String(row.base_quantity)} {String(row.uom)} ({String(row.ordered_outers)} outers × {String(row.units_per_outer)})</span>}<span>{String(row.net_amount)} {String(row.currency)} · expected {String(row.delivery_date ?? "—")}</span></div></div>;
         })}
       </div>
       <EvidenceRows data={data} />
@@ -148,7 +153,7 @@ function SupplierOverviewCard({ args, result }: ToolRenderProps) {
   const orders = Array.isArray(data.orders) ? data.orders : [];
   if (!result) return <div className="result-card is-loading">Loading supplier evidence…</div>;
   if (!result.ok) return <ResultError result={result} label="Supplier lookup needs attention" />;
-  return <section className="result-card"><div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Supplier overview</div><h3>{String(supplier.name ?? args.supplier_id ?? "Supplier")}</h3><div className="metric-row"><strong>{orders.length}</strong><span>recent purchase orders in scope</span></div><code>{String(supplier.canonical_id ?? "")}</code><EvidenceRows data={data} /></section>;
+  return <section className="result-card"><div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Supplier overview</div><h3>{String(supplier.name ?? args.supplier_id ?? "Supplier")}</h3><div className="metric-row"><strong>{orders.length}</strong><span>purchase orders in the current dataset and authorized scope</span></div><code>{String(supplier.canonical_id ?? "")}</code><EvidenceRows data={data} /></section>;
 }
 
 function CustomerOverviewCard({ args, result }: ToolRenderProps) {
@@ -163,7 +168,7 @@ function CustomerOverviewCard({ args, result }: ToolRenderProps) {
     <section className="result-card" aria-label="Customer overview evidence">
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Customer overview</div>
       <h3>{String(customer.name ?? args.customer ?? "Customer")}</h3>
-      <div className="metric-row"><strong>{orders.length}</strong><span>recent orders in scope</span></div>
+      <div className="metric-row"><strong>{orders.length}</strong><span>orders in the current dataset and authorized scope</span></div>
       <code>{String(customer.canonical_id ?? "")}</code>
       <EvidenceRows data={data} />
     </section>
@@ -180,7 +185,7 @@ function CustomerPortfolioCard({ result }: ToolRenderProps) {
     <section className="result-card" aria-label="Authorized customer portfolio summary">
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Authorized customer scope</div>
       <h3>{String(data.operating_company ?? "Operating company")}</h3>
-      <div className="metric-row"><strong>{String(data.customer_count ?? 0)}</strong><span>customers in your scope</span></div>
+      <div className="metric-row"><strong>{String(data.customer_count ?? 0)}</strong><span>customers in the current dataset and authorized scope</span></div>
       <p>{String(data.customers_with_orders ?? 0)} with orders · {String(data.open_order_count ?? 0)} open orders</p>
       <EvidenceRows data={data} />
     </section>

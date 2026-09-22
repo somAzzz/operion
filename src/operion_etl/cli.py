@@ -202,6 +202,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     provision_wwi.add_argument("--apply", action="store_true")
     provision_wwi.add_argument(
+        "--selection-plan",
+        type=Path,
+        help="JSON order whitelist; apply expands only the complete dependency closure",
+    )
+    provision_wwi.add_argument(
         "--admin-env",
         type=Path,
         help="Dedicated provisioning credentials; required with --apply",
@@ -349,7 +354,14 @@ def main() -> None:
             if args.admin_env is None:
                 raise SystemExit("--admin-env is required with --apply")
             print(
-                apply_interview_wwi(args.directory, args.identity_map, args.admin_env)
+                apply_interview_wwi(
+                    args.directory,
+                    args.identity_map,
+                    args.admin_env,
+                    selection_plan=args.selection_plan,
+                )
             )
         else:
-            print(provision_wwi_plan(args.directory))
+            print(
+                provision_wwi_plan(args.directory, selection_plan=args.selection_plan)
+            )

@@ -48,6 +48,7 @@ class InterviewWwiDatasetTests(unittest.TestCase):
             "wide-world-importers-v1.0", manifest["source_snapshot"]["data_version"]
         )
         self.assertEqual(663, manifest["source_profile"]["customers"])
+        self.assertEqual("interview-wwi-v1.1", manifest["mapping_revision"])
 
     def test_identity_map_is_pending_and_unique_per_target(self):
         with IDENTITY.open(encoding="utf-8", newline="") as stream:
@@ -116,6 +117,18 @@ class InterviewWwiQueryTests(unittest.TestCase):
         self.assertEqual("", detail["order"]["docstatus"])
         self.assertEqual("USD", detail["order"]["currency"])
         self.assertEqual(1, len(detail["lines"]))
+        self.assertEqual("48", detail["lines"][0]["picked_quantity"])
+        self.assertEqual("0", detail["lines"][0]["unpicked_quantity"])
+        self.assertEqual("", detail["lines"][0]["delivered_quantity"])
+        self.assertEqual(
+            "unknown_not_provided_by_wwi_order_lines",
+            detail["lines"][0]["delivery_evidence"],
+        )
+        self.assertEqual("interview-wwi-v1", detail["dataset_version"])
+        self.assertEqual("2016-05-31", detail["business_date"])
+        self.assertEqual(
+            "current dataset and server-authorized IDs only", detail["query_scope"]
+        )
 
     def test_purchase_order_and_zero_supplier_are_queryable(self):
         supplier = self.repository.supplier_overview(
@@ -128,6 +141,22 @@ class InterviewWwiQueryTests(unittest.TestCase):
         self.assertEqual("741388.60", detail["order"]["net_total_ex_tax"])
         self.assertEqual("open", detail["order"]["source_status"])
         self.assertEqual(3, len(detail["lines"]))
+
+    def test_purchase_detail_uses_base_units_and_independent_gold_amount(self):
+        detail = self.repository.get_purchase_order(
+            "wwi:purchase_order:2044", self.scope
+        )
+        line = next(
+            row
+            for row in detail["lines"]
+            if row["canonical_id"] == "wwi:purchase_order_line:8240"
+        )
+        self.assertEqual("1592", line["ordered_outers"])
+        self.assertEqual("25", line["units_per_outer"])
+        self.assertEqual("39800", line["base_quantity"])
+        self.assertEqual("39800", line["quantity"])
+        self.assertEqual("1.900000", line["unit_price_ex_tax"])
+        self.assertEqual("75620.00", line["net_amount"])
 
 
 if __name__ == "__main__":

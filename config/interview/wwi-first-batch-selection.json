@@ -1,0 +1,11 @@
+{
+  "dataset_version": "interview-wwi-v1",
+  "mapping_revision": "interview-wwi-v1.1",
+  "sales_orders": [
+    "wwi:sales_order:66823"
+  ],
+  "purchase_orders": [
+    "wwi:purchase_order:2044"
+  ],
+  "closure_policy": "complete orders plus customer, supplier, order and primary contacts, and every referenced product and line"
+}

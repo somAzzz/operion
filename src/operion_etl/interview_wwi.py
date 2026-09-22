@@ -424,7 +424,7 @@ def build_interview_wwi(
     for row in source["sales_lines"]:
         order_id = int(row["OrderID"])
         quantity = Decimal(str(row["Quantity"]))
-        delivered = Decimal(str(row.get("PickedQuantity") or 0))
+        picked = Decimal(str(row.get("PickedQuantity") or 0))
         unit_price = Decimal(str(row["UnitPrice"]))
         amount = quantity * unit_price
         sales_totals[order_id] += amount
@@ -439,8 +439,11 @@ def build_interview_wwi(
                 "description": row["Description"],
                 "uom": product["UnitPackage"],
                 "ordered_quantity": _number(quantity),
-                "delivered_quantity": _number(delivered),
-                "open_quantity": _number(max(quantity - delivered, Decimal(0))),
+                "picked_quantity": _number(picked),
+                "unpicked_quantity": _number(max(quantity - picked, Decimal(0))),
+                "delivered_quantity": "",
+                "delivery_evidence": "unknown_not_provided_by_wwi_order_lines",
+                "open_quantity": "",
                 "unit_price_ex_tax": _money(unit_price),
                 "tax_rate_percent": _number(row["TaxRate"]),
                 "net_amount": _money(amount),
@@ -500,7 +503,9 @@ def build_interview_wwi(
                 "received_outers": _number(received),
                 "open_quantity": _number(max(ordered - received, Decimal(0)) * factor),
                 "expected_unit_price_per_outer": _money(outer_price),
-                "expected_unit_price_each": _money(outer_price / factor),
+                "expected_unit_price_each": format(
+                    (outer_price / factor).quantize(Decimal("0.000001")), "f"
+                ),
                 "net_amount": _money(amount),
                 "currency": "USD",
                 "last_receipt_date": _date(row.get("LastReceiptDate")),
@@ -576,6 +581,7 @@ def prepare_interview_wwi(
         writer.writerows(identity_rows)
     dataset_manifest = {
         "dataset_version": DATASET_VERSION,
+        "mapping_revision": "interview-wwi-v1.1",
         "source_system": "wwi",
         "data_class": "public_sample",
         "seed": seed,
@@ -603,6 +609,11 @@ def prepare_interview_wwi(
             "WWI order rows do not store a currency code"
         ),
         "amount_basis": "tax_exclusive",
+        "mapping_changes": [
+            "PickedQuantity is mapped to picked_quantity, never delivered_quantity",
+            "delivered_quantity is blank without delivery evidence",
+            "purchase imports convert outer quantities to base-unit quantities",
+        ],
         "counts": {name: len(rows) for name, rows in data.items()},
         "identity_rows": len(identity_rows),
     }
@@ -675,6 +686,15 @@ def validate_interview_wwi(directory: Path) -> dict[str, Any]:
                 errors.append(f"line has missing product: {row['canonical_id']}")
             by_order[row[relation]] += Decimal(row["net_amount"])
             line_counts[row[relation]] += 1
+            if line_table == "purchase_order_lines":
+                source_amount = (
+                    Decimal(row["ordered_outers"])
+                    * Decimal(row["expected_unit_price_per_outer"])
+                ).quantize(Decimal("0.01"))
+                if source_amount != Decimal(row["net_amount"]):
+                    errors.append(
+                        f"purchase source amount mismatch: {row['canonical_id']}"
+                    )
         for row in data[order_table]:
             canonical_id = row["canonical_id"]
             if line_counts[canonical_id] not in range(1, 5):
@@ -707,6 +727,46 @@ def validate_interview_wwi(directory: Path) -> dict[str, Any]:
     if {int(row["source_id"]) for row in data["products"]} != set(PRODUCT_IDS):
         errors.append("product selection differs from interview-wwi-v1 contract")
 
+    for row in data["sales_order_lines"]:
+        ordered = Decimal(row["ordered_quantity"])
+        picked = Decimal(row["picked_quantity"])
+        unpicked = Decimal(row["unpicked_quantity"])
+        if picked + unpicked != ordered:
+            errors.append(f"picked/unpicked mismatch: {row['canonical_id']}")
+        if row["delivered_quantity"]:
+            errors.append(f"delivery quantity must be unknown: {row['canonical_id']}")
+        if row["delivery_evidence"] != "unknown_not_provided_by_wwi_order_lines":
+            errors.append(f"delivery evidence marker mismatch: {row['canonical_id']}")
+        if row["open_quantity"]:
+            errors.append(
+                f"delivery-open quantity must be unknown: {row['canonical_id']}"
+            )
+
+    # Independent gold facts copied from the pinned WWI source, not recomputed by
+    # the transformation under test.
+    sales_gold = next(
+        (row for row in data["sales_order_lines"] if row["source_id"] == "210128"),
+        None,
+    )
+    if sales_gold is None or (
+        sales_gold["ordered_quantity"],
+        sales_gold["picked_quantity"],
+        sales_gold["unpicked_quantity"],
+        sales_gold["delivered_quantity"],
+    ) != ("48", "48", "0", ""):
+        errors.append("gold sales line 210128 quantity semantics changed")
+    purchase_gold = next(
+        (row for row in data["purchase_order_lines"] if row["source_id"] == "8240"),
+        None,
+    )
+    if purchase_gold is None or (
+        purchase_gold["ordered_outers"],
+        purchase_gold["units_per_outer"],
+        purchase_gold["expected_unit_price_each"],
+        purchase_gold["net_amount"],
+    ) != ("1592", "25", "1.900000", "75620.00"):
+        errors.append("gold purchase line 8240 amount semantics changed")
+
     return {
         "status": "passed" if not errors else "failed",
         "dataset_version": DATASET_VERSION,
@@ -715,16 +775,23 @@ def validate_interview_wwi(directory: Path) -> dict[str, Any]:
     }
 
 
-def provision_wwi_plan(directory: Path) -> dict[str, Any]:
+def provision_wwi_plan(
+    directory: Path, *, selection_plan: Path | None = None
+) -> dict[str, Any]:
     return provision_plan(
         directory,
         validator=validate_interview_wwi,
         dataset_version=DATASET_VERSION,
+        selection_plan=selection_plan,
     )
 
 
 def apply_interview_wwi(
-    directory: Path, identity_map: Path, admin_env: Path
+    directory: Path,
+    identity_map: Path,
+    admin_env: Path,
+    *,
+    selection_plan: Path | None = None,
 ) -> dict[str, Any]:
     return apply_interview_demo(
         directory,
@@ -732,4 +799,5 @@ def apply_interview_wwi(
         admin_env,
         validator=validate_interview_wwi,
         dataset_version=DATASET_VERSION,
+        selection_plan=selection_plan,
     )

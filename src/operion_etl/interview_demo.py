@@ -6,7 +6,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -147,7 +147,10 @@ FILE_FIELDS: dict[str, list[str]] = {
         "description",
         "uom",
         "ordered_quantity",
+        "picked_quantity",
+        "unpicked_quantity",
         "delivered_quantity",
+        "delivery_evidence",
         "open_quantity",
         "unit_price_ex_tax",
         "tax_rate_percent",
@@ -411,7 +414,10 @@ def build_interview_demo(
                         "description": product["name"],
                         "uom": product["uom"],
                         "ordered_quantity": str(quantity),
+                        "picked_quantity": "",
+                        "unpicked_quantity": "",
                         "delivered_quantity": str(delivered),
+                        "delivery_evidence": "simulated_fixture",
                         "open_quantity": str(quantity - delivered),
                         "unit_price_ex_tax": _money(rate),
                         "tax_rate_percent": "19",
@@ -694,11 +700,14 @@ def provision_plan(
     *,
     validator: Callable[[Path], dict[str, Any]] = validate_interview_demo,
     dataset_version: str = DATASET_VERSION,
+    selection_plan: Path | None = None,
 ) -> dict[str, Any]:
     validation = validator(directory)
     if validation["status"] != "passed":
         return {"status": "blocked", "validation": validation}
     data = _load_directory(directory)
+    if selection_plan is not None:
+        data = _select_dependency_closed_data(data, selection_plan)
     customer_ids = {
         row["canonical_id"]
         for row in data["organizations"]
@@ -712,6 +721,7 @@ def provision_plan(
     return {
         "status": "dry_run",
         "dataset_version": dataset_version,
+        "selection_plan": str(selection_plan) if selection_plan else None,
         "operations": [
             {
                 "system": "ERPNext",
@@ -775,6 +785,80 @@ def _load_directory(directory: Path) -> dict[str, list[dict[str, str]]]:
     return result
 
 
+def _select_dependency_closed_data(
+    data: dict[str, list[dict[str, str]]], selection_plan: Path
+) -> dict[str, list[dict[str, str]]]:
+    """Restrict an apply to complete orders and their full dependency closure."""
+    plan = json.loads(selection_plan.read_text(encoding="utf-8"))
+    if plan.get("dataset_version") not in {
+        DATASET_VERSION,
+        "interview-wwi-v1",
+    }:
+        raise RuntimeError("selection plan dataset_version does not match the loader")
+    requested = {
+        "sales_orders": set(plan.get("sales_orders") or []),
+        "purchase_orders": set(plan.get("purchase_orders") or []),
+    }
+    if not any(requested.values()):
+        raise RuntimeError("selection plan must include at least one complete order")
+    selected_orders: dict[str, list[dict[str, str]]] = {}
+    for table in ("sales_orders", "purchase_orders"):
+        index = {row["canonical_id"]: row for row in data[table]}
+        unknown = sorted(requested[table] - set(index))
+        if unknown:
+            raise RuntimeError(f"selection plan has unknown {table}: {unknown}")
+        selected_orders[table] = [
+            row for row in data[table] if row["canonical_id"] in requested[table]
+        ]
+
+    sales_lines = [
+        row
+        for row in data["sales_order_lines"]
+        if row["sales_order_canonical_id"] in requested["sales_orders"]
+    ]
+    purchase_lines = [
+        row
+        for row in data["purchase_order_lines"]
+        if row["purchase_order_canonical_id"] in requested["purchase_orders"]
+    ]
+    product_ids = {row["product_canonical_id"] for row in sales_lines + purchase_lines}
+    organization_ids = {
+        row["customer_canonical_id"] for row in selected_orders["sales_orders"]
+    } | {row["supplier_canonical_id"] for row in selected_orders["purchase_orders"]}
+    contact_ids = {
+        row["contact_canonical_id"]
+        for table in ("sales_orders", "purchase_orders")
+        for row in selected_orders[table]
+    }
+    selected_organizations = [
+        row for row in data["organizations"] if row["canonical_id"] in organization_ids
+    ]
+    primary_source_ids = {
+        row["primary_contact_source_id"]
+        for row in selected_organizations
+        if row.get("primary_contact_source_id")
+    }
+    contact_ids.update(
+        row["canonical_id"]
+        for row in data["contacts"]
+        if row.get("source_id") in primary_source_ids
+    )
+    return {
+        "organizations": selected_organizations,
+        "contacts": [
+            row for row in data["contacts"] if row["canonical_id"] in contact_ids
+        ],
+        "products": [
+            row for row in data["products"] if row["canonical_id"] in product_ids
+        ],
+        "sales_orders": selected_orders["sales_orders"],
+        "sales_order_lines": sales_lines,
+        "purchase_orders": selected_orders["purchase_orders"],
+        "purchase_order_lines": purchase_lines,
+        "fulfillment_scenarios": [],
+    }
+
+
 def _assert_apply_preflight(values: dict[str, str]) -> None:
     required_flags = (
         "OPERION_DEMO_INSTANCE",
@@ -796,6 +880,212 @@ def _assert_apply_preflight(values: dict[str, str]) -> None:
             raise RuntimeError(f"apply blocked; {key} is missing from the admin env")
 
 
+def _plain_decimal(value: Decimal) -> str:
+    normalized = format(value.normalize(), "f")
+    return normalized.rstrip("0").rstrip(".") if "." in normalized else normalized
+
+
+def _purchase_line_import_values(
+    row: dict[str, str], *, rate_precision: int
+) -> dict[str, str]:
+    """Convert a source outer-package line to a target base-unit line."""
+    if not 0 <= rate_precision <= 12:
+        raise RuntimeError("purchase rate precision must be between 0 and 12")
+    ordered_outers = Decimal(row["ordered_outers"])
+    units_per_outer = Decimal(row["units_per_outer"])
+    outer_rate = Decimal(row["expected_unit_price_per_outer"])
+    source_amount = Decimal(row["net_amount"])
+    if ordered_outers <= 0 or units_per_outer <= 0 or outer_rate < 0:
+        raise RuntimeError(
+            f"invalid purchase quantities or price: {row['canonical_id']}"
+        )
+    expected_source_amount = (ordered_outers * outer_rate).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    if expected_source_amount != source_amount:
+        raise RuntimeError(
+            f"purchase source amount mismatch for {row['canonical_id']}: "
+            f"{expected_source_amount} != {source_amount}"
+        )
+    base_quantity = ordered_outers * units_per_outer
+    rate_quantum = Decimal(1).scaleb(-rate_precision)
+    base_rate = (source_amount / base_quantity).quantize(
+        rate_quantum, rounding=ROUND_HALF_UP
+    )
+    target_amount = (base_quantity * base_rate).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    if target_amount != source_amount:
+        raise RuntimeError(
+            f"target rate precision {rate_precision} cannot preserve purchase amount "
+            f"for {row['canonical_id']}: {target_amount} != {source_amount}"
+        )
+    return {
+        "qty": _plain_decimal(base_quantity),
+        "uom": UOM_MAP[row["canonical_uom"]],
+        "conversion_factor": "1",
+        "rate": format(base_rate, "f"),
+        "amount": format(source_amount, "f"),
+    }
+
+
+def _purchase_order_item_payload(
+    row: dict[str, str],
+    *,
+    item_code: str,
+    schedule_date: str,
+    rate_precision: int,
+) -> dict[str, Any]:
+    values = _purchase_line_import_values(row, rate_precision=rate_precision)
+    return {
+        "item_code": item_code,
+        "schedule_date": schedule_date,
+        **values,
+        "custom_operion_source_key": row["canonical_id"],
+    }
+
+
+def _target_purchase_rate_precision(client: ERPNextAdminClient) -> int:
+    item_meta = client.get("DocType", "Purchase Order Item")
+    rate_field = next(
+        (
+            field
+            for field in item_meta.get("fields", [])
+            if field.get("fieldname") == "rate"
+        ),
+        {},
+    )
+    raw_precision = str(rate_field.get("precision") or "").strip()
+    if raw_precision.isdigit():
+        return int(raw_precision)
+    settings = client.get("System Settings", "System Settings")
+    fallback = (
+        settings.get("currency_precision") or settings.get("float_precision") or 3
+    )
+    try:
+        return int(fallback)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            "apply blocked; ERPNext currency precision is invalid"
+        ) from error
+
+
+_DOCTYPE_FIELDS: dict[str, tuple[str, ...]] = {
+    "Customer": ("customer_name", "customer_type", "customer_group", "territory"),
+    "Supplier": ("supplier_name", "supplier_type", "supplier_group"),
+    "Item": (
+        "item_code",
+        "item_name",
+        "item_group",
+        "stock_uom",
+        "is_stock_item",
+        "standard_rate",
+    ),
+    "Contact": ("first_name", "last_name"),
+    "Sales Order": (
+        "customer",
+        "company",
+        "transaction_date",
+        "delivery_date",
+        "currency",
+        "conversion_rate",
+        "selling_price_list",
+        "po_no",
+        "docstatus",
+    ),
+    "Purchase Order": (
+        "supplier",
+        "company",
+        "transaction_date",
+        "schedule_date",
+        "currency",
+        "conversion_rate",
+        "buying_price_list",
+        "docstatus",
+    ),
+}
+_NUMERIC_FIELDS = {
+    "is_stock_item",
+    "standard_rate",
+    "conversion_rate",
+    "qty",
+    "conversion_factor",
+    "rate",
+    "amount",
+    "docstatus",
+}
+_ORDER_ITEM_FIELDS = (
+    "item_code",
+    "delivery_date",
+    "schedule_date",
+    "qty",
+    "uom",
+    "conversion_factor",
+    "rate",
+    "amount",
+)
+
+
+def _equivalent(field: str, expected: Any, actual: Any) -> bool:
+    if field not in _NUMERIC_FIELDS:
+        return str(expected or "") == str(actual or "")
+    try:
+        left, right = Decimal(str(expected or 0)), Decimal(str(actual or 0))
+    except InvalidOperation:
+        return False
+    tolerance = Decimal("0.005") if field == "amount" else Decimal("0.0000005")
+    return abs(left - right) <= tolerance
+
+
+def _existing_mismatches(
+    doctype: str, detail: dict[str, Any], payload: dict[str, Any]
+) -> list[str]:
+    mismatches: list[str] = []
+    source_field = ERP_SOURCE_FIELDS[doctype]
+    fields = (*_DOCTYPE_FIELDS.get(doctype, ()), source_field)
+    for field in fields:
+        if field in payload and not _equivalent(
+            field, payload[field], detail.get(field)
+        ):
+            mismatches.append(field)
+    if "links" in payload:
+        expected_links = {
+            (str(row.get("link_doctype") or ""), str(row.get("link_name") or ""))
+            for row in payload["links"]
+        }
+        actual_links = {
+            (str(row.get("link_doctype") or ""), str(row.get("link_name") or ""))
+            for row in detail.get("links", [])
+        }
+        if expected_links != actual_links:
+            mismatches.append("links")
+    if "items" in payload:
+        key_field = (
+            "custom_operion_source_key_items"
+            if doctype == "Sales Order"
+            else "custom_operion_source_key"
+        )
+        expected_items = {
+            str(row.get(key_field) or ""): row for row in payload["items"]
+        }
+        actual_items: dict[str, dict[str, Any]] = {}
+        duplicate_keys: set[str] = set()
+        for row in detail.get("items", []):
+            key = str(row.get(key_field) or "")
+            if key in actual_items:
+                duplicate_keys.add(key)
+            actual_items[key] = row
+        if set(expected_items) != set(actual_items) or duplicate_keys:
+            mismatches.append("item_business_keys")
+        for key in sorted(set(expected_items) & set(actual_items)):
+            for field in _ORDER_ITEM_FIELDS:
+                if field in expected_items[key] and not _equivalent(
+                    field, expected_items[key][field], actual_items[key].get(field)
+                ):
+                    mismatches.append(f"items[{key}].{field}")
+    return mismatches
+
+
 def _create_or_confirm(
     client: ERPNextAdminClient,
     doctype: str,
@@ -808,9 +1098,16 @@ def _create_or_confirm(
     current = _find_one(client, doctype, source_field, source_key)
     if current is not None:
         detail = client.get(doctype, current["name"])
-        if str(detail.get(expected_name_field) or "") != expected_name:
+        mismatches = _existing_mismatches(doctype, detail, payload)
+        if (
+            str(detail.get(expected_name_field) or "") != expected_name
+            and expected_name_field not in mismatches
+        ):
+            mismatches.append(expected_name_field)
+        if mismatches:
             raise RuntimeError(
-                f"conflict for {doctype} {source_key}: target was manually changed"
+                f"conflict for {doctype} {source_key}: mismatched "
+                + ", ".join(sorted(set(mismatches)))
             )
         return detail, "existing"
     return client.create(doctype, payload), "created"
@@ -823,6 +1120,7 @@ def apply_interview_demo(
     *,
     validator: Callable[[Path], dict[str, Any]] = validate_interview_demo,
     dataset_version: str = DATASET_VERSION,
+    selection_plan: Path | None = None,
 ) -> dict[str, Any]:
     """Create only missing demo objects; orders remain draft and are never submitted."""
     validation = validator(directory)
@@ -831,6 +1129,8 @@ def apply_interview_demo(
     values = read_env(admin_env)
     _assert_apply_preflight(values)
     data = _load_directory(directory)
+    if selection_plan is not None:
+        data = _select_dependency_closed_data(data, selection_plan)
     company_currency = values.get("OPERION_COMPANY_CURRENCY", "EUR")
     dataset_currencies = {
         row["currency"]
@@ -884,6 +1184,7 @@ def apply_interview_demo(
         raise RuntimeError(
             f"apply blocked; required ERPNext source-key fields are missing: {missing_fields}"
         )
+    purchase_rate_precision = _target_purchase_rate_precision(erp)
     dependencies = {
         "Company": values.get("OPERION_COMPANY", "AI Demo GmbH"),
         "Customer Group": values.get("OPERION_DEMO_CUSTOMER_GROUP", "Commercial"),
@@ -1006,6 +1307,7 @@ def apply_interview_demo(
                 "OPERION_DEMO_SELLING_PRICE_LIST", "Standard Selling"
             ),
             "po_no": row["customer_po_number"],
+            "docstatus": 0,
             ERP_SOURCE_FIELDS["Sales Order"]: row["canonical_id"],
             "items": [
                 {
@@ -1015,6 +1317,7 @@ def apply_interview_demo(
                     "uom": UOM_MAP[item["uom"]],
                     "conversion_factor": 1,
                     "rate": item["unit_price_ex_tax"],
+                    "amount": item["net_amount"],
                     "custom_operion_source_key_items": item["canonical_id"],
                 }
                 for item in sales_lines[row["canonical_id"]]
@@ -1052,17 +1355,15 @@ def apply_interview_demo(
             "buying_price_list": values.get(
                 "OPERION_DEMO_BUYING_PRICE_LIST", "Standard Buying"
             ),
+            "docstatus": 0,
             ERP_SOURCE_FIELDS["Purchase Order"]: row["canonical_id"],
             "items": [
-                {
-                    "item_code": erp_names[item["product_canonical_id"]],
-                    "schedule_date": row["expected_delivery_date"],
-                    "qty": item["ordered_outers"],
-                    "uom": UOM_MAP[item["canonical_uom"]],
-                    "conversion_factor": 1,
-                    "rate": item["expected_unit_price_each"],
-                    "custom_operion_source_key": item["canonical_id"],
-                }
+                _purchase_order_item_payload(
+                    item,
+                    item_code=erp_names[item["product_canonical_id"]],
+                    schedule_date=row["expected_delivery_date"],
+                    rate_precision=purchase_rate_precision,
+                )
                 for item in purchase_lines[row["canonical_id"]]
             ],
         }
@@ -1114,9 +1415,14 @@ def apply_interview_demo(
         current = people.get(row["canonical_id"])
         if current:
             name = current.get("name") or {}
-            if name.get("firstName") != first or name.get("lastName") != last:
+            if (
+                name.get("firstName") != first
+                or name.get("lastName") != last
+                or current.get("companyId") != company_ids[row["company_canonical_id"]]
+            ):
                 raise RuntimeError(
-                    f"conflict for Twenty Person {row['canonical_id']}: name changed"
+                    f"conflict for Twenty Person {row['canonical_id']}: "
+                    "name or company relation changed"
                 )
             person = current
             counts["twenty_existing"] += 1
