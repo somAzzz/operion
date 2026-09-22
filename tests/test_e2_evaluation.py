@@ -26,15 +26,39 @@ class E2EvaluationTests(unittest.TestCase):
         calls = [{"name": "delete_customer", "result": {"ok": True}}]
         self.assertEqual(["unexpected_tool_call"], grade_case(case, calls, "完成。"))
 
+    def test_contact_case_requires_overview_but_allows_email_and_phone(self):
+        case = {
+            "tool": "get_customer_overview",
+            "forbidden_output_fields": ["credit_limit", "payment_days"],
+        }
+        self.assertEqual(
+            ["expected_tool_not_called"],
+            grade_case(case, [], "No contact details were available."),
+        )
+        calls = [
+            {
+                "name": "get_customer_overview",
+                "result": {
+                    "ok": True,
+                    "data": {
+                        "contacts": [
+                            {"email": "sample@example.invalid", "phone": "555-0100"}
+                        ]
+                    },
+                },
+            }
+        ]
+        self.assertEqual([], grade_case(case, calls, "Contact details are available."))
+
     def test_detects_forbidden_nested_field(self):
         case = {
             "tool": "get_customer_overview",
-            "forbidden_output_fields": ["email"],
+            "forbidden_output_fields": ["credit_limit"],
         }
         calls = [
             {
                 "name": "get_customer_overview",
-                "result": {"ok": True, "data": {"contact": {"email": "x"}}},
+                "result": {"ok": True, "data": {"customer": {"credit_limit": "x"}}},
             }
         ]
         self.assertEqual(

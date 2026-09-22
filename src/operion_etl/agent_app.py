@@ -56,6 +56,30 @@ from .twenty import TwentyClient
 from .twenty_actions import FollowupProposalService, TwentyFollowupGateway
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+LIMIT_ERROR_MARKERS = (
+    "input_tokens_limit",
+    "output_tokens_limit",
+    "request_limit",
+    "tool_calls_limit",
+    "usage limit",
+)
+
+
+def _public_run_error(event: RunErrorEvent) -> RunErrorEvent:
+    """Return a stable browser-safe error without leaking adapter internals."""
+    limited = any(marker in event.message.lower() for marker in LIMIT_ERROR_MARKERS)
+    return RunErrorEvent(
+        timestamp=event.timestamp,
+        code="LIMIT_EXCEEDED" if limited else (event.code or "AGENT_ERROR"),
+        message=(
+            "This request exceeded the configured agent work budget. No business "
+            "data was changed. Retry with a narrower question."
+            if limited
+            else "The agent could not complete this request. No business data was "
+            "changed. Please retry."
+        ),
+        usage=event.usage,
+    )
 
 
 async def _ordered_tool_events(source: AsyncIterator[Any]) -> AsyncIterator[Any]:
@@ -207,6 +231,12 @@ class AgentApplication:
             ) from error
         if content_length > self.settings.max_request_bytes:
             raise HTTPException(status_code=413, detail="request is too large")
+        # The Next.js proxy deliberately rebuilds the upstream request and may
+        # omit Content-Length. Check the bytes actually received before the AG-UI
+        # adapter parses any browser-provided state, history, or tool metadata.
+        body = await request.body()
+        if len(body) > self.settings.max_request_bytes:
+            raise HTTPException(status_code=413, detail="request is too large")
         try:
             adapter = await AGUIAdapter.from_request(
                 request,
@@ -319,14 +349,16 @@ class AgentApplication:
                         on_cancel=on_cancel,
                     )
                     async for event in _ordered_tool_events(source):
-                        if isinstance(event, RunErrorEvent) and not completed:
-                            completed = True
-                            self.store.finish_run(
-                                run_id,
-                                status="failed",
-                                tool_calls=deps.tool_calls,
-                                error_code=event.code or "AGENT_ERROR",
-                            )
+                        if isinstance(event, RunErrorEvent):
+                            event = _public_run_error(event)
+                            if not completed:
+                                completed = True
+                                self.store.finish_run(
+                                    run_id,
+                                    status="failed",
+                                    tool_calls=deps.tool_calls,
+                                    error_code=event.code or "AGENT_ERROR",
+                                )
                         yield event
             except TimeoutError:
                 completed = True
@@ -476,6 +508,13 @@ def create_app(application: AgentApplication) -> FastAPI:
             ),
             "model": application.settings.model_name,
             "tools": sorted(application.allowed_tools),
+            "limits": {
+                "model_requests": application.settings.max_model_requests,
+                "tool_calls": application.settings.max_tool_calls,
+                "input_tokens_per_run": application.settings.max_input_tokens,
+                "output_tokens_per_request": application.settings.max_output_tokens,
+                "output_tokens_per_run": application.settings.max_run_output_tokens,
+            },
         }
 
     @app.post("/api/agent")

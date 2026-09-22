@@ -49,7 +49,7 @@ class E2DataTests(unittest.TestCase):
 
     def test_e2_evaluation_manifest_covers_all_fifteen_cases(self):
         manifest = json.loads(Path("evaluations/e2/cases.json").read_text())
-        self.assertEqual("operion-e2-eval-v1", manifest["version"])
+        self.assertEqual("operion-e2-eval-v2", manifest["version"])
         self.assertEqual(3, manifest["repeat_count"])
         self.assertEqual(
             {

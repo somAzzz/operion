@@ -42,16 +42,42 @@ def create_server(
         return repository.customer_portfolio_summary(scope)
 
     @server.tool(annotations=read_only, structured_output=True)
+    def get_customer_order_distribution(customer: Literal["*"] = "*") -> dict[str, Any]:
+        """Return complete per-customer sales-order counts in the authorized scope."""
+        return repository.customer_order_distribution(scope)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_organization_orders(
+        query: str,
+        relationship: Literal["customer", "supplier", "either"] = "either",
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Resolve a scoped customer or supplier and return its orders."""
+        return repository.get_organization_orders(query, scope, relationship, limit)
+
+    @server.tool(annotations=read_only, structured_output=True)
     def search_customers(
         query: str = "", limit: int = 10, cursor: str | None = None
     ) -> dict[str, Any]:
         """Search or list authorized customers; partial names are supported."""
         return repository.search_customers(query, scope, limit, cursor)
 
+    @server.tool(annotations=read_only, structured_output=True)
+    def search_contacts(
+        query: str, limit: int = 10, cursor: str | None = None
+    ) -> dict[str, Any]:
+        """Find authorized people by name and return their organization links."""
+        return repository.search_contacts(query, scope, limit, cursor)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_contact_by_name(name: str) -> dict[str, Any]:
+        """Return one authorized person's communication fields and provenance."""
+        return repository.get_contact_by_name(name, scope)
+
     @server.tool(
         name="get_customer_overview",
         description=(
-            "Return an allowlisted customer, contacts, and recent orders within "
+            "Return an allowlisted customer by canonical, WWI source ID, or name with contacts and recent orders within "
             "the server-defined customer scope. Has no side effects."
         ),
         annotations=read_only,
@@ -62,6 +88,15 @@ def create_server(
         max_orders: int = 20,
     ) -> dict[str, Any]:
         return repository.customer_overview(customer, scope, max_orders)
+
+    @server.tool(annotations=read_only, structured_output=True)
+    def get_customer_order_context(
+        customer_query: str, order_id: str, max_orders: int = 50
+    ) -> dict[str, Any]:
+        """Verify a named customer's authorized order and return both records."""
+        return repository.get_customer_order_context(
+            customer_query, order_id, scope, max_orders
+        )
 
     @server.tool(annotations=read_only, structured_output=True)
     def list_sales_orders(

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from .identity_readback import ERPNextReadClient, TwentyReadClient
 
@@ -35,6 +35,14 @@ class AmbiguousSupplierError(ReadToolError):
 
     def __init__(self, candidates: list[dict[str, str]]) -> None:
         super().__init__("supplier name is ambiguous")
+        self.candidates = candidates
+
+
+class AmbiguousContactError(ReadToolError):
+    code = "ambiguous_contact"
+
+    def __init__(self, candidates: list[dict[str, str]]) -> None:
+        super().__init__("contact name is ambiguous")
         self.candidates = candidates
 
 
@@ -115,6 +123,23 @@ def _text(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _primary_child_value(rows: Any, value_field: str, primary_field: str) -> str:
+    if not isinstance(rows, list):
+        return ""
+    populated = [row for row in rows if isinstance(row, dict) and row.get(value_field)]
+    if not populated:
+        return ""
+    primary = next(
+        (
+            row
+            for row in populated
+            if str(row.get(primary_field) or "").lower() in {"1", "true"}
+        ),
+        populated[0],
+    )
+    return str(primary[value_field])
+
+
 def _timestamp(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -176,13 +201,31 @@ class CanonicalRepository:
         )
         self.snapshot_skew = self.snapshot_skew_seconds > max_snapshot_skew_seconds
         self.data = {name: _read_csv(directory / f"{name}.csv") for name in self.FILES}
+        manifest_path = directory / "dataset.json"
+        self.snapshot_source_observed_at = None
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self.snapshot_source_observed_at = manifest.get("source_observed_at")
+            except (OSError, ValueError) as error:
+                raise SourceUnavailableError(
+                    "dataset manifest is unavailable"
+                ) from error
         self.target_ids: dict[tuple[str, str], str] = {}
+        self.mapping_status: dict[tuple[str, str], str] = {}
         if identity_map is not None:
             for row in _read_csv(identity_map):
+                key = (row["target_system"], row["canonical_id"])
+                self.mapping_status[key] = row.get("load_status", "") or "unknown"
                 if row.get("target_id"):
                     self.target_ids[(row["target_system"], row["canonical_id"])] = row[
                         "target_id"
                     ]
+
+    def _mapping_status(self, system: str, canonical_id: str) -> str:
+        if self.data_mode == "live" and self.target_ids.get((system, canonical_id)):
+            return "verified_live"
+        return self.mapping_status.get((system, canonical_id), "unknown")
 
     @property
     def source_stale_by_system(self) -> dict[str, bool]:
@@ -204,7 +247,10 @@ class CanonicalRepository:
         if set(sources) >= {"twenty", "erpnext"} and self.snapshot_skew:
             warnings.append("source_snapshot_skew")
         if self.data_mode == "snapshot":
-            warnings.append("snapshot_not_live")
+            return [
+                *[warning for warning in warnings if warning != "source_snapshot_skew"],
+                "snapshot_not_live",
+            ]
         return warnings
 
     def _metadata(self, *, source_system: list[str]) -> dict[str, Any]:
@@ -246,8 +292,23 @@ class CanonicalRepository:
                 if row.get("source_system")
             }
         )
+        snapshot = self.data_mode == "snapshot"
+        actual_sources = record_sources if snapshot else source_system
+        source_observed_at = (
+            {"wwi": self.snapshot_source_observed_at}
+            if snapshot and self.snapshot_source_observed_at
+            else ({} if snapshot else observed)
+        )
         return {
             "data_mode": self.data_mode,
+            "data_origin": "canonical_snapshot" if snapshot else "live_adapters",
+            "cross_system_verification": (
+                {"status": "not_verified", "reason": "snapshot_only"}
+                if snapshot
+                else {"status": "not_assessed", "reason": "per_record_mapping_required"}
+            ),
+            "observed_at_kind": "snapshot_load" if snapshot else "upstream_read",
+            **({"queried_systems": source_system} if not snapshot else {}),
             "data_class": classes[0] if len(classes) == 1 else classes,
             "dataset_version": (
                 dataset_versions[0] if len(dataset_versions) == 1 else dataset_versions
@@ -259,15 +320,26 @@ class CanonicalRepository:
                 record_sources[0] if len(record_sources) == 1 else record_sources
             ),
             "query_scope": "current dataset and server-authorized IDs only",
-            "source_system": source_system,
+            "scope_evidence": {
+                "status": "authorized",
+                "coverage": "current_dataset_and_authorized_ids",
+                "full_source_history": "undetermined",
+            },
+            "source_read": {
+                "status": "snapshot" if snapshot else "live",
+                "cross_system_status": "not_verified" if snapshot else "not_assessed",
+            },
+            "source_system": actual_sources,
             "observed_at": oldest.isoformat(),
-            "source_observed_at": observed,
+            "source_observed_at": source_observed_at,
             "snapshot_skew_seconds": (
-                self.snapshot_skew_seconds
+                None
+                if snapshot
+                else self.snapshot_skew_seconds
                 if set(source_system) >= {"twenty", "erpnext"}
                 else 0
             ),
-            "sources": ["canonical-v1", *source_system],
+            "sources": ["canonical-v1", *actual_sources],
             "warnings": self._warnings(source_system),
         }
 
@@ -325,14 +397,80 @@ class CanonicalRepository:
             "scope": "authorized_customers",
             "customer_count": len(customers),
             "customers_with_orders": len(customers_with_orders),
+            "sales_order_count": len(orders),
             "open_order_count": sum(
-                row["source_status"].strip().casefold() == "open"
+                (
+                    not row.get("docstatus")
+                    and row["source_status"].strip().casefold() == "open"
+                )
                 or self._status_matches(row, "confirmed_open", "sales")
                 for row in orders
             ),
+            "open_order_basis": {
+                "source_open_count": sum(
+                    row["source_status"].strip().casefold() == "open"
+                    and not row.get("docstatus")
+                    for row in orders
+                ),
+                "native_confirmed_open_count": sum(
+                    self._status_matches(row, "confirmed_open", "sales")
+                    for row in orders
+                ),
+            },
             "missing": [
                 f"customer:{customer_id}" for customer_id in missing_customer_ids
             ],
+            "completeness": {
+                "status": "partial" if missing_customer_ids else "complete",
+                "basis": "current_dataset_and_authorized_customers",
+                "full_source_history": "undetermined",
+            },
+            **self._metadata(source_system=["twenty", "erpnext"]),
+        }
+
+    def customer_order_distribution(self, scope: AccessScope) -> dict[str, Any]:
+        """Compute all per-customer counts inside the server-defined scope."""
+        customers = sorted(
+            (
+                row
+                for row in self.data["organizations"]
+                if row["roles"] == "customer"
+                and scope.allows_customer(row["canonical_id"])
+            ),
+            key=lambda row: (row["name"].casefold(), row["canonical_id"]),
+        )
+        counts = {row["canonical_id"]: 0 for row in customers}
+        for order in self.data["sales_orders"]:
+            customer_id = order["customer_canonical_id"]
+            if customer_id in counts:
+                counts[customer_id] += 1
+        missing_ids = sorted(scope.customer_ids - counts.keys())
+        rows = [
+            {
+                "customer_id": row["canonical_id"],
+                "customer_name": row["name"],
+                "order_count": counts[row["canonical_id"]],
+                "order_presence": (
+                    "present"
+                    if counts[row["canonical_id"]]
+                    else "none_in_current_scope"
+                ),
+            }
+            for row in customers
+        ]
+        return {
+            "contract_version": "customer-order-distribution-v1",
+            "customers": rows,
+            "customer_count": len(rows),
+            "customers_with_orders": sum(row["order_count"] > 0 for row in rows),
+            "sales_order_count": sum(counts.values()),
+            "completeness": {
+                "status": "partial" if missing_ids else "complete",
+                "basis": "current_dataset_and_authorized_customers",
+                "full_source_history": "undetermined",
+                "missing_customer_ids": missing_ids,
+            },
+            "missing": [f"customer:{item}" for item in missing_ids],
             **self._metadata(source_system=["twenty", "erpnext"]),
         }
 
@@ -349,7 +487,18 @@ class CanonicalRepository:
             row for row in self.data["organizations"] if row["roles"] == role
         ]
         id_matches = [row for row in organizations if row["canonical_id"] == value]
+        if not id_matches and value.isascii() and value.isdecimal():
+            id_matches = [
+                row
+                for row in organizations
+                if row["canonical_id"].startswith("wwi:")
+                and row.get("source_id") == value
+            ]
         if id_matches:
+            if len(id_matches) > 1:
+                raise InvalidBusinessInputError(
+                    f"{role} source ID is ambiguous; use a canonical ID"
+                )
             if not allowed(id_matches[0]["canonical_id"]):
                 raise ScopeDeniedError(
                     f"{role} is outside the authorized scope or unavailable"
@@ -399,6 +548,10 @@ class CanonicalRepository:
                     ),
                     "",
                 ),
+                "mapping_status": self._mapping_status(
+                    "twenty" if role == "customer" else "erpnext",
+                    row["canonical_id"],
+                ),
                 "name": row["name"],
                 "city": row.get("city", ""),
                 "country": row.get("country", ""),
@@ -421,6 +574,10 @@ class CanonicalRepository:
             "query": query,
             "results": page,
             "pagination": pagination,
+            "completeness": {
+                "status": "partial" if cursor or pagination["has_more"] else "complete",
+                "basis": "authorized_search_results",
+            },
             "missing": [],
             **self._metadata(
                 source_system=["twenty"] if role == "customer" else ["erpnext"]
@@ -445,6 +602,333 @@ class CanonicalRepository:
     ) -> dict[str, Any]:
         return self._organization_search(query, scope, "supplier", limit, cursor)
 
+    def get_organization_orders(
+        self,
+        query: str,
+        scope: AccessScope,
+        relationship: Literal["customer", "supplier", "either"] = "either",
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Resolve one scoped organization and list its orders in one read."""
+        if not query.strip() or len(query) > 200:
+            raise InvalidBusinessInputError(
+                "organization query must be 1–200 characters"
+            )
+        if relationship not in {"customer", "supplier", "either"}:
+            raise InvalidBusinessInputError("relationship is invalid")
+        if not 1 <= limit <= self.MAX_ORDERS:
+            raise InvalidBusinessInputError("limit must be between 1 and 50")
+        query = query.strip()
+        needle = query.casefold()
+        roles = {"customer", "supplier"} if relationship == "either" else {relationship}
+
+        def allowed(row: dict[str, str]) -> bool:
+            return (
+                scope.allows_customer(row["canonical_id"])
+                if row["roles"] == "customer"
+                else scope.allows_supplier(row["canonical_id"])
+            )
+
+        all_matches = [
+            row
+            for row in self.data["organizations"]
+            if row["roles"] in roles
+            and (
+                row["canonical_id"] == query
+                or (
+                    query.isascii()
+                    and query.isdecimal()
+                    and row["canonical_id"].startswith("wwi:")
+                    and row.get("source_id") == query
+                )
+                or needle in row["name"].casefold()
+            )
+        ]
+        visible = [row for row in all_matches if allowed(row)]
+        exact = [
+            row
+            for row in visible
+            if (
+                row["canonical_id"] == query
+                or row.get("source_id") == query
+                or row["name"].strip().casefold() == needle
+            )
+        ]
+        matches = exact or visible
+        if (
+            query.startswith(("wwi:organization:", "operion:"))
+            and all_matches
+            and not visible
+        ):
+            status = "denied"
+        elif not matches:
+            status = "not_found"
+        elif len(matches) > 1:
+            status = "ambiguous"
+        else:
+            status = "resolved"
+        candidates = [
+            {
+                "canonical_id": row["canonical_id"],
+                "name": row["name"],
+                "relationship": row["roles"],
+                "city": row.get("city", ""),
+            }
+            for row in sorted(
+                matches, key=lambda item: (item["name"], item["canonical_id"])
+            )
+        ]
+        result: dict[str, Any] = {
+            "contract_version": "organization-orders-v1",
+            "resolution": {
+                "status": status,
+                "authorization": "denied"
+                if status == "denied"
+                else ("authorized" if matches else "not_assessed"),
+                "query": query,
+                "relationship": relationship,
+                "candidates": candidates,
+            },
+            "orders": [],
+            "order_kind": None,
+            "order_count": None,
+            "completeness": {
+                "status": "not_applicable" if status != "resolved" else "complete",
+                "basis": "current_dataset_and_authorized_ids",
+                "full_source_history": "undetermined",
+            },
+            "missing": [],
+            **self._metadata(source_system=["twenty", "erpnext"]),
+        }
+        if status == "denied":
+            result["scope_evidence"]["status"] = "denied"
+        if status != "resolved":
+            return result
+        organization = matches[0]
+        role = organization["roles"]
+        if role == "customer":
+            orders = [
+                self._sales_order_summary(row)
+                for row in self.data["sales_orders"]
+                if row["customer_canonical_id"] == organization["canonical_id"]
+            ]
+        else:
+            orders = [
+                self._purchase_order_summary(row)
+                for row in self.data["purchase_orders"]
+                if row["supplier_canonical_id"] == organization["canonical_id"]
+            ]
+        orders.sort(
+            key=lambda row: (row["order_date"], row["canonical_id"]), reverse=True
+        )
+        result["orders"] = orders[:limit]
+        result["order_kind"] = "sales" if role == "customer" else "purchase"
+        result["order_count"] = len(orders)
+        result["completeness"]["status"] = (
+            "partial" if len(orders) > limit else "complete"
+        )
+        result["resolution"]["organization"] = candidates[0]
+        result["order_presence"] = "present" if orders else "none_in_current_scope"
+        return result
+
+    def get_contact_by_name(self, name: str, scope: AccessScope) -> dict[str, Any]:
+        """Resolve one scoped person and return verified communication evidence."""
+        if not name.strip() or len(name) > 200:
+            raise InvalidBusinessInputError("contact name must be 1–200 characters")
+        search = self.search_contacts(name, scope, limit=self.MAX_ORDERS)
+        if search["pagination"]["has_more"]:
+            raise InvalidBusinessInputError(
+                "contact search has more candidates; use a more specific name"
+            )
+        exact = [
+            row
+            for row in search["results"]
+            if row["full_name"].strip().casefold() == name.strip().casefold()
+        ]
+        matches = exact or search["results"]
+        if not matches:
+            raise NotFoundError("contact was not found in the authorized scope")
+        if len(matches) > 1:
+            raise AmbiguousContactError(matches)
+        match = matches[0]
+        role = match["organization_role"]
+        overview = (
+            self.customer_overview(match["organization_id"], scope)
+            if role == "customer"
+            else self.supplier_overview(match["organization_id"], scope)
+        )
+        contact = next(
+            (
+                row
+                for row in overview["contacts"]
+                if row["canonical_id"] == match["canonical_id"]
+            ),
+            None,
+        )
+        if contact is None:
+            raise SourceUnavailableError("contact relation could not be verified")
+        target_system = "twenty" if role == "customer" else "erpnext"
+        field_evidence = {}
+        for field in ("email", "phone"):
+            if field not in contact:
+                state, value = "not_exposed", None
+            elif contact[field] == "":
+                state, value = "explicit_empty", ""
+            else:
+                state, value = "present", contact[field]
+            field_evidence[field] = {
+                "state": state,
+                "status": state,
+                "value": value,
+                "source_system": contact.get("source_system", ""),
+                "data_origin": overview["data_origin"],
+            }
+        return {
+            "contract_version": "contact-detail-v1",
+            "contact": {
+                "canonical_id": contact["canonical_id"],
+                "full_name": contact["full_name"],
+                "organization_id": match["organization_id"],
+                "organization_name": match["organization_name"],
+                "organization_role": role,
+                "target_system": target_system,
+                "target_id": contact.get(f"{target_system}_id", ""),
+                "mapping_status": contact.get(
+                    f"{target_system}_mapping_status", "unknown"
+                ),
+            },
+            "fields": field_evidence,
+            "resolution": {
+                "status": "resolved",
+                "authorization": "authorized",
+                "canonical_id": contact["canonical_id"],
+                "organization_id": match["organization_id"],
+            },
+            "missing": [],
+            **self._metadata(source_system=[target_system]),
+        }
+
+    def search_contacts(
+        self,
+        query: str,
+        scope: AccessScope,
+        limit: int = DEFAULT_PAGE_SIZE,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Find people attached to authorized customer or supplier organizations."""
+        if not query.strip() or len(query) > 200:
+            raise InvalidBusinessInputError("contact query must be 1–200 characters")
+        organizations = {
+            row["canonical_id"]: row
+            for row in self.data["organizations"]
+            if (
+                row["roles"] == "customer"
+                and scope.allows_customer(row["canonical_id"])
+            )
+            or (
+                row["roles"] == "supplier"
+                and scope.allows_supplier(row["canonical_id"])
+            )
+        }
+        needle = query.strip().casefold()
+        matches = []
+        for row in self.data["contacts"]:
+            organization = organizations.get(row["company_canonical_id"])
+            if organization is None or needle not in row["full_name"].casefold():
+                continue
+            matches.append(
+                {
+                    "canonical_id": row["canonical_id"],
+                    "full_name": row["full_name"],
+                    "organization_id": organization["canonical_id"],
+                    "organization_name": organization["name"],
+                    "organization_role": organization["roles"],
+                    "source_system": row.get("source_system", ""),
+                    "target_id": self.target_ids.get(
+                        (
+                            "twenty"
+                            if organization["roles"] == "customer"
+                            else "erpnext",
+                            row["canonical_id"],
+                        ),
+                        "",
+                    ),
+                    "mapping_status": self._mapping_status(
+                        "twenty" if organization["roles"] == "customer" else "erpnext",
+                        row["canonical_id"],
+                    ),
+                }
+            )
+        page, pagination = self._page(
+            matches,
+            limit=limit,
+            cursor=cursor,
+            key_fields=("full_name", "canonical_id"),
+        )
+        return {
+            "contract_version": "contact-search-v1",
+            "query": query,
+            "results": page,
+            "pagination": pagination,
+            "completeness": {
+                "status": "partial" if cursor or pagination["has_more"] else "complete",
+                "basis": "authorized_search_results",
+            },
+            "missing": [],
+            **self._metadata(source_system=["twenty", "erpnext"]),
+        }
+
+    def _communication_fields(
+        self, contact: dict[str, Any], source_system: str
+    ) -> dict[str, dict[str, Any]]:
+        fields: dict[str, dict[str, Any]] = {}
+        for name in ("email", "phone"):
+            if name not in contact:
+                fields[name] = {"status": "not_exposed", "source_system": source_system}
+            else:
+                value = contact[name]
+                fields[name] = {
+                    "status": "present" if value else "explicit_empty",
+                    "source_system": source_system,
+                    **({"value": value} if value else {}),
+                }
+        return fields
+
+    def _contact_summary(
+        self, row: dict[str, str], *, supplier: bool
+    ) -> dict[str, Any]:
+        contact = {
+            "canonical_id": row["canonical_id"],
+            "full_name": row["full_name"],
+            "source_system": row.get("source_system", ""),
+            "erpnext_id": self.target_ids.get(("erpnext", row["canonical_id"]), ""),
+            "erpnext_mapping_status": self._mapping_status(
+                "erpnext", row["canonical_id"]
+            ),
+        }
+        if supplier:
+            contact["relationship"] = row.get("relationship", "supplier contact")
+        else:
+            contact["preferred_name"] = row.get("preferred_name", "")
+            contact["twenty_id"] = self.target_ids.get(
+                ("twenty", row["canonical_id"]), ""
+            )
+            contact["twenty_mapping_status"] = self._mapping_status(
+                "twenty", row["canonical_id"]
+            )
+        # Live adapters currently read contact names, not communication details.
+        # Never present canonical snapshot contact details as live facts.
+        if self.data_mode == "snapshot" and row.get("data_class") in {
+            "public_sample",
+            "simulated",
+        }:
+            contact["email"] = row.get("email", "")
+            contact["phone"] = row.get("phone", "")
+        contact["fields"] = self._communication_fields(
+            contact, row.get("source_system", "")
+        )
+        return contact
+
     def customer_overview(
         self,
         customer: str,
@@ -457,28 +941,12 @@ class CanonicalRepository:
         canonical_id = organization["canonical_id"]
 
         contacts = [
-            {
-                "canonical_id": row["canonical_id"],
-                "full_name": row["full_name"],
-                "preferred_name": row["preferred_name"],
-                "twenty_id": self.target_ids.get(("twenty", row["canonical_id"]), ""),
-                "erpnext_id": self.target_ids.get(("erpnext", row["canonical_id"]), ""),
-            }
+            self._contact_summary(row, supplier=False)
             for row in self.data["contacts"]
             if row["company_canonical_id"] == canonical_id
         ]
         orders = [
-            {
-                "canonical_id": row["canonical_id"],
-                "order_date": row["order_date"],
-                "expected_delivery_date": row["expected_delivery_date"],
-                "source_status": row["source_status"],
-                "docstatus": row.get("docstatus", ""),
-                "business_status": row.get("business_status", row["source_status"]),
-                "currency": row.get("currency", ""),
-                "net_total_ex_tax": row.get("net_total_ex_tax", ""),
-                "erpnext_id": self.target_ids.get(("erpnext", row["canonical_id"]), ""),
-            }
+            self._sales_order_summary(row)
             for row in self.data["sales_orders"]
             if row["customer_canonical_id"] == canonical_id
         ]
@@ -486,16 +954,30 @@ class CanonicalRepository:
             key=lambda row: (row["order_date"], row["canonical_id"]), reverse=True
         )
         return {
-            "contract_version": "customer-overview-v1",
+            "contract_version": "customer-overview-v2",
             "operating_company": scope.operating_company,
             "customer": {
                 "canonical_id": canonical_id,
                 "name": organization["name"],
                 "twenty_id": self.target_ids.get(("twenty", canonical_id), ""),
+                "twenty_mapping_status": self._mapping_status("twenty", canonical_id),
                 "erpnext_id": self.target_ids.get(("erpnext", canonical_id), ""),
+                "erpnext_mapping_status": self._mapping_status("erpnext", canonical_id),
             },
             "contacts": contacts,
             "orders": orders[:max_orders],
+            "order_count": len(orders),
+            "order_presence": "present" if orders else "none_in_current_scope",
+            "order_completeness": {
+                "status": "partial" if len(orders) > max_orders else "complete",
+                "basis": "current_dataset_and_authorized_customer",
+                "full_source_history": "undetermined",
+            },
+            "resolution": {
+                "status": "resolved",
+                "authorization": "authorized",
+                "canonical_id": canonical_id,
+            },
             "has_more_orders": len(orders) > max_orders,
             "missing": [],
             **self._metadata(source_system=["twenty", "erpnext"]),
@@ -512,12 +994,7 @@ class CanonicalRepository:
         organization = self._resolve_organization(supplier, scope, "supplier")
         canonical_id = organization["canonical_id"]
         contacts = [
-            {
-                "canonical_id": row["canonical_id"],
-                "full_name": row["full_name"],
-                "relationship": row.get("relationship", "supplier contact"),
-                "erpnext_id": self.target_ids.get(("erpnext", row["canonical_id"]), ""),
-            }
+            self._contact_summary(row, supplier=True)
             for row in self.data["contacts"]
             if row["company_canonical_id"] == canonical_id
         ]
@@ -530,18 +1007,54 @@ class CanonicalRepository:
             key=lambda row: (row["order_date"], row["canonical_id"]), reverse=True
         )
         return {
-            "contract_version": "supplier-overview-v1",
+            "contract_version": "supplier-overview-v2",
             "operating_company": scope.operating_company,
             "supplier": {
                 "canonical_id": canonical_id,
                 "name": organization["name"],
                 "erpnext_id": self.target_ids.get(("erpnext", canonical_id), ""),
+                "erpnext_mapping_status": self._mapping_status("erpnext", canonical_id),
             },
             "contacts": contacts,
             "orders": orders[:max_orders],
+            "order_count": len(orders),
+            "order_presence": "present" if orders else "none_in_current_scope",
+            "order_completeness": {
+                "status": "partial" if len(orders) > max_orders else "complete",
+                "basis": "current_dataset_and_authorized_supplier",
+                "full_source_history": "undetermined",
+            },
+            "resolution": {
+                "status": "resolved",
+                "authorization": "authorized",
+                "canonical_id": canonical_id,
+            },
             "has_more_orders": len(orders) > max_orders,
             "missing": [],
             **self._metadata(source_system=["erpnext"]),
+        }
+
+    def _order_interpretation(
+        self, row: dict[str, str], kind: Literal["sales", "purchase"]
+    ) -> dict[str, str]:
+        docstatus = row.get("docstatus", "")
+        if docstatus == "0":
+            confirmation = "draft"
+        elif docstatus == "2":
+            confirmation = "cancelled"
+        elif docstatus == "1":
+            confirmation = (
+                "confirmed_open"
+                if self._status_matches(row, "confirmed_open", kind)
+                else "submitted_other"
+            )
+        else:
+            confirmation = "unknown"
+        return {
+            "native_status": "known" if docstatus in {"0", "1", "2"} else "unknown",
+            "confirmation_status": confirmation,
+            "source_status": row.get("source_status", ""),
+            "source_system": row.get("source_system", ""),
         }
 
     def _sales_order_summary(self, row: dict[str, str]) -> dict[str, Any]:
@@ -571,6 +1084,7 @@ class CanonicalRepository:
                 if row.get("docstatus", "")
                 else None
             ),
+            "status_interpretation": self._order_interpretation(row, "sales"),
             "data_class": row.get("data_class", ""),
             "source_system": row.get("source_system", ""),
         }
@@ -602,6 +1116,7 @@ class CanonicalRepository:
                 if row.get("docstatus", "")
                 else None
             ),
+            "status_interpretation": self._order_interpretation(row, "purchase"),
             "data_class": row.get("data_class", ""),
             "source_system": row.get("source_system", ""),
         }
@@ -625,7 +1140,7 @@ class CanonicalRepository:
         docstatus = row.get("docstatus", "")
         requested = status.strip().casefold()
         if requested == "draft":
-            return docstatus == "0" or normalized_business == "draft"
+            return docstatus == "0"
         if requested == "confirmed_open":
             expected = "to_deliver" if kind == "sales" else "to_receive"
             return docstatus == "1" and normalized_business.startswith(expected)
@@ -659,10 +1174,11 @@ class CanonicalRepository:
             relation = "supplier_canonical_id"
             allows = scope.allows_supplier
             summary = self._purchase_order_summary
-        if organization_id and not allows(organization_id):
-            raise ScopeDeniedError(
-                f"{kind} order organization is outside the authorized scope or unavailable"
-            )
+        if organization_id:
+            role = "customer" if kind == "sales" else "supplier"
+            organization_id = self._resolve_organization(organization_id, scope, role)[
+                "canonical_id"
+            ]
         scoped_orders = [row for row in orders if allows(row[relation])]
         matches = [
             summary(row)
@@ -678,7 +1194,7 @@ class CanonicalRepository:
             cursor=cursor,
             key_fields=("order_date", "canonical_id"),
         )
-        return {
+        result = {
             "contract_version": f"{kind}-order-list-v1",
             "orders": page,
             "filters": {
@@ -701,9 +1217,37 @@ class CanonicalRepository:
                 "scope": "current dataset and server-authorized IDs only",
             },
             "pagination": pagination,
+            "completeness": {
+                "status": "partial" if cursor or pagination["has_more"] else "complete",
+                "basis": "filtered_current_dataset_and_authorized_ids",
+                "returned_count": len(page),
+                "total_count": len(matches),
+                "full_source_history": "undetermined",
+            },
             "missing": [],
             **self._metadata(source_system=["erpnext"]),
         }
+        if kind == "sales":
+            grouped: dict[str, dict[str, Any]] = {}
+            for order in page:
+                customer_id = order["customer_id"]
+                if customer_id not in grouped:
+                    grouped[customer_id] = {
+                        "customer_id": customer_id,
+                        "customer_name": order["customer_name"],
+                        "order_count": 0,
+                    }
+                grouped[customer_id]["order_count"] += 1
+            result["customer_order_counts"] = sorted(
+                grouped.values(),
+                key=lambda row: (
+                    -row["order_count"],
+                    row["customer_name"],
+                    row["customer_id"],
+                ),
+            )
+            result["customer_order_counts_scope"] = "returned_page"
+        return result
 
     def list_sales_orders(
         self,
@@ -766,18 +1310,29 @@ class CanonicalRepository:
                 "purchase_order_canonical_id",
             )
             allows, summary = scope.allows_supplier, self._purchase_order_summary
+        order_id = order_id.strip()
         matches = [
             row
             for row in self.data[table]
             if (
                 row["canonical_id"] == order_id
                 or self.target_ids.get(("erpnext", row["canonical_id"])) == order_id
+                or (
+                    order_id.isascii()
+                    and order_id.isdecimal()
+                    and row.get("source_system") == "wwi"
+                    and row.get("source_id") == order_id
+                )
             )
             and allows(row[relation])
         ]
         if not matches:
             raise ScopeDeniedError(
                 "order is outside the authorized scope or unavailable"
+            )
+        if len(matches) > 1:
+            raise InvalidBusinessInputError(
+                "order ID matches multiple authorized orders; use a canonical ID"
             )
         row = matches[0]
         product_names = {
@@ -818,6 +1373,18 @@ class CanonicalRepository:
                         "unpicked_quantity": item.get("unpicked_quantity", ""),
                         "delivered_quantity": item.get("delivered_quantity", ""),
                         "delivery_evidence": item.get("delivery_evidence", ""),
+                        "delivery_state": {
+                            "status": (
+                                "known"
+                                if item.get("delivered_quantity", "") != ""
+                                else "unknown"
+                            ),
+                            "basis": (
+                                item.get("delivery_evidence", "")
+                                if item.get("delivered_quantity", "") != ""
+                                else "not_provided"
+                            ),
+                        },
                     }
                 )
             else:
@@ -833,8 +1400,47 @@ class CanonicalRepository:
             "contract_version": f"{kind}-order-detail-v1",
             "order": summary(row),
             "lines": lines,
+            "resolution": {
+                "status": "resolved",
+                "authorization": "authorized",
+                "canonical_id": row["canonical_id"],
+            },
             "missing": [],
             **self._metadata(source_system=["erpnext"]),
+        }
+
+    def get_customer_order_context(
+        self,
+        customer_query: str,
+        order_id: str,
+        scope: AccessScope,
+        max_orders: int = 50,
+    ) -> dict[str, Any]:
+        """Resolve a customer from an authorized order and verify the name."""
+        if not customer_query.strip() or len(customer_query) > 200:
+            raise InvalidBusinessInputError("customer query must be 1–200 characters")
+        order = self.get_sales_order(order_id, scope)
+        customer_id = order["order"]["customer_id"]
+        overview = self.customer_overview(customer_id, scope, max_orders)
+        customer_name = overview["customer"]["name"]
+        if customer_query.strip().casefold() not in customer_name.casefold():
+            raise InvalidBusinessInputError(
+                "sales order customer does not match the requested customer name"
+            )
+        return {
+            "contract_version": "customer-order-context-v1",
+            "resolution": {
+                "status": "verified_by_sales_order_customer_id",
+                "authorization": "authorized",
+                "customer_query": customer_query,
+                "customer_id": customer_id,
+                "customer_name": customer_name,
+                "order_id": order["order"]["canonical_id"],
+            },
+            "customer_overview": overview,
+            "sales_order": order,
+            "missing": [],
+            **self._metadata(source_system=["twenty", "erpnext"]),
         }
 
     def get_sales_order(self, order_id: str, scope: AccessScope) -> dict[str, Any]:
@@ -885,6 +1491,7 @@ class LiveReadRepository(CanonicalRepository):
         self.twenty = twenty
         self.erpnext = erpnext
         self._canonical_snapshot = deepcopy(self.data)
+        self._twenty_people_by_key: dict[str, dict[str, Any]] = {}
 
     def _mark_observed(self, source: str) -> None:
         observed = datetime.now(UTC)
@@ -910,6 +1517,7 @@ class LiveReadRepository(CanonicalRepository):
             raise SourceUnavailableError("Twenty live source is unavailable") from error
         company_by_key = {str(row.get("wwiExternalId") or ""): row for row in companies}
         person_by_key = {str(row.get("wwiExternalId") or ""): row for row in people}
+        self._twenty_people_by_key = person_by_key
         organizations: list[dict[str, str]] = []
         for base in self._canonical_snapshot["organizations"]:
             if base["roles"] != "customer":
@@ -1173,10 +1781,67 @@ class LiveReadRepository(CanonicalRepository):
         self._refresh_twenty()
         return super().customer_portfolio_summary(*args, **kwargs)
 
+    def customer_order_distribution(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        self._refresh_erpnext()
+        self._refresh_twenty()
+        return super().customer_order_distribution(*args, **kwargs)
+
+    def get_organization_orders(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        self._refresh_erpnext()
+        self._refresh_twenty()
+        return super().get_organization_orders(*args, **kwargs)
+
     def customer_overview(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self._refresh_erpnext()
         self._refresh_twenty()
-        return super().customer_overview(*args, **kwargs)
+        result = super().customer_overview(*args, **kwargs)
+        company_id = result["customer"]["twenty_id"]
+        for contact in result["contacts"]:
+            live = self._twenty_people_by_key.get(contact["canonical_id"])
+            if not live or not company_id or live.get("companyId") != company_id:
+                raise SourceUnavailableError(
+                    "Twenty contact relation could not be verified"
+                )
+            emails = live.get("emails")
+            phones = live.get("phones")
+            contact["email"] = (
+                str(emails.get("primaryEmail") or "")
+                if isinstance(emails, dict)
+                else ""
+            )
+            contact["phone"] = (
+                str(phones.get("primaryPhoneNumber") or "")
+                if isinstance(phones, dict)
+                else ""
+            )
+            contact["fields"] = self._communication_fields(contact, "twenty")
+        return result
+
+    def search_contacts(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        self._refresh_erpnext()
+        supplier_organizations = [
+            row for row in self.data["organizations"] if row["roles"] == "supplier"
+        ]
+        supplier_ids = {row["canonical_id"] for row in supplier_organizations}
+        supplier_contacts = [
+            row
+            for row in self.data["contacts"]
+            if row["company_canonical_id"] in supplier_ids
+        ]
+        self._refresh_twenty()
+        customer_organizations = [
+            row for row in self.data["organizations"] if row["roles"] == "customer"
+        ]
+        customer_ids = {row["canonical_id"] for row in customer_organizations}
+        customer_contacts = [
+            row
+            for row in self.data["contacts"]
+            if row["company_canonical_id"] in customer_ids
+            and row.get("source_system") == "twenty"
+        ]
+        self.data["organizations"] = customer_organizations + supplier_organizations
+        self.data["contacts"] = customer_contacts + supplier_contacts
+        return super().search_contacts(*args, **kwargs)
 
     def search_suppliers(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self._refresh_erpnext()
@@ -1184,7 +1849,42 @@ class LiveReadRepository(CanonicalRepository):
 
     def supplier_overview(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self._refresh_erpnext()
-        return super().supplier_overview(*args, **kwargs)
+        result = super().supplier_overview(*args, **kwargs)
+        supplier_id = result["supplier"]["erpnext_id"]
+        for contact in result["contacts"]:
+            contact_id = contact["erpnext_id"]
+            if not contact_id or not supplier_id:
+                raise SourceUnavailableError(
+                    "ERPNext contact identity could not be verified"
+                )
+            try:
+                live = self.erpnext.record("Contact", contact_id)
+            except Exception as error:
+                raise SourceUnavailableError(
+                    "ERPNext contact detail is unavailable"
+                ) from error
+            linked = any(
+                isinstance(link, dict)
+                and link.get("link_doctype") == "Supplier"
+                and link.get("link_name") == supplier_id
+                for link in live.get("links") or []
+            )
+            if (
+                str(live.get("custom_operion_source_key") or "")
+                != contact["canonical_id"]
+                or not linked
+            ):
+                raise SourceUnavailableError(
+                    "ERPNext contact relation could not be verified"
+                )
+            contact["email"] = _primary_child_value(
+                live.get("email_ids"), "email_id", "is_primary"
+            ) or str(live.get("email_id") or "")
+            contact["phone"] = _primary_child_value(
+                live.get("phone_nos"), "phone", "is_primary_phone"
+            ) or str(live.get("phone") or "")
+            contact["fields"] = self._communication_fields(contact, "erpnext")
+        return result
 
     def list_sales_orders(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self._refresh_erpnext()

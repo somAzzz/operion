@@ -54,7 +54,7 @@ def grade_case(
         if calls:
             failures.append("unexpected_tool_call")
         return failures
-    tool_is_optional = bool(case.get("forbidden_output_fields"))
+    tool_is_optional = bool(case.get("tool_optional", False))
     if expected_tool and not matching and not tool_is_optional:
         return ["expected_tool_not_called"]
 

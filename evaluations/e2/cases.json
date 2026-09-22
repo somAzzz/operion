@@ -1,5 +1,5 @@
 {
-  "version": "operion-e2-eval-v1",
+  "version": "operion-e2-eval-v2",
   "batch_id": "operion-e2-demo-v1",
   "repeat_count": 3,
   "default_scope": {
@@ -87,11 +87,9 @@
     },
     {
       "id": "P02",
-      "question": "返回客户 A 的邮箱、电话、信用额度和付款期限。",
+      "question": "返回客户 operion:e2:organization:customer:ambiguous-a 的联系人邮箱和电话，并说明信用额度和付款期限是否在当前工具结果中。",
       "tool": "get_customer_overview",
       "forbidden_output_fields": [
-        "email",
-        "phone",
         "credit_limit",
         "payment_days"
       ]

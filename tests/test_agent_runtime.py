@@ -20,12 +20,57 @@ CUSTOMER_ID = "wwi:organization:customer:11"
 
 
 class AgentRuntimeTests(unittest.TestCase):
-    def test_instructions_keep_wwi_source_and_delivery_semantics_distinct(self):
-        self.assertIn("Picked quantity is not delivered quantity", AGENT_INSTRUCTIONS)
-        self.assertIn("ERPNext native status", AGENT_INSTRUCTIONS)
-        self.assertIn("server-authorized scope", AGENT_INSTRUCTIONS)
-        self.assertIn("authoritative ambiguous_customer", AGENT_INSTRUCTIONS)
-        self.assertIn("unverified scenario", AGENT_INSTRUCTIONS)
+    def test_instructions_only_route_tools_and_describe_conversation(self):
+        for tool in (
+            "get_customer_order_distribution",
+            "get_organization_orders",
+            "check_operation_capability",
+        ):
+            self.assertIn(tool, AGENT_INSTRUCTIONS)
+        for rule in (
+            "Picked quantity is not delivered quantity",
+            "bare numeric customer source ID",
+            "supplier/purchase-order context",
+            "pending means pending",
+            "confirmed open orders",
+            "customer_order_counts",
+        ):
+            self.assertNotIn(rule, AGENT_INSTRUCTIONS)
+        self.assertIn("latest user message", AGENT_INSTRUCTIONS)
+
+    def test_new_typed_tools_return_server_decisions(self):
+        calls = [
+            ("get_customer_order_distribution", {}),
+            ("get_organization_orders", {"query": "11", "relationship": "customer"}),
+            ("check_operation_capability", {"operation": "business_write"}),
+        ]
+        count = 0
+
+        def model_function(messages, info: AgentInfo):
+            nonlocal count
+            if count < len(calls):
+                name, arguments = calls[count]
+                count += 1
+                return ModelResponse(
+                    parts=[ToolCallPart(name, arguments, f"call-{count}")]
+                )
+            return ModelResponse(parts=[TextPart("Done.")])
+
+        settings = AgentSettings(max_model_requests=5, max_tool_calls=4)
+        agent = create_operion_agent(settings, model=FunctionModel(model_function))
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID})),
+            user_id="user-1",
+        )
+        agent.run_sync("summarize and check capabilities", deps=deps)
+        distribution, orders, capability = [
+            call["result"]["data"] for call in deps.tool_calls
+        ]
+        self.assertEqual("complete", distribution["completeness"]["status"])
+        self.assertEqual("resolved", orders["resolution"]["status"])
+        self.assertEqual("authorized", orders["resolution"]["authorization"])
+        self.assertEqual("denied", capability["authorization"]["status"])
 
     def test_customer_portfolio_summary_is_available_as_a_server_tool(self):
         call_count = 0
@@ -86,12 +131,14 @@ class AgentRuntimeTests(unittest.TestCase):
             max_tool_calls=1,
             max_input_tokens=100,
             max_output_tokens=50,
+            max_run_output_tokens=75,
         )
         limits = settings.usage_limits()
         self.assertEqual(2, limits.request_limit)
         self.assertEqual(1, limits.tool_calls_limit)
         self.assertEqual(100, limits.input_tokens_limit)
-        self.assertEqual(50, limits.output_tokens_limit)
+        self.assertEqual(75, limits.output_tokens_limit)
+        self.assertEqual(50, settings.model_settings()["max_tokens"])
 
     def test_settings_read_explicit_interview_token_budgets(self):
         with patch.dict(
@@ -99,14 +146,23 @@ class AgentRuntimeTests(unittest.TestCase):
             {
                 "OPERION_MAX_INPUT_TOKENS": "40000",
                 "OPERION_MAX_OUTPUT_TOKENS": "3000",
+                "OPERION_MAX_RUN_OUTPUT_TOKENS": "9000",
             },
         ):
             settings = AgentSettings.from_environment()
 
         self.assertEqual(40_000, settings.max_input_tokens)
         self.assertEqual(3_000, settings.max_output_tokens)
+        self.assertEqual(9_000, settings.max_run_output_tokens)
         self.assertEqual(40_000, settings.usage_limits().input_tokens_limit)
+        self.assertEqual(9_000, settings.usage_limits().output_tokens_limit)
         self.assertEqual(3_000, settings.model_settings()["max_tokens"])
+
+    def test_settings_reject_inconsistent_request_and_output_budgets(self):
+        with self.assertRaisesRegex(ValueError, "must exceed max_tool_calls"):
+            AgentSettings(max_model_requests=3, max_tool_calls=3)
+        with self.assertRaisesRegex(ValueError, "at least max_output_tokens"):
+            AgentSettings(max_output_tokens=100, max_run_output_tokens=99)
 
     def test_followup_tool_only_creates_a_server_side_proposal(self):
         class FakeProposalService:

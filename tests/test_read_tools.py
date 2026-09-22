@@ -27,7 +27,7 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         self.assertEqual(self.customer_id, result["customer"]["canonical_id"])
         self.assertTrue(result["contacts"])
         self.assertTrue(result["orders"])
-        self.assertEqual("customer-overview-v1", result["contract_version"])
+        self.assertEqual("customer-overview-v2", result["contract_version"])
 
     def test_customer_portfolio_summary_only_counts_authorized_customers(self):
         result = self.repository.customer_portfolio_summary(self.scope)
@@ -35,7 +35,19 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         self.assertEqual("authorized_customers", result["scope"])
         self.assertEqual(1, result["customer_count"])
         self.assertEqual(1, result["customers_with_orders"])
+        self.assertEqual(1, result["sales_order_count"])
         self.assertGreater(result["open_order_count"], 0)
+
+    def test_source_open_does_not_override_native_order_status(self):
+        order = self.repository.data["sales_orders"][0]
+        order["source_status"] = "open"
+        order["docstatus"] = "1"
+        order["business_status"] = "Completed"
+        summary = self.repository.customer_portfolio_summary(self.scope)
+        self.assertEqual(0, summary["open_order_count"])
+        self.assertEqual(0, summary["open_order_basis"]["native_confirmed_open_count"])
+        listed = self.repository.list_sales_orders(self.scope, status="confirmed_open")
+        self.assertEqual(0, listed["completeness"]["total_count"])
 
     def test_customer_portfolio_summary_reports_unknown_scoped_ids(self):
         scope = AccessScope(
@@ -101,11 +113,39 @@ class ReadToolAcceptanceTests(unittest.TestCase):
                 AccessScope("AI Demo GmbH", frozenset()),
             )
 
-    def test_p02_sensitive_fields_are_not_in_overview(self):
+    def test_p02_contact_details_are_scoped_and_other_sensitive_fields_are_hidden(self):
         result = self.repository.customer_overview(self.customer_id, self.scope)
+        self.assertTrue(result["contacts"][0]["email"])
+        self.assertTrue(result["contacts"][0]["phone"])
         serialized = json.dumps(result).casefold()
-        for field in ("credit_limit", "payment_days", "email", "phone"):
+        for field in ("credit_limit", "payment_days", "notes"):
             self.assertNotIn(field, serialized)
+
+    def test_live_overview_does_not_reuse_snapshot_contact_details(self):
+        repository = CanonicalRepository(CANONICAL, data_mode="live")
+        result = repository.customer_overview(self.customer_id, self.scope)
+        self.assertNotIn("email", result["contacts"][0])
+        self.assertNotIn("phone", result["contacts"][0])
+
+    def test_unclassified_contact_details_are_not_exposed(self):
+        contact = next(
+            row
+            for row in self.repository.data["contacts"]
+            if row["company_canonical_id"] == self.customer_id
+        )
+        original_class = contact["data_class"]
+        try:
+            contact["data_class"] = "private"
+            result = self.repository.customer_overview(self.customer_id, self.scope)
+            selected = next(
+                row
+                for row in result["contacts"]
+                if row["canonical_id"] == contact["canonical_id"]
+            )
+            self.assertNotIn("email", selected)
+            self.assertNotIn("phone", selected)
+        finally:
+            contact["data_class"] = original_class
 
     def test_p03_repository_has_no_business_write_methods(self):
         for method in ("create", "update", "delete", "submit", "cancel", "amend"):
@@ -137,21 +177,21 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         self.assertEqual("insufficient_information", result["result"])
         self.assertIn("source_freshness", result["missing"])
 
-    def test_source_timestamps_are_independent_and_skew_is_visible(self):
+    def test_snapshot_does_not_claim_independent_live_source_timestamps(self):
         now = datetime.now(UTC)
-        twenty = now.isoformat()
-        erpnext = (now - timedelta(minutes=10)).isoformat()
         repository = CanonicalRepository(
             CANONICAL,
-            twenty_observed_at=twenty,
-            erpnext_observed_at=erpnext,
+            twenty_observed_at=now.isoformat(),
+            erpnext_observed_at=(now - timedelta(minutes=10)).isoformat(),
             max_snapshot_skew_seconds=300,
         )
         result = repository.customer_overview(self.customer_id, self.scope)
-        self.assertEqual(twenty, result["source_observed_at"]["twenty"])
-        self.assertEqual(erpnext, result["source_observed_at"]["erpnext"])
-        self.assertEqual(600, result["snapshot_skew_seconds"])
-        self.assertIn("source_snapshot_skew", result["warnings"])
+        self.assertEqual("canonical_snapshot", result["data_origin"])
+        self.assertEqual("snapshot_load", result["observed_at_kind"])
+        self.assertEqual(["wwi"], result["source_system"])
+        self.assertEqual({}, result["source_observed_at"])
+        self.assertIsNone(result["snapshot_skew_seconds"])
+        self.assertNotIn("source_snapshot_skew", result["warnings"])
 
     def test_fulfillment_freshness_only_depends_on_erpnext(self):
         repository = CanonicalRepository(

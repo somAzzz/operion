@@ -1,6 +1,8 @@
 # E1 read-tool contract v1
 
-This contract exposes ten business operations and no generic data, URL, GraphQL,
+Historical E1 acceptance contract. Current customer and supplier contact fields are defined in [Contact overviews v2](contact-overviews-v2.md).
+
+The current MCP interface exposes fifteen read-only business operations and no generic data, URL, GraphQL,
 SQL, mutation, or permission-management primitive. Caller identity is translated
 to `AccessScope` by the server. A caller cannot provide a role, token, company,
 customer scope, source path, or target address as a tool argument.
@@ -12,14 +14,63 @@ customer scope, source path, or target address as a tool argument.
 - Input: optional constant `customer="*"`, meaning every customer already
   authorized by the server. Company and customer scope cannot be supplied by the
   caller.
-- Output: authorized customer count, customers with orders, open order count,
+- Output: authorized customer count, customers with orders, total sales order
+  count, open order count,
   explicit `authorized_customers` scope, observation times, sources, missing
   scoped IDs, and warnings.
 - Authorization: only canonical customer IDs present in the server-defined scope
   contribute to any aggregate. It is not an unrestricted company-wide count.
 - Side effects: none. The result is derived from the immutable canonical batch.
 
+## Deterministic resolution and complete-scope aggregation
+
+### `get_customer_order_distribution(customer="*")`
+
+- Computes every authorized customer's sales-order count server-side, including
+  customers with zero orders. Its `completeness.status` is `complete` when all
+  scoped customer IDs are present in the current dataset, otherwise `partial`.
+- `full_source_history=undetermined` prevents a zero count in the sample from
+  becoming a claim about all historical WWI orders.
+
+### `get_organization_orders(query, relationship, limit)`
+
+- Resolves customer, supplier, or either relationship inside the caller's scope.
+  It returns `resolved`, `ambiguous`, `not_found`, or `denied` without asking
+  the model to choose a relationship or same-name entity.
+- A resolved result includes unique canonical order IDs, total order count, and
+  `complete` or `partial` coverage of the current authorized dataset.
+
+## Contact discovery
+
+### `search_contacts(query, limit, cursor)`
+
+- Searches contact names linked to server-authorized customers or suppliers.
+- Returns contact and organization IDs, relationship role, record source,
+  identity-map status, and pagination. It does not return email or phone; use
+  the corresponding scoped overview to verify those fields.
+- A pending identity-map row remains `pending` even when its target ID is blank;
+  an empty ID alone does not establish an unmatched identity.
+- Snapshot results identify the WWI canonical batch as their source, omit
+  live query-system labels, and report `cross_system_verification.status` as
+  `not_verified` with reason `snapshot_only`. Target IDs describe mappings,
+  not reads.
+
+### `get_contact_by_name(name)`
+
+- Resolves exactly one person linked to an authorized organization. Ambiguous
+  names return candidates; absent or out-of-scope people are not exposed.
+- Returns each email/phone field with a deterministic state (`present`,
+  `explicit_empty`, or `not_exposed`), value, record source, data origin, and
+  target identity-map status. No model-side organization matching is required.
+
 ## Customer and sales-order queries
+
+### `get_customer_order_context(customer_query, order_id, max_orders)`
+
+- Reads an authorized sales order, follows its customer ID, and verifies that
+  the resulting customer's name contains the requested customer query.
+- Returns the verified customer overview and order detail together. A name
+  mismatch fails closed; the model cannot select a same-name customer itself.
 
 ### `search_customers(query, limit, cursor)`
 
@@ -30,7 +81,7 @@ customer scope, source path, or target address as a tool argument.
 
 ### `get_customer_overview`
 
-- Purpose: resolve one customer by canonical ID or exact case-insensitive name and
+- Purpose: resolve one customer by canonical ID, numeric WWI source ID, or exact case-insensitive name and
   return its allowlisted contacts and recent sales orders.
 - Input: `customer` (required string), `max_orders` (integer, 1–50; default 20).
 - Authorization: the resolved canonical customer ID must be in the server-defined
@@ -38,8 +89,9 @@ customer scope, source path, or target address as a tool argument.
 - Output: contract version, operating company, customer IDs, allowlisted contact
   names/IDs, recent order IDs/dates/status, `observed_at`, sources, missing fields,
   warnings, and pagination indication.
-- Excluded fields: email, phone, credit limit, payment terms, notes, arbitrary
-  custom fields, and all source fields not explicitly constructed by the service.
+- Contact email and phone are returned only with explicit field state and source
+  evidence. Credit limit, payment terms, notes, arbitrary custom fields, and all
+  fields not explicitly constructed by the service remain excluded.
 - Errors: `not_found`, `ambiguous_customer`, `scope_denied`,
   `invalid_business_input`, or `source_unavailable`. Empty data is not substituted
   for a source error.
@@ -53,8 +105,16 @@ customer scope, source path, or target address as a tool argument.
   query language, or target method.
 - Detail returns only the authorized order and allowlisted item, quantity, UOM,
   tax-exclusive unit rate/amount, currency, and delivery date fields.
+- Detail accepts a canonical ID, mapped ERPNext target ID, or numeric WWI
+  `source_id` for an authorized sales order. Ambiguous IDs require a canonical ID.
 - `draft` means native `docstatus=0`; `confirmed_open` means `docstatus=1` plus
   `business_status=to_deliver`. Source status remains separately visible.
+  Structured `status_interpretation` leaves confirmation `unknown` when native
+  docstatus is absent. Sales lines return `delivery_state=unknown` when the
+  delivered quantity is absent; picked quantity never substitutes for delivery.
+- Lists return filtered `total_count` and `completeness.status` separately from
+  page count; overview results similarly distinguish zero orders from a partial
+  recent-order page.
 
 ## Supplier and purchase-order queries
 
@@ -62,7 +122,8 @@ customer scope, source path, or target address as a tool argument.
 `get_purchase_order` mirror the customer contracts but use an independent
 server-defined supplier scope. `confirmed_open` for purchases means native
 `docstatus=1` plus `business_status=to_receive`; customer scope cannot grant
-supplier access.
+supplier access. Purchase-order detail accepts the same ID forms for an
+authorized purchase order, including numeric WWI `source_id`.
 
 ## `check_fulfillment`
 

@@ -16,14 +16,19 @@ class MCPServerAcceptanceTests(unittest.TestCase):
         scope = AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID}))
         self.server = create_server(repository, scope)
 
-    def test_exposes_exactly_ten_read_only_business_tools(self):
+    def test_exposes_exactly_fifteen_read_only_business_tools(self):
         tools = asyncio.run(self.server.list_tools())
         self.assertEqual(
             {
                 "get_customer_portfolio_summary",
+                "get_customer_order_distribution",
+                "get_organization_orders",
                 "get_customer_overview",
                 "check_fulfillment",
                 "search_customers",
+                "search_contacts",
+                "get_contact_by_name",
+                "get_customer_order_context",
                 "list_sales_orders",
                 "get_sales_order",
                 "search_suppliers",

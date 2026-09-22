@@ -2,15 +2,31 @@ import asyncio
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from ag_ui.core import ToolCallArgsEvent, ToolCallEndEvent, ToolCallStartEvent
+from ag_ui.core import (
+    RunErrorEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
+)
 from fastapi.testclient import TestClient
 from pydantic_ai import CancellationToken
-from pydantic_ai.messages import ModelMessage, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    ToolCallPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from operion_etl.agent_app import AgentApplication, _ordered_tool_events, create_app
+from operion_etl.agent_app import (
+    AgentApplication,
+    _ordered_tool_events,
+    _public_run_error,
+    create_app,
+)
 from operion_etl.agent_runtime import AgentSettings, create_operion_agent
 from operion_etl.read_tools import AccessScope, CanonicalRepository
 from operion_etl.session_store import ConversationStore
@@ -28,6 +44,19 @@ def last_user_text(messages: list[ModelMessage]) -> str:
 
 
 class AgentAppTests(unittest.TestCase):
+    def test_internal_usage_limit_error_is_safe_for_the_browser(self):
+        public = _public_run_error(
+            RunErrorEvent(
+                message=(
+                    "Exceeded input_tokens_limit; internal docs and adapter details"
+                )
+            )
+        )
+        self.assertEqual("LIMIT_EXCEEDED", public.code)
+        self.assertIn("work budget", public.message)
+        self.assertNotIn("input_tokens_limit", public.message)
+        self.assertNotIn("internal", public.message)
+
     def test_late_tool_arguments_are_emitted_before_tool_end(self):
         start = ToolCallStartEvent(tool_call_id="call-1", tool_call_name="lookup")
         opening = ToolCallArgsEvent(tool_call_id="call-1", delta="{")
@@ -88,24 +117,88 @@ class AgentAppTests(unittest.TestCase):
         response = self.client.post("/api/agent", json={})
         self.assertEqual(401, response.status_code)
 
-    def test_health_lists_the_ten_server_side_read_tools(self):
+    def test_actual_request_bytes_are_checked_when_content_length_is_untrusted(self):
+        self.application.settings = replace(
+            self.application.settings, max_request_bytes=100
+        )
+        response = self.client.post(
+            "/api/agent",
+            json={"padding": "x" * 200},
+            headers={**self.headers, "Content-Length": "1"},
+        )
+        self.assertEqual(413, response.status_code)
+
+    def test_tool_limit_error_is_sanitized_in_the_sse_stream(self):
+        def excessive_tools(messages, info: AgentInfo):
+            return ModelResponse(
+                parts=[
+                    ToolCallPart("get_customer_portfolio_summary", {}, f"call-{index}")
+                    for index in range(4)
+                ]
+            )
+
+        settings = AgentSettings(max_model_requests=5, max_tool_calls=3)
+        agent = create_operion_agent(settings, model=FunctionModel(excessive_tools))
+        application = AgentApplication(
+            settings=settings,
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope("AI Demo GmbH", frozenset({CUSTOMER_ID})),
+            store=ConversationStore(Path(self.temp.name) / "limit.sqlite3"),
+            token="limit-token",
+            user_id="user-1",
+            agent=agent,
+        )
+        client = TestClient(create_app(application))
+        response = client.post(
+            "/api/agent",
+            json={
+                "threadId": "limit-thread",
+                "runId": "limit-run",
+                "state": {},
+                "context": [],
+                "forwardedProps": {},
+                "tools": [],
+                "messages": [
+                    {"id": "user-limit", "role": "user", "content": "complex"}
+                ],
+            },
+            headers={
+                "Authorization": "Bearer limit-token",
+                "Accept": "text/event-stream",
+            },
+        )
+        self.assertEqual(200, response.status_code)
+        self.assertIn("No business data was changed", response.text)
+        self.assertNotIn("tool_calls_limit", response.text)
+        self.assertNotIn("pydantic.dev", response.text)
+
+    def test_health_lists_the_sixteen_server_side_read_tools(self):
         response = self.client.get("/health")
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             [
                 "check_fulfillment",
+                "check_operation_capability",
+                "get_contact_by_name",
+                "get_customer_order_context",
+                "get_customer_order_distribution",
                 "get_customer_overview",
                 "get_customer_portfolio_summary",
+                "get_organization_orders",
                 "get_purchase_order",
                 "get_sales_order",
                 "get_supplier_overview",
                 "list_purchase_orders",
                 "list_sales_orders",
+                "search_contacts",
                 "search_customers",
                 "search_suppliers",
             ],
             response.json()["tools"],
         )
+        self.assertEqual(3, response.json()["limits"]["tool_calls"])
+        self.assertEqual(1_500, response.json()["limits"]["output_tokens_per_request"])
+        self.assertEqual(6_000, response.json()["limits"]["output_tokens_per_run"])
 
     def test_client_history_is_discarded_and_server_history_is_restored(self):
         payload = {
