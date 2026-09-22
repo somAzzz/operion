@@ -443,7 +443,7 @@
 .action-page__header svg,
 .back-link svg { width: 0.9rem; height: 0.9rem; }
 
-.thread-frame { min-height: 0; flex: 1; }
+.thread-frame { min-height: 0; flex: 1; overflow: hidden; }
 .thread-frame .aui-thread-root { background: transparent; }
 
 .result-card {
@@ -675,8 +675,30 @@
 .event-timeline strong { font-size: 0.78rem; }
 .event-timeline p, .event-timeline code { display: block; margin-top: 0.2rem; color: var(--muted-foreground); font-size: 0.68rem; }
 
+@media (min-width: 761px) {
+  .ops-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .evidence-rail,
+  .chat-workspace {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
 @media (max-width: 760px) {
-  .ops-shell { grid-template-columns: 1fr; padding: 0; gap: 0; }
+  .ops-shell {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    padding: 0;
+  }
   .evidence-rail { min-height: auto; border-radius: 0; padding: 0.8rem 1rem; flex-flow: row wrap; align-items: center; gap: 0.8rem; }
   .brand-mark { margin: 0; width: 2rem; height: 2rem; }
   .evidence-rail h1 { font-size: 1rem; }
@@ -685,7 +707,7 @@
   .conversation-history { width: 100%; flex: 1 0 100%; margin-top: 0; }
   .conversation-history__list { display: flex; overflow-x: auto; overflow-y: hidden; }
   .conversation-history__item { flex: 0 0 min(15rem, 72vw); }
-  .chat-workspace { min-height: calc(100dvh - 3.6rem); border: 0; border-radius: 0; }
+  .chat-workspace { min-height: 0; flex: 1; border: 0; border-radius: 0; }
   .workspace-header { min-height: 4.4rem; padding: 0.8rem 1rem; }
   .workspace-header h2 { font-size: 0.9rem; }
   .workspace-header button { padding-inline: 0.7rem; }

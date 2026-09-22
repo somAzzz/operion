@@ -159,6 +159,10 @@ export function MyRuntimeProvider({
   const runtime = useAgUiRuntime({
     agent,
     showThinking: false,
+    // Keep the composer usable while a response is in flight. A follow-up is
+    // queued and released only after the active run reaches a terminal state,
+    // so transient stream delays cannot make the interface feel locked.
+    unstable_enableMessageQueue: true,
     adapters: {
       history: historyAdapter,
       threadList: threadListAdapter,

@@ -31,11 +31,30 @@ import Link from "next/link";
 type ToolRenderProps = {
   args: Record<string, unknown>;
   result?: { ok?: boolean; data?: Record<string, unknown>; error?: Record<string, unknown> };
+  status: { type: string; reason?: string; error?: unknown };
 };
+
+function unresolvedToolState(
+  result: ToolRenderProps["result"],
+  status: ToolRenderProps["status"],
+  loadingLabel: string,
+) {
+  if (result) return null;
+  if (status.type !== "running" && status.type !== "requires-action") {
+    return (
+      <div className="result-card is-error" role="alert">
+        <strong>Tool call did not complete</strong>
+        <span>No evidence was returned. Retry the question or reduce its scope.</span>
+      </div>
+    );
+  }
+  return <div className="result-card is-loading" role="status">{loadingLabel}</div>;
+}
 
 function EvidenceRows({ data }: { data: Record<string, unknown> }) {
   const sources = Array.isArray(data.sources) ? data.sources.map(String) : [];
   const observedAt = typeof data.observed_at === "string" ? data.observed_at : "—";
+  const verification = (data.cross_system_verification ?? {}) as Record<string, unknown>;
   return (
     <div className="evidence-meta">
       <span><DatabaseIcon aria-hidden="true" />{String(data.dataset_version ?? "dataset not reported")}</span>
@@ -43,6 +62,7 @@ function EvidenceRows({ data }: { data: Record<string, unknown> }) {
       <span>Business date {String(data.business_date ?? "—")}</span>
       <span><Clock3Icon aria-hidden="true" />Observed {observedAt}</span>
       <span>{String(data.query_scope ?? `${sources.length} sources`)}</span>
+      {verification.status === "not_verified" ? <span>Live cross-system identity not verified</span> : null}
     </div>
   );
 }
@@ -60,7 +80,7 @@ function SelectStableId({ id, noun }: { id: string; noun: string }) {
   );
 }
 
-function ResultError({ result, label }: { result?: ToolRenderProps["result"]; label: string }) {
+function ResultError({ result, label, noun }: { result?: ToolRenderProps["result"]; label: string; noun: "customer" | "supplier" }) {
   if (result?.ok !== false) return null;
   const candidates = Array.isArray(result.error?.candidates) ? result.error.candidates : [];
   return (
@@ -70,18 +90,19 @@ function ResultError({ result, label }: { result?: ToolRenderProps["result"]; la
       {candidates.map((candidate, index) => {
         const row = candidate as Record<string, unknown>;
         const id = String(row.canonical_id ?? "");
-        return <div key={id || index}><span>{String(row.name ?? id)}</span>{id ? <SelectStableId id={id} noun="customer" /> : null}</div>;
+        return <div key={id || index}><span>{String(row.name ?? id)}</span>{id ? <SelectStableId id={id} noun={noun} /> : null}</div>;
       })}
     </div>
   );
 }
 
-function SearchResultsCard({ result, kind }: ToolRenderProps & { kind: "customer" | "supplier" }) {
+function SearchResultsCard({ result, status, kind }: ToolRenderProps & { kind: "customer" | "supplier" }) {
   const data = result?.data ?? {};
   const rows = Array.isArray(data.results) ? data.results : [];
   const pagination = (data.pagination ?? {}) as Record<string, unknown>;
-  if (!result) return <div className="result-card is-loading">Searching {kind}s…</div>;
-  if (!result.ok) return <ResultError result={result} label={`${kind} search unavailable`} />;
+  const unresolved = unresolvedToolState(result, status, `Searching ${kind}s…`);
+  if (!result) return unresolved;
+  if (!result.ok) return <ResultError result={result} label={`${kind} search unavailable`} noun={kind} />;
   return (
     <section className="result-card" aria-label={`${kind} search results`}>
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />{kind} results</div>
@@ -99,12 +120,75 @@ function SearchResultsCard({ result, kind }: ToolRenderProps & { kind: "customer
   );
 }
 
-function OrderListCard({ result, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
+function ContactSearchCard({ result, status }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  const rows = Array.isArray(data.results) ? data.results : [];
+  const pagination = (data.pagination ?? {}) as Record<string, unknown>;
+  const unresolved = unresolvedToolState(result, status, "Searching contacts…");
+  if (!result) return unresolved;
+  if (!result.ok) return <div className="result-card is-error"><strong>Contact search unavailable</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
+  return (
+    <section className="result-card" aria-label="Contact search results">
+      <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Contact results</div>
+      <h3>{rows.length ? `${rows.length} on this page` : "No matching contacts in the current dataset and authorized scope"}</h3>
+      <div className="result-list">
+        {rows.map((item) => {
+          const row = item as Record<string, unknown>;
+          const id = String(row.canonical_id ?? "");
+          const organizationId = String(row.organization_id ?? "");
+          const noun = row.organization_role === "supplier" ? "supplier" : "customer";
+          return <div className="result-list__item" key={id}><div><strong>{String(row.full_name ?? id)}</strong><span>{String(row.organization_name ?? "")} · {String(row.organization_role ?? "")}</span><code>{id}</code></div><SelectStableId id={organizationId} noun={noun} /></div>;
+        })}
+      </div>
+      {pagination.has_more ? <small>More results are available; use the returned cursor to continue.</small> : null}
+      <EvidenceRows data={data} />
+    </section>
+  );
+}
+
+function ContactDetailCard({ result, status }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  const contact = (data.contact ?? {}) as Record<string, unknown>;
+  const fields = (data.fields ?? {}) as Record<string, Record<string, unknown>>;
+  const unresolved = unresolvedToolState(result, status, "Verifying contact details…");
+  if (!result) return unresolved;
+  if (!result.ok) return <div className="result-card is-error"><strong>Contact lookup needs attention</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
+  return <section className="result-card" aria-label="Verified contact details">
+    <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Contact detail</div>
+    <h3>{String(contact.full_name ?? "Contact")}</h3>
+    <p>{String(contact.organization_name ?? "")} · {String(contact.organization_role ?? "")}</p>
+    <code>{String(contact.canonical_id ?? "")}</code>
+    <p>Email: {fields.email?.state === "present" ? String(fields.email.value) : String(fields.email?.state ?? "unavailable")}</p>
+    <p>Phone: {fields.phone?.state === "present" ? String(fields.phone.value) : String(fields.phone?.state ?? "unavailable")}</p>
+    <p>Source: {String(fields.email?.source_system ?? data.record_source_system ?? "unknown")} · mapping {String(contact.mapping_status ?? "unknown")}</p>
+    <EvidenceRows data={data} />
+  </section>;
+}
+
+function CustomerOrderContextCard({ result, status }: ToolRenderProps) {
+  const data = result?.data ?? {};
+  const resolution = (data.resolution ?? {}) as Record<string, unknown>;
+  const overview = (data.customer_overview ?? {}) as Record<string, unknown>;
+  const orders = Array.isArray(overview.orders) ? overview.orders : [];
+  const unresolved = unresolvedToolState(result, status, "Verifying customer and sales order…");
+  if (!result) return unresolved;
+  if (!result.ok) return <div className="result-card is-error"><strong>Customer and order do not match</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
+  return <section className="result-card" aria-label="Verified customer and sales order">
+    <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />Order-backed customer resolution</div>
+    <h3>{String(resolution.customer_name ?? "Customer")}</h3>
+    <p>Order {String(resolution.order_id ?? "")} identifies customer {String(resolution.customer_id ?? "")}</p>
+    <p>{orders.length} sales orders returned in the authorized scope</p>
+    <EvidenceRows data={data} />
+  </section>;
+}
+
+function OrderListCard({ result, status, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
   const data = result?.data ?? {};
   const orders = Array.isArray(data.orders) ? data.orders : [];
   const pagination = (data.pagination ?? {}) as Record<string, unknown>;
-  if (!result) return <div className="result-card is-loading">Loading {kind}s…</div>;
-  if (!result.ok) return <ResultError result={result} label={`${kind} list unavailable`} />;
+  const unresolved = unresolvedToolState(result, status, `Loading ${kind}s…`);
+  if (!result) return unresolved;
+  if (!result.ok) return <ResultError result={result} label={`${kind} list unavailable`} noun={kind === "sales order" ? "customer" : "supplier"} />;
   return (
     <section className="result-card" aria-label={`${kind} list`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind}s</div>
@@ -123,12 +207,13 @@ function OrderListCard({ result, kind }: ToolRenderProps & { kind: "sales order"
   );
 }
 
-function OrderDetailCard({ result, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
+function OrderDetailCard({ result, status, kind }: ToolRenderProps & { kind: "sales order" | "purchase order" }) {
   const data = result?.data ?? {};
   const order = (data.order ?? {}) as Record<string, unknown>;
   const lines = Array.isArray(data.lines) ? data.lines : [];
-  if (!result) return <div className="result-card is-loading">Loading {kind} details…</div>;
-  if (!result.ok) return <ResultError result={result} label={`${kind} unavailable`} />;
+  const unresolved = unresolvedToolState(result, status, `Loading ${kind} details…`);
+  if (!result) return unresolved;
+  if (!result.ok) return <ResultError result={result} label={`${kind} unavailable`} noun={kind === "sales order" ? "customer" : "supplier"} />;
   return (
     <section className="result-card" aria-label={`${kind} detail`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind} detail</div>
@@ -147,23 +232,23 @@ function OrderDetailCard({ result, kind }: ToolRenderProps & { kind: "sales orde
   );
 }
 
-function SupplierOverviewCard({ args, result }: ToolRenderProps) {
+function SupplierOverviewCard({ args, result, status }: ToolRenderProps) {
   const data = result?.data ?? {};
   const supplier = (data.supplier ?? {}) as Record<string, unknown>;
   const orders = Array.isArray(data.orders) ? data.orders : [];
-  if (!result) return <div className="result-card is-loading">Loading supplier evidence…</div>;
-  if (!result.ok) return <ResultError result={result} label="Supplier lookup needs attention" />;
+  const unresolved = unresolvedToolState(result, status, "Loading supplier evidence…");
+  if (!result) return unresolved;
+  if (!result.ok) return <ResultError result={result} label="Supplier lookup needs attention" noun="supplier" />;
   return <section className="result-card"><div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Supplier overview</div><h3>{String(supplier.name ?? args.supplier_id ?? "Supplier")}</h3><div className="metric-row"><strong>{orders.length}</strong><span>purchase orders in the current dataset and authorized scope</span></div><code>{String(supplier.canonical_id ?? "")}</code><EvidenceRows data={data} /></section>;
 }
 
-function CustomerOverviewCard({ args, result }: ToolRenderProps) {
+function CustomerOverviewCard({ args, result, status }: ToolRenderProps) {
   const data = result?.data ?? {};
   const customer = (data.customer ?? {}) as Record<string, unknown>;
   const orders = Array.isArray(data.orders) ? data.orders : [];
-  if (!result) return <div className="result-card is-loading">Loading customer evidence…</div>;
-  if (!result.ok) {
-    return <div className="result-card is-error"><strong>Customer lookup needs attention</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
-  }
+  const unresolved = unresolvedToolState(result, status, "Loading customer evidence…");
+  if (!result) return unresolved;
+  if (!result.ok) return <ResultError result={result} label="Customer lookup needs attention" noun="customer" />;
   return (
     <section className="result-card" aria-label="Customer overview evidence">
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Customer overview</div>
@@ -175,9 +260,10 @@ function CustomerOverviewCard({ args, result }: ToolRenderProps) {
   );
 }
 
-function CustomerPortfolioCard({ result }: ToolRenderProps) {
+function CustomerPortfolioCard({ result, status }: ToolRenderProps) {
   const data = result?.data ?? {};
-  if (!result) return <div className="result-card is-loading">Counting authorized customers…</div>;
+  const unresolved = unresolvedToolState(result, status, "Counting authorized customers…");
+  if (!result) return unresolved;
   if (!result.ok) {
     return <div className="result-card is-error"><strong>Customer count unavailable</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
   }
@@ -186,17 +272,18 @@ function CustomerPortfolioCard({ result }: ToolRenderProps) {
       <div className="result-card__eyebrow"><UserRoundSearchIcon aria-hidden="true" />Authorized customer scope</div>
       <h3>{String(data.operating_company ?? "Operating company")}</h3>
       <div className="metric-row"><strong>{String(data.customer_count ?? 0)}</strong><span>customers in the current dataset and authorized scope</span></div>
-      <p>{String(data.customers_with_orders ?? 0)} with orders · {String(data.open_order_count ?? 0)} open orders</p>
+      <p>{String(data.customers_with_orders ?? 0)} with orders · {String(data.sales_order_count ?? 0)} sales orders · {String(data.open_order_count ?? 0)} open orders</p>
       <EvidenceRows data={data} />
     </section>
   );
 }
 
-function FulfillmentResultCard({ args, result }: ToolRenderProps) {
+function FulfillmentResultCard({ args, result, status: toolStatus }: ToolRenderProps) {
   const data = result?.data ?? {};
   const status = String(data.result ?? "pending");
   const missing = Array.isArray(data.missing) ? data.missing.map(String) : [];
-  if (!result) return <div className="result-card is-loading">Checking fulfillment evidence…</div>;
+  const unresolved = unresolvedToolState(result, toolStatus, "Checking fulfillment evidence…");
+  if (!result) return unresolved;
   if (!result.ok) {
     return <div className="result-card is-error"><strong>Fulfillment check unavailable</strong><span>{String(result.error?.message ?? "No result")}</span></div>;
   }
@@ -211,11 +298,12 @@ function FulfillmentResultCard({ args, result }: ToolRenderProps) {
   );
 }
 
-function FollowupProposalCard({ result }: ToolRenderProps) {
+function FollowupProposalCard({ result, status }: ToolRenderProps) {
   const data = result?.data ?? {};
   const target = (data.target ?? {}) as Record<string, unknown>;
   const parameters = (data.parameters ?? {}) as Record<string, unknown>;
-  if (!result) return <div className="result-card is-loading">Saving a reviewable proposal…</div>;
+  const unresolved = unresolvedToolState(result, status, "Saving a reviewable proposal…");
+  if (!result) return unresolved;
   if (!result.ok) {
     return <div className="result-card is-error"><strong>Proposal was not created</strong><span>{String(result.error?.message ?? "Rejected by the action service")}</span></div>;
   }
@@ -266,10 +354,25 @@ const toolkit = defineToolkit({
     parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
     render: (props) => <SearchResultsCard {...(props as ToolRenderProps)} kind="customer" />,
   },
+  search_contacts: {
+    description: "Find authorized contacts by person name and organization link.",
+    parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } }, required: ["query"] },
+    render: (props) => <ContactSearchCard {...(props as ToolRenderProps)} />,
+  },
+  get_contact_by_name: {
+    description: "Read one authorized contact with per-field provenance.",
+    parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+    render: (props) => <ContactDetailCard {...(props as ToolRenderProps)} />,
+  },
   list_sales_orders: {
     description: "List authorized sales orders by customer, date, and status.",
     parameters: { type: "object", properties: { customer_id: { type: ["string", "null"] }, date_from: { type: ["string", "null"] }, date_to: { type: ["string", "null"] }, status: { type: ["string", "null"] }, limit: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: ["string", "null"] } } },
     render: (props) => <OrderListCard {...(props as ToolRenderProps)} kind="sales order" />,
+  },
+  get_customer_order_context: {
+    description: "Verify a sales order belongs to a named customer and return both records.",
+    parameters: { type: "object", properties: { customer_query: { type: "string" }, order_id: { type: "string" }, max_orders: { type: "integer", minimum: 1, maximum: 50 } }, required: ["customer_query", "order_id"] },
+    render: (props) => <CustomerOrderContextCard {...(props as ToolRenderProps)} />,
   },
   get_sales_order: {
     description: "Read one authorized sales order and its item lines.",

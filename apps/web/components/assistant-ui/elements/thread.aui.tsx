@@ -36,6 +36,7 @@ import {
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
+  QueueItemPrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
   type FileMessagePartComponent,
@@ -61,6 +62,7 @@ import {
   SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  XIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -201,7 +203,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-auto scroll-smooth"
       >
         <div
           className={cn(
@@ -420,11 +422,13 @@ const ThreadSuggestionItem: FC = () => {
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+      <ComposerRunStatus />
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
           className="border-foreground/10 focus-within:border-foreground/25 data-[dragging=true]:border-ring flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
+          <ComposerQueue />
           <ComposerAttachments />
           <ComposerPrimitive.Input
             placeholder="Send a message..."
@@ -441,7 +445,86 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   );
 };
 
+const lastRunError = (s: AssistantState): string | undefined => {
+  const message = [...s.thread.messages]
+    .reverse()
+    .find((candidate) => candidate.role === "assistant");
+  const status = message?.status;
+  if (status?.type !== "incomplete" || status.reason !== "error") {
+    return undefined;
+  }
+  if (typeof status.error === "string") return status.error;
+  if (
+    typeof status.error === "object" &&
+    status.error !== null &&
+    "message" in status.error &&
+    typeof status.error.message === "string"
+  ) {
+    return status.error.message;
+  }
+  return "The request could not be completed.";
+};
+
+const ComposerRunStatus: FC = () => {
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const error = useAuiState(lastRunError);
+
+  if (isRunning) {
+    return (
+      <div
+        data-slot="aui_composer-running"
+        role="status"
+        className="text-muted-foreground mb-2 px-1 text-xs"
+      >
+        Response in progress. You can type and queue the next message, or stop
+        this response.
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        data-slot="aui_composer-error"
+        role="alert"
+        className="border-destructive/40 bg-destructive/10 text-destructive mb-2 rounded-lg border px-3 py-2 text-sm dark:text-red-200"
+      >
+        <p className="font-medium">The last request stopped with an error.</p>
+        <p className="mt-0.5 break-words">{error}</p>
+        <p className="mt-1 text-xs opacity-80">
+          Your conversation is preserved. You can send a shorter question
+          below.
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const ComposerQueue: FC = () => (
+  <ComposerPrimitive.Queue>
+    {() => (
+      <div className="bg-background/80 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm">
+        <span className="text-muted-foreground shrink-0 text-xs">Queued</span>
+        <QueueItemPrimitive.Text className="min-w-0 flex-1 truncate" />
+        <QueueItemPrimitive.Remove asChild>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground rounded p-1"
+            aria-label="Remove queued message"
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        </QueueItemPrimitive.Remove>
+      </div>
+    )}
+  </ComposerPrimitive.Queue>
+);
+
 const ComposerAction: FC = () => {
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAddAttachment />
@@ -478,16 +561,20 @@ const ComposerAction: FC = () => {
             </ComposerPrimitive.StopDictation>
           </AuiIf>
         </AuiIf>
-        <AuiIf condition={(s) => !s.thread.isRunning}>
+        <AuiIf
+          condition={(s) =>
+            !s.thread.isRunning || s.thread.capabilities.queue
+          }
+        >
           <ComposerPrimitive.Send asChild>
             <TooltipIconButton
-              tooltip="Send message"
+              tooltip={isRunning ? "Queue message" : "Send message"}
               side="bottom"
               type="button"
               variant="default"
               size="icon"
               className="aui-composer-send size-7 rounded-full"
-              aria-label="Send message"
+              aria-label={isRunning ? "Queue message" : "Send message"}
             >
               <ArrowUpIcon className="aui-composer-send-icon size-4" />
             </TooltipIconButton>
