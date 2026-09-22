@@ -31,6 +31,35 @@ status_services() {
   [ -f "$runtime/effective-config.txt" ] && cat "$runtime/effective-config.txt"
 }
 
+ensure_port_free() {
+  port=$1
+  label=$2
+  if ss -H -ltn "sport = :$port" | grep -q .; then
+    echo "$label port $port is already in use; stop the stale service first" >&2
+    ss -H -ltnp "sport = :$port" >&2 || true
+    return 1
+  fi
+}
+
+wait_for_http() {
+  pid=$1
+  label=$2
+  url=$3
+  shift 3
+  status=000
+  for _ in $(seq 1 30); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "$label exited during startup" >&2
+      return 1
+    fi
+    status=$(curl -s -o /dev/null -w '%{http_code}' "$@" "$url" || true)
+    [ "$status" = 200 ] && return 0
+    sleep 1
+  done
+  echo "$label did not become ready: $url returned HTTP $status" >&2
+  return 1
+}
+
 start_profile() {
   profile=$1
   config="$repo/config/interview/$profile.env"
@@ -60,6 +89,12 @@ start_profile() {
   export OPERION_SESSION_DB="$runtime/$profile-sessions.sqlite3"
   set +a
 
+  ensure_port_free "$OPERION_AGENT_PORT" "Agent"
+  ensure_port_free "$OPERION_WEB_PORT" "Web"
+  if [ "$profile" = e2-controlled-action ]; then
+    ensure_port_free 8001 "Action API"
+  fi
+
   if [ "$profile" = e2-controlled-action ]; then
     "$repo/scripts/setup-interview-action-db.sh"
   fi
@@ -84,13 +119,20 @@ start_profile() {
   web_pid=$!
   printf '%s web\n' "$web_pid" >>"$runtime/pids"
 
-  for url in http://127.0.0.1:8000/health "http://127.0.0.1:$OPERION_WEB_PORT"; do
-    for _ in $(seq 1 30); do
-      curl -fsS "$url" >/dev/null 2>&1 && break
-      sleep 1
-    done
-    curl -fsS "$url" >/dev/null
-  done
+  # Check the processes we just launched, not merely whichever stale service
+  # happens to answer on the configured ports. The authenticated endpoints also
+  # prove that Agent and Next.js inherited the same ephemeral credential.
+  if ! wait_for_http "$agent_pid" "Agent" \
+    "http://127.0.0.1:$OPERION_AGENT_PORT/api/conversations" \
+    -H "Authorization: Bearer $OPERION_AGENT_TOKEN"; then
+    stop_services
+    return 1
+  fi
+  if ! wait_for_http "$web_pid" "Web" \
+    "http://127.0.0.1:$OPERION_WEB_PORT/api/conversations"; then
+    stop_services
+    return 1
+  fi
   if [ "$profile" = e2-controlled-action ]; then
     curl -fsS http://127.0.0.1:8001/health \
       -H "Authorization: Bearer $OPERION_ACTION_TOKEN" >/dev/null
@@ -104,7 +146,7 @@ observed_at=$OPERION_OBSERVED_AT
 customer_scope=$OPERION_CUSTOMER_IDS
 supplier_scope=$OPERION_SUPPLIER_IDS
 model=$OPERION_MODEL_NAME@$OPERION_MODEL_BASE_URL
-model_budget=input:$OPERION_MAX_INPUT_TOKENS,output:$OPERION_MAX_OUTPUT_TOKENS
+model_budget=requests:$OPERION_MAX_MODEL_REQUESTS,tools:$OPERION_MAX_TOOL_CALLS,input_run:$OPERION_MAX_INPUT_TOKENS,output_request:$OPERION_MAX_OUTPUT_TOKENS,output_run:$OPERION_MAX_RUN_OUTPUT_TOKENS,timeout_seconds:$OPERION_RUN_TIMEOUT_SECONDS
 web=http://127.0.0.1:$OPERION_WEB_PORT
 EOF
   chmod 600 "$runtime/effective-config.txt"
