@@ -9,6 +9,12 @@ lightweight ETL pipeline provide governed facts and tools.
 The goal is to keep material business judgment with people while agents help with
 search, consolidation, recommendations, and narrowly controlled execution.
 
+## Demo video
+
+[![Watch the Operion demo on YouTube](https://i.ytimg.com/vi/TxG6GOX3BZE/hqdefault.jpg)](https://www.youtube.com/watch?v=TxG6GOX3BZE)
+
+[Watch **Operion** on YouTube](https://www.youtube.com/watch?v=TxG6GOX3BZE).
+
 ![Operion system architecture](docs/imgs/pipeline.png)
 
 ## Current status

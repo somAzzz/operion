@@ -6,6 +6,12 @@
 
 目标：让人掌握必要的业务判断，让 agent 协助查询、整理、建议和受控执行。
 
+## 演示视频
+
+[![在 YouTube 观看 Operion 演示](https://i.ytimg.com/vi/TxG6GOX3BZE/hqdefault.jpg)](https://www.youtube.com/watch?v=TxG6GOX3BZE)
+
+[在 YouTube 观看 **Operion**](https://www.youtube.com/watch?v=TxG6GOX3BZE)。
+
 ![Operion 系统架构](docs/imgs/pipeline.png)
 
 当前阶段：**E0–E4 已通过，下一步进入 E5 企业试运行**。
