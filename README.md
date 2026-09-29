@@ -48,6 +48,13 @@ repeats the applicable gates against Twenty 2.39.0. Writes remain limited to one
 internal Task in the isolated public/simulated demo workspace; E5 enterprise
 identity, real-data controls, monitoring, and release operations are not yet
 approved.
+The next operational gate is an E5 single-operator, read-only pilot. The immediate
+implementation priority is live cross-system correctness and final-answer
+evaluation, followed by the first complete WWI import batch and measured
+expansion. See the [prioritized improvement plan](docs/enterprise/improvement-plan.md)
+(Chinese) for findings, dependencies, and acceptance criteria. Historical E0–E4
+passes remain limited to their tested scope. The pilot does not authorize
+real-data writes, which still require an independent approver and a separate gate.
 
 The interview demonstration adds scoped customer/supplier search and order
 listing/detail. It includes both a separate simulated dataset and a pinned,

@@ -14,12 +14,12 @@
 
 ![Operion 系统架构](docs/imgs/pipeline.png)
 
-当前阶段：**E0–E4 已通过，下一步进入 E5 企业试运行**。
+当前阶段：**E0–E4 历史实验范围已通过；下一步先完善实时跨系统正确性与 Agent 评测，运营目标为 E5 单人只读试运行**。实施顺序见 [总体改进计划](docs/enterprise/improvement-plan.md)。真实写入仍须独立审批人与专项验收。
 WWI 下载与最小 ETL 已实现；Twenty 已回读 10 个 WWI Company 和 25 个 People，
 其中 18 个 People 具备预期 Company 关联；ERPNext 已回读并核对 8 个客户、2 个供应商、
 9 个商品、25 个联系人、8 张销售订单和 2 张采购订单。双系统 identity map 已完成
-ERPNext 72/72、Twenty 35/35 回读；客户概览和履约检查已作为仅有的两个只读 MCP 工具
-通过 15 个固定 E1 案例。E2 已实现本地 SGLang/Pydantic AI Agent、AG-UI
+ERPNext 72/72、Twenty 35/35 回读；客户概览和履约检查曾通过 15 个固定 E1 案例，
+当前已扩展为客户、供应商、联系人、订单、汇总和履约等 15 个只读 MCP 工具。E2 已实现本地 SGLang/Pydantic AI Agent、AG-UI
 接入、服务端可信会话与 assistant-ui 证据界面；15 个案例各重复 3 次全部通过，
 并在 E2 阶段保持业务写入关闭。E3 已实现 PostgreSQL 动作账本、可信独立审批、租约、
 未知结果对账、W01–W15 故障验证，以及 `/approvals`、`/actions` 状态页面；
@@ -36,6 +36,7 @@ Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实�
 
 ## 文档入口
 
+- [总体改进计划与优先级](docs/enterprise/improvement-plan.md)：当前发现、P0–P3 执行队列、跨系统验收、WWI 扩充策略及完成标准。
 - [企业运行方案与阶段子方案](docs/enterprise/README.md)：从环境基线、assistant-ui 前端、只读 Agent、受控写入到企业试运行的完整设计、阶段子目标与验收标准。
 - [人工功能与 agent 设计对照](docs/human-functions-agent-map.md)：需要了解哪些业务功能，哪些判断交给人。
 - [Agent / MCP 边界](docs/agent-boundaries.md)：工具范围、权限、审批和验证要求。
@@ -46,7 +47,7 @@ Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实�
 - [E4 跟进任务合同](contracts/e4-followup-task-v1.md)：唯一真实写入的固定范围与保证。
 - [E4 跟进任务运行手册](ops/e4-followup-task.md)：凭据隔离、审批、恢复与补偿。
 - [E5 企业边界合同](contracts/e5-enterprise-boundary-v1.md)：OIDC、服务端范围、撤销、发布锁和证据门禁。
-- [E5 企业试运行手册](ops/e5-enterprise-pilot.md)：告警、备份恢复、容量、回退和 10 日观察。
+- [E5 单人试运行手册](ops/e5-enterprise-pilot.md)：告警、备份恢复、容量、回退和 10 日观察。
 - [数据目录说明](data/README.md)：原始数据、加工数据和导出结果的保存规则。
 - [面试模拟数据运行手册](ops/interview-demo-data.md)：虚构 DEMO 数据的生成、校验和受控装载。
 - [WWI 面试数据运行手册](ops/interview-wwi-data.md)：公开样例的固定抽取、血缘、校验和受控装载。
