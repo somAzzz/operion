@@ -1,11 +1,11 @@
 {
-  "schema_version": "operion-e5-evidence-v1",
-  "environment": "replace-with-enterprise-pilot-environment",
-  "window_start": "2026-09-21T08:00:00+02:00",
-  "window_end": "2026-10-02T18:00:00+02:00",
+  "schema_version": "operion-e5-evidence-v2",
+  "environment": "replace-with-actual-local-or-hosted-environment",
+  "window_start": "replace-with-actual-observation-start",
+  "window_end": "replace-with-actual-observation-end",
   "identity": {
     "provider": "replace-with-identity-provider",
-    "pilot_users": 3,
+    "pilot_users": 1,
     "one_company": true,
     "revocation_minutes": 0,
     "cross_scope_denied": true
@@ -26,8 +26,7 @@
     "postgres_failure_received": false,
     "worker_stall_received": false,
     "disk_low_received": false,
-    "primary_contact": "replace-with-primary-contact",
-    "backup_contact": "replace-with-backup-contact"
+    "operator_contact": "replace-with-operator-contact"
   },
   "recovery": {
     "encrypted": false,
@@ -42,7 +41,6 @@
     "concurrent_sessions": 5,
     "read_p95_seconds": 5,
     "agent_p95_seconds": 60,
-    "task_p95_seconds": 30,
     "overload_controlled": false
   },
   "release": {
@@ -60,11 +58,11 @@
     "access_audit_passed": false
   },
   "pilot": {
+    "data_mode": "public_sample",
     "business_days": 10,
     "legitimate_requests": 0,
     "unresolved_blockers": 0,
-    "business_signoff": "replace-with-business-owner",
-    "operations_signoff": "replace-with-operations-owner",
-    "governance_signoff": "replace-with-governance-owner"
+    "writes_disabled": true,
+    "operator_signoff": "replace-with-operator-name-and-date"
   }
 }

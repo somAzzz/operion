@@ -6,7 +6,7 @@ import json
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -19,7 +19,7 @@ class StrictEvidence(BaseModel):
 
 class IdentityEvidence(StrictEvidence):
     provider: str = Field(min_length=1)
-    pilot_users: int = Field(ge=3, le=5)
+    pilot_users: int = Field(ge=1, le=1)
     one_company: bool
     revocation_minutes: float = Field(ge=0, le=5)
     cross_scope_denied: bool
@@ -43,8 +43,7 @@ class AlertEvidence(StrictEvidence):
     postgres_failure_received: bool
     worker_stall_received: bool
     disk_low_received: bool
-    primary_contact: str = Field(min_length=1)
-    backup_contact: str = Field(min_length=1)
+    operator_contact: str = Field(min_length=1)
 
 
 class RecoveryEvidence(StrictEvidence):
@@ -61,7 +60,6 @@ class CapacityEvidence(StrictEvidence):
     concurrent_sessions: int = Field(ge=5)
     read_p95_seconds: float = Field(gt=0, le=5)
     agent_p95_seconds: float = Field(gt=0, le=60)
-    task_p95_seconds: float = Field(gt=0, le=30)
     overload_controlled: bool
 
 
@@ -82,12 +80,12 @@ class LifecycleEvidence(StrictEvidence):
 
 
 class PilotEvidence(StrictEvidence):
+    data_mode: Literal["public_sample", "private"]
     business_days: int = Field(ge=10)
     legitimate_requests: int = Field(ge=0)
     unresolved_blockers: int = Field(ge=0, le=0)
-    business_signoff: str = Field(min_length=1)
-    operations_signoff: str = Field(min_length=1)
-    governance_signoff: str = Field(min_length=1)
+    writes_disabled: bool
+    operator_signoff: str = Field(min_length=1)
 
 
 class E5Evidence(StrictEvidence):
@@ -120,12 +118,10 @@ CASE_FIELDS = {
 
 def evidence_blockers(evidence: E5Evidence) -> list[str]:
     blockers: list[str] = []
-    if evidence.schema_version != "operion-e5-evidence-v1":
+    if evidence.schema_version != "operion-e5-evidence-v2":
         blockers.append("unsupported evidence schema")
-    if evidence.environment.lower() in {"local", "test", "demo", "simulated"}:
-        blockers.append(
-            "enterprise pilot evidence cannot come from a simulated environment"
-        )
+    if evidence.environment.lower() in {"simulated", "mock"}:
+        blockers.append("single-operator pilot observation cannot be simulated")
     if "replace-with" in json.dumps(evidence.model_dump(mode="json")):
         blockers.append("evidence still contains template placeholders")
     if evidence.window_end <= evidence.window_start:
@@ -143,6 +139,8 @@ def evidence_blockers(evidence: E5Evidence) -> list[str]:
         blockers.append("observation window does not contain the claimed business days")
     if evidence.pilot.legitimate_requests == 0:
         blockers.append("pilot has no legitimate traffic")
+    if not evidence.pilot.writes_disabled:
+        blockers.append("single-operator pilot must keep writes disabled")
     document = evidence.model_dump()
     for section_name in CASE_FIELDS.values():
         for field_name, value in document[section_name].items():
@@ -167,6 +165,8 @@ def evaluate(evidence_path: Path, output: Path) -> dict[str, Any]:
 
     if not result.wasSuccessful():
         blockers.append("deterministic regression suite failed")
+    if result.skipped:
+        blockers.append("deterministic regression suite has skipped tests")
     cases = {
         case_id: {
             "status": "passed" if evidence is not None and not blockers else "blocked",
@@ -176,7 +176,7 @@ def evaluate(evidence_path: Path, output: Path) -> dict[str, Any]:
     }
     passed = evidence is not None and result.wasSuccessful() and not blockers
     report = {
-        "report_version": "operion-e5-evaluation-v1",
+        "report_version": "operion-e5-evaluation-v2",
         "status": "passed" if passed else "blocked",
         "completed_at": datetime.now(UTC).isoformat(),
         "tests": {
@@ -189,8 +189,11 @@ def evaluate(evidence_path: Path, output: Path) -> dict[str, Any]:
         "cases": cases,
         "pilot": (
             {
+                "pilot_users": evidence.identity.pilot_users,
+                "data_mode": evidence.pilot.data_mode,
                 "business_days": evidence.pilot.business_days,
                 "legitimate_requests": evidence.pilot.legitimate_requests,
+                "writes_disabled": evidence.pilot.writes_disabled,
                 "window_start": evidence.window_start.isoformat(),
                 "window_end": evidence.window_end.isoformat(),
             }

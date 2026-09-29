@@ -9,13 +9,13 @@ from operion_etl.e5_evaluation import E5Evidence, evidence_blockers
 def valid_evidence() -> dict:
     start = datetime(2026, 9, 1, 8, tzinfo=UTC)
     return {
-        "schema_version": "operion-e5-evidence-v1",
-        "environment": "enterprise-pilot-eu",
+        "schema_version": "operion-e5-evidence-v2",
+        "environment": "local",
         "window_start": start,
         "window_end": start + timedelta(days=13),
         "identity": {
             "provider": "company-oidc",
-            "pilot_users": 3,
+            "pilot_users": 1,
             "one_company": True,
             "revocation_minutes": 1,
             "cross_scope_denied": True,
@@ -36,8 +36,7 @@ def valid_evidence() -> dict:
             "postgres_failure_received": True,
             "worker_stall_received": True,
             "disk_low_received": True,
-            "primary_contact": "primary@example.test",
-            "backup_contact": "backup@example.test",
+            "operator_contact": "operator@example.test",
         },
         "recovery": {
             "encrypted": True,
@@ -52,7 +51,6 @@ def valid_evidence() -> dict:
             "concurrent_sessions": 5,
             "read_p95_seconds": 1,
             "agent_p95_seconds": 10,
-            "task_p95_seconds": 2,
             "overload_controlled": True,
         },
         "release": {
@@ -70,18 +68,18 @@ def valid_evidence() -> dict:
             "access_audit_passed": True,
         },
         "pilot": {
+            "data_mode": "public_sample",
             "business_days": 10,
             "legitimate_requests": 100,
             "unresolved_blockers": 0,
-            "business_signoff": "business-owner",
-            "operations_signoff": "operations-owner",
-            "governance_signoff": "governance-owner",
+            "writes_disabled": True,
+            "operator_signoff": "operator-2026-09-29",
         },
     }
 
 
 class E5EvaluationTests(unittest.TestCase):
-    def test_complete_real_pilot_evidence_passes_gate(self):
+    def test_complete_single_operator_pilot_evidence_passes_gate(self):
         evidence = E5Evidence.model_validate(valid_evidence())
         self.assertEqual([], evidence_blockers(evidence))
 
@@ -92,6 +90,24 @@ class E5EvaluationTests(unittest.TestCase):
         blockers = evidence_blockers(E5Evidence.model_validate(document))
         self.assertTrue(any("simulated" in item for item in blockers))
         self.assertTrue(any("disk_low_received" in item for item in blockers))
+
+    def test_multiple_users_and_legacy_signoffs_are_rejected(self):
+        from pydantic import ValidationError
+
+        document = valid_evidence()
+        document["identity"]["pilot_users"] = 3
+        with self.assertRaises(ValidationError):
+            E5Evidence.model_validate(document)
+        document["identity"]["pilot_users"] = 1
+        document["pilot"]["business_signoff"] = "invented-reviewer"
+        with self.assertRaises(ValidationError):
+            E5Evidence.model_validate(document)
+
+    def test_single_operator_pilot_with_writes_enabled_is_blocked(self):
+        document = valid_evidence()
+        document["pilot"]["writes_disabled"] = False
+        blockers = evidence_blockers(E5Evidence.model_validate(document))
+        self.assertIn("single-operator pilot must keep writes disabled", blockers)
 
 
 if __name__ == "__main__":
