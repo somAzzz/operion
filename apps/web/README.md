@@ -16,3 +16,13 @@ minimum.
 
 The active conversation ID is kept in local storage. Message history and tool
 authorization remain authoritative in the Python service.
+
+For enterprise authentication, use the [local HTTPS/OIDC gateway](../../ops/auth-gateway.md).
+The gateway issues an opaque browser session and forwards tokens only on the
+private network. Next.js checks the current backend identity policy and route
+roles on every request; browser token cookies and static service-token fallback
+are disabled in enterprise mode. Set `OPERION_PUBLIC_ORIGIN` to the exact HTTPS
+origin. The deployment must keep Next.js and the Python APIs private.
+
+`/session` provides a same-origin POST sign-out. Container builds use the
+standalone output; local `npm run dev` and `npm run start` remain supported.

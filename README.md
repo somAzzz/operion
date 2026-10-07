@@ -56,6 +56,12 @@ expansion. See the [prioritized improvement plan](docs/enterprise/improvement-pl
 passes remain limited to their tested scope. The pilot does not authorize
 real-data writes, which still require an independent approver and a separate gate.
 
+A local HTTPS login gateway is now available with Keycloak, OAuth2 Proxy,
+server-side Redis sessions, and private Web/Agent services. See the
+[gateway runbook](ops/auth-gateway.md) and [acceptance scope](docs/enterprise/gateway-acceptance.md).
+It uses synthetic users and public snapshots; browser and real-user pilot
+acceptance remain separate.
+
 The interview demonstration adds scoped customer/supplier search and order
 listing/detail. It includes both a separate simulated dataset and a pinned,
 deterministically extracted WWI public-sample dataset at the same demonstration

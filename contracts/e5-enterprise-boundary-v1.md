@@ -12,7 +12,9 @@
 
 ## 浏览器与服务边界
 
-可信 ingress 完成登录，将 access token 放在 `x-forwarded-access-token` 或配置的 HttpOnly cookie 中。Next.js 只在服务端读取并转发；不得创建 `NEXT_PUBLIC_*` token。企业部署必须让 Next.js 只能经 ingress 到达，否则客户端可伪造转发头。
+可信 ingress 完成 OIDC 登录，把 access/refresh token 保存在服务端会话存储中；浏览器仅持有 Secure、HttpOnly、SameSite 的不透明 session cookie。网关清除客户端提供的认证/转发头，从有效会话注入 `x-forwarded-access-token`。Next.js 只在服务端读取并转发，不接受浏览器 token cookie 或企业模式静态服务 token，不得创建 `NEXT_PUBLIC_*` token。企业部署必须让 Next.js 只能经 ingress 到达。
+
+Next.js 在每次请求通过 `/api/identity` 核验当前身份策略，再按功能检查角色；后端 API 保留独立验签及授权。非只读浏览器请求验证同源 Origin；注销仅允许同源 POST，删除服务端会话并注销 IdP session。已开始请求仍受原有超时控制，不声明注销能自动撤回进行中的工作。本地实现、启动与验收边界见 [认证网关运行手册](../ops/auth-gateway.md)。
 
 Agent 和 Action API 都独立验证 token。Agent 按身份动态构造 customer scope 和工具集。Action API 的批准仍要求服务端 CSRF secret；通用提案和通用修订不能绕过 E4 的服务端事实解析。
 

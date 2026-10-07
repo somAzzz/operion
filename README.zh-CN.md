@@ -37,6 +37,7 @@ Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实�
 ## 文档入口
 
 - [总体改进计划与优先级](docs/enterprise/improvement-plan.md)：当前发现、P0–P3 执行队列、跨系统验收、WWI 扩充策略及完成标准。
+- [本地认证网关](ops/auth-gateway.md)：Keycloak 登录、HTTPS、服务端会话、撤销与隔离部署；[本地验收范围](docs/enterprise/gateway-acceptance.md)。
 - [企业运行方案与阶段子方案](docs/enterprise/README.md)：从环境基线、assistant-ui 前端、只读 Agent、受控写入到企业试运行的完整设计、阶段子目标与验收标准。
 - [人工功能与 agent 设计对照](docs/human-functions-agent-map.md)：需要了解哪些业务功能，哪些判断交给人。
 - [Agent / MCP 边界](docs/agent-boundaries.md)：工具范围、权限、审批和验证要求。

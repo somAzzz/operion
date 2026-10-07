@@ -51,7 +51,7 @@
 
 仅有本地确定性测试和构建不能完成以下实际运行条件，因此当前不得标为 PASSED，也不得由此开放私有数据或写入：
 
-- 尚未配置实际使用的 OIDC issuer/audience/JWKS、一名实际试运行用户和受限网络入口；
+- I07 已实现本地 Keycloak issuer/audience/JWKS 与 loopback HTTPS 受限入口，使用合成账号完成协议验证；实际试运行用户、浏览器点击和实际环境网络隔离仍待验收，见 [网关摘要](../gateway-acceptance.md)；
 - 尚未由操作者实际接收 PostgreSQL、Worker stall、磁盘不足告警并验证无人值守时的自动暂停/降级；
 - 尚未配置加密异机 backup/WAL 归档并完成隔离恢复，无法证明 RPO ≤ 15 分钟、RTO ≤ 4 小时；
 - 尚未完成自动化五并发容量与发布回退演练；
