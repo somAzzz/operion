@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from ag_ui.core import (
     RunErrorEvent,
@@ -28,6 +29,7 @@ from operion_etl.agent_app import (
     create_app,
 )
 from operion_etl.agent_runtime import AgentSettings, create_operion_agent
+from operion_etl.enterprise_auth import EnterpriseIdentity
 from operion_etl.read_tools import AccessScope, CanonicalRepository
 from operion_etl.session_store import ConversationStore
 
@@ -44,6 +46,47 @@ def last_user_text(messages: list[ModelMessage]) -> str:
 
 
 class AgentAppTests(unittest.TestCase):
+    def test_identity_lookup_does_not_grant_agent_access_to_an_approver(self):
+        identity = EnterpriseIdentity(
+            user_id="approver",
+            tenant_id="tenant",
+            operating_company="AI Demo GmbH",
+            customer_ids=frozenset({CUSTOMER_ID}),
+            roles=frozenset({"action_approver"}),
+            subject="approver-subject",
+            session_id="session",
+        )
+        self.application.authenticator = SimpleNamespace(
+            authenticate=lambda _: identity
+        )
+        response = self.client.get("/api/identity", headers=self.headers)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(["action_approver"], response.json()["roles"])
+        self.assertEqual(
+            403, self.client.get("/api/conversations", headers=self.headers).status_code
+        )
+
+    def test_identity_endpoint_authenticates_and_never_returns_credentials(self):
+        response = self.client.get("/api/identity", headers=self.headers)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("user-1", response.json()["user_id"])
+        self.assertEqual(
+            {"user_id", "tenant_id", "operating_company", "roles"},
+            set(response.json()),
+        )
+        self.assertEqual("no-store", response.headers["cache-control"])
+        self.assertEqual(401, self.client.get("/api/identity").status_code)
+        self.assertEqual(
+            401,
+            self.client.get(
+                "/api/identity",
+                headers={
+                    "X-Forwarded-Access-Token": "test-token",
+                    "X-Forwarded-User": "user-1",
+                },
+            ).status_code,
+        )
+
     def test_internal_usage_limit_error_is_safe_for_the_browser(self):
         public = _public_run_error(
             RunErrorEvent(

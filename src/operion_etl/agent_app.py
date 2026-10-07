@@ -164,12 +164,15 @@ class AgentApplication:
         self.conversation_locks: dict[str, asyncio.Lock] = {}
         self.active_runs: dict[str, tuple[str, CancellationToken]] = {}
 
-    def authenticate(self, request: Request) -> EnterpriseIdentity:
+    def authenticate(
+        self, request: Request, *, require_agent_read: bool = True
+    ) -> EnterpriseIdentity:
         authorization = request.headers.get("authorization", "")
         if self.authenticator is not None:
             try:
                 identity = self.authenticator.authenticate(authorization)
-                identity.require("agent_read")
+                if require_agent_read:
+                    identity.require("agent_read")
                 return identity
             except AuthenticationError as error:
                 raise HTTPException(status_code=401, detail=str(error)) from error
@@ -516,6 +519,19 @@ def create_app(application: AgentApplication) -> FastAPI:
                 "output_tokens_per_run": application.settings.max_run_output_tokens,
             },
         }
+
+    @app.get("/api/identity")
+    async def identity_endpoint(request: Request) -> JSONResponse:
+        identity = application.authenticate(request, require_agent_read=False)
+        return JSONResponse(
+            {
+                "user_id": identity.user_id,
+                "tenant_id": identity.tenant_id,
+                "operating_company": identity.operating_company,
+                "roles": sorted(identity.roles),
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/api/agent")
     async def agent_endpoint(request: Request) -> Response:

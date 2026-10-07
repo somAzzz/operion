@@ -123,6 +123,49 @@ class EnterpriseAuthTests(unittest.TestCase):
         with self.assertRaises(AuthenticationError):
             self.authenticator.authenticate(f"Bearer {self._token(sid=None, jti=None)}")
 
+    def test_invalid_token_matrix_is_rejected(self):
+        for claims in (
+            {"iss": "https://attacker.example"},
+            {"aud": "another-service"},
+            {"exp": datetime.now(UTC) - timedelta(seconds=1)},
+            {"iat": datetime.now(UTC) + timedelta(minutes=5)},
+        ):
+            with (
+                self.subTest(claims=list(claims)),
+                self.assertRaises(AuthenticationError),
+            ):
+                self.authenticator.authenticate(f"Bearer {self._token(**claims)}")
+        token = self._token()
+        header, payload, signature = token.split(".")
+        tampered = ("A" if signature[0] != "A" else "B") + signature[1:]
+        with self.assertRaises(AuthenticationError):
+            self.authenticator.authenticate(f"Bearer {header}.{payload}.{tampered}")
+        for authorization in ("", "Basic bad", "Bearer not-a-jwt"):
+            with (
+                self.subTest(authorization=authorization),
+                self.assertRaises(AuthenticationError),
+            ):
+                self.authenticator.authenticate(authorization)
+
+    def test_valid_after_and_roles_take_effect_without_restart(self):
+        token = self._token()
+        identity = self.authenticator.authenticate(f"Bearer {token}")
+        with self.assertRaises(AuthorizationError):
+            identity.require("action_approver")
+        self.policy["users"]["subject-1"]["valid_after"] = (
+            int(datetime.now(UTC).timestamp()) + 1
+        )
+        self._write_policy()
+        with self.assertRaises(AuthenticationError):
+            self.authenticator.authenticate(f"Bearer {token}")
+
+    def test_unassigned_identity_and_unavailable_policy_fail_closed(self):
+        with self.assertRaises(AuthorizationError):
+            self.authenticator.authenticate(f"Bearer {self._token(sub='unassigned')}")
+        self.policy_path.unlink()
+        with self.assertRaises(AuthorizationError):
+            self.authenticator.authenticate(f"Bearer {self._token()}")
+
 
 if __name__ == "__main__":
     unittest.main()
