@@ -1,0 +1,162 @@
+name: operion-gateway
+
+# Isolated, loopback-only acceptance stack. No business write credentials.
+services:
+  ingress:
+    image: nginx:1.30.5-alpine
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy_params_operion:/etc/nginx/proxy_params_operion:ro
+      - ../../var/gateway/tls/server.crt:/run/tls/server.crt:ro
+      - ../../var/gateway/tls/server.key:/run/tls/server.key:ro
+    networks:
+      edge:
+      identity:
+        aliases: [operion.localhost]
+      frontend:
+    depends_on: [keycloak, oauth2-proxy]
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: [start-dev, --import-realm]
+    environment:
+      KC_HOSTNAME: https://operion.localhost:8443/identity
+      KC_HTTP_RELATIVE_PATH: /identity
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ../../var/gateway/realm.json:/opt/keycloak/data/import/operion-realm.json:ro
+      - keycloak-data:/opt/keycloak/data/h2
+    networks: [identity]
+    depends_on:
+      keycloak-data-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  keycloak-data-init:
+    image: nginx:1.30.5-alpine
+    entrypoint: [/bin/sh, -c]
+    command: ["chown 1000:0 /keycloak-data"]
+    volumes:
+      - keycloak-data:/keycloak-data
+    network_mode: none
+
+  redis:
+    image: redis:7.4.11-alpine
+    command: [redis-server, --save, "", --appendonly, "no"]
+    networks: [sessions]
+    restart: unless-stopped
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    user: "0:0" # local secret bind mounts are root-readable only
+    command: [--config=/etc/oauth2-proxy.cfg]
+    environment:
+      SSL_CERT_FILE: /run/tls/ca.crt
+    volumes:
+      - ./oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
+      - ../../var/gateway/client-secret:/run/secrets/client-secret:ro
+      - ../../var/gateway/cookie-secret:/run/secrets/cookie-secret:ro
+      - ../../var/gateway/tls/ca.crt:/run/tls/ca.crt:ro
+    networks: [identity, sessions, frontend]
+    depends_on:
+      keycloak:
+        condition: service_started
+      redis:
+        condition: service_started
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    environment:
+      OPERION_ENVIRONMENT: enterprise
+      OPERION_PUBLIC_ORIGIN: https://operion.localhost:8443
+      OPERION_AGENT_URL: http://agent:8000/api/agent
+      # No action service/worker in this read-only acceptance stack.
+      OPERION_ACTION_URL: http://127.0.0.1:1/api
+      NEXT_TELEMETRY_DISABLED: "1"
+    networks: [frontend, backend]
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode===401?0:1)).on('error',()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: ../..
+      dockerfile: deploy/gateway/agent.Dockerfile
+    environment:
+      OPERION_ENVIRONMENT: enterprise
+      OPERION_OIDC_ISSUER: https://operion.localhost:8443/identity/realms/operion
+      OPERION_OIDC_AUDIENCE: operion
+      OPERION_OIDC_JWKS_URL: https://operion.localhost:8443/identity/realms/operion/protocol/openid-connect/certs
+      SSL_CERT_FILE: /run/tls/ca.crt
+      OPERION_IDENTITY_POLICY: /run/policy/identity-policy.json
+      OPERION_WRITES_ENABLED: "0"
+      OPERION_ENABLE_FOLLOWUP_PROPOSALS: "0"
+      OPERION_CANONICAL_DIR: /app/data/canonical/interview-wwi-v1
+      OPERION_IDENTITY_MAP: /app/reports/interview-wwi-v1/identity_map.csv
+      OPERION_DATA_MODE: snapshot
+      OPERION_CUSTOMER_IDS: wwi:organization:customer:65
+      OPERION_COMPANY: AI Demo GmbH
+      OPERION_SESSION_DB: /state/sessions.sqlite3
+      OPERION_AGENT_HOST: 0.0.0.0
+      OPERION_MODEL_BASE_URL: http://model-relay:30000/v1
+      OPERION_MODEL_NAME: qwen3.8-27b
+      OPERION_MODEL_API_KEY: dummy
+      OPERION_MAX_MODEL_REQUESTS: "7"
+      OPERION_MAX_TOOL_CALLS: "6"
+      OPERION_MAX_INPUT_TOKENS: "100000"
+      OPERION_MAX_OUTPUT_TOKENS: "4000"
+      OPERION_MAX_RUN_OUTPUT_TOKENS: "12000"
+      OPERION_RUN_TIMEOUT_SECONDS: "90"
+      PYDANTIC_AI_NO_BANNER: "1"
+    volumes:
+      - ../../var/gateway/policy:/run/policy:ro
+      - ../../var/gateway/tls/ca.crt:/run/tls/ca.crt:ro
+      - agent-data:/state
+    networks: [identity, backend]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Agent gets only a fixed model upstream, not general access to host services.
+  model-relay:
+    image: nginx:1.30.5-alpine
+    volumes:
+      - ./model-relay.conf:/etc/nginx/nginx.conf:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks: [backend, model-egress]
+    restart: unless-stopped
+
+networks:
+  edge:
+  identity:
+    internal: true
+  frontend:
+    internal: true
+  backend:
+    internal: true
+  sessions:
+    internal: true
+  model-egress:
+
+volumes:
+  keycloak-data:
+  agent-data:

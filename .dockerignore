@@ -1,0 +1,16 @@
+**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!data/
+!data/canonical/
+!data/canonical/interview-wwi-v1/
+!data/canonical/interview-wwi-v1/**
+!reports/
+!reports/interview-wwi-v1/
+!reports/interview-wwi-v1/identity_map.csv
+!deploy/
+!deploy/gateway/
+!deploy/gateway/agent.Dockerfile
+**/__pycache__
