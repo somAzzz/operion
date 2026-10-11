@@ -20,7 +20,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     UserPromptPart,
 )
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from operion_etl.agent_app import (
     AgentApplication,
@@ -375,6 +375,97 @@ class AgentAppTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual("cancelling", response.json()["status"])
         self.assertTrue(token.cancelled)
+
+    def test_wrong_business_count_is_withheld_and_run_fails(self):
+        model_calls = 0
+
+        async def stream_function(messages, info: AgentInfo):
+            nonlocal model_calls
+            model_calls += 1
+            if model_calls == 1:
+                yield {
+                    0: DeltaToolCall(
+                        name="get_customer_portfolio_summary",
+                        json_args="{}",
+                        tool_call_id="count-call",
+                    )
+                }
+            yield "客户共有一百张订单。"
+
+        self.application.agent = create_operion_agent(
+            self.application.settings,
+            model=FunctionModel(stream_function=stream_function),
+        )
+        response = self.client.post(
+            "/api/agent",
+            json={
+                "threadId": "blocked-count-thread",
+                "runId": "blocked-count-run",
+                "state": {},
+                "context": [],
+                "forwardedProps": {},
+                "tools": [],
+                "messages": [
+                    {"id": "question-1", "role": "user", "content": "多少订单？"}
+                ],
+            },
+            headers=self.headers,
+        )
+        self.assertEqual(200, response.status_code)
+        self.assertIn("OUTPUT_UNVERIFIED", response.text)
+        self.assertNotIn("一百张订单", response.text)
+        self.assertEqual(2, model_calls)
+        run = self.application.store.run("blocked-count-run", "user-1")
+        self.assertEqual("failed", run["status"])
+        self.assertEqual("ORDER_COUNT_MISMATCH", run["error_code"])
+        history = self.client.get(
+            "/api/conversations/blocked-count-thread", headers=self.headers
+        )
+        self.assertNotIn("一百张订单", json.dumps(history.json(), ensure_ascii=False))
+
+    def test_verified_business_count_is_emitted_and_saved(self):
+        expected = self.application.repository.customer_portfolio_summary(
+            self.application.scope
+        )["sales_order_count"]
+        model_calls = 0
+
+        async def stream_function(messages, info: AgentInfo):
+            nonlocal model_calls
+            model_calls += 1
+            if model_calls == 1:
+                yield {
+                    0: DeltaToolCall(
+                        name="get_customer_portfolio_summary",
+                        json_args="{}",
+                        tool_call_id="count-call",
+                    )
+                }
+            yield f"当前授权范围有 {expected} 张订单。"
+
+        self.application.agent = create_operion_agent(
+            self.application.settings,
+            model=FunctionModel(stream_function=stream_function),
+        )
+        response = self.client.post(
+            "/api/agent",
+            json={
+                "threadId": "verified-count-thread",
+                "runId": "verified-count-run",
+                "state": {},
+                "context": [],
+                "forwardedProps": {},
+                "tools": [],
+                "messages": [
+                    {"id": "question-2", "role": "user", "content": "多少订单？"}
+                ],
+            },
+            headers=self.headers,
+        )
+        self.assertEqual(200, response.status_code)
+        self.assertIn(f"{expected} 张订单", response.text)
+        self.assertIn("RUN_FINISHED", response.text)
+        run = self.application.store.run("verified-count-run", "user-1")
+        self.assertEqual("succeeded", run["status"])
 
 
 if __name__ == "__main__":

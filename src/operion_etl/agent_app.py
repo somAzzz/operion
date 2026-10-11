@@ -4,6 +4,7 @@ import asyncio
 import os
 import re
 import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,6 +14,10 @@ import uvicorn
 from ag_ui.core import (
     EventType,
     RunErrorEvent,
+    RunFinishedEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
     ToolCallResultEvent,
@@ -21,6 +26,7 @@ from ag_ui.core import (
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from opentelemetry import trace
 from pydantic import ValidationError
 from pydantic_ai import Agent, CancellationToken
 from pydantic_ai.agent import AgentRunResult
@@ -45,6 +51,18 @@ from .enterprise_auth import (
     OIDCAuthenticator,
 )
 from .identity_readback import ERPNextReadClient
+from .observability import (
+    agent_run_labels,
+    configure_observability,
+    instrument_fastapi,
+    run_span_ids,
+)
+from .output_guardrails import (
+    GuardrailDecision,
+    GuardrailVerdict,
+    record_guardrail,
+    verify_business_answer,
+)
 from .read_tools import AccessScope, CanonicalRepository
 from .session_store import (
     ConversationBusyError,
@@ -265,6 +283,17 @@ class AgentApplication:
             str(adapter.conversation_id or ""), "conversation ID"
         )
         run_id = self._validate_id(str(adapter.run_input.run_id), "run ID")
+        run_started = time.monotonic()
+        run_span = trace.get_tracer("operion.agent").start_span(
+            "operion.agent.run",
+            attributes={
+                "operion.run.id": run_id,
+                "langfuse.trace.metadata.run_id": run_id,
+                "langfuse.session.id": conversation_id,
+                "langfuse.observation.type": "agent",
+            },
+        )
+        trace_id, span_id = run_span_ids(run_span)
         try:
             self.store.get_or_create(conversation_id, owner_id)
             self.store.record_access(
@@ -272,12 +301,25 @@ class AgentApplication:
             )
             history = self.store.history(conversation_id, owner_id)
             self.store.start_run(
-                run_id, conversation_id, owner_id, self.settings.model_name
+                run_id,
+                conversation_id,
+                owner_id,
+                self.settings.model_name,
+                trace_id=trace_id,
+                span_id=span_id,
             )
         except SessionAccessDenied as error:
+            run_span.set_attribute("operion.run.status", "denied")
+            run_span.end()
             raise HTTPException(status_code=403, detail=str(error)) from error
         except RunReplayError as error:
+            run_span.set_attribute("operion.run.status", "rejected")
+            run_span.end()
             raise HTTPException(status_code=409, detail=str(error)) from error
+        except BaseException:
+            run_span.set_attribute("operion.run.status", "error")
+            run_span.end()
+            raise
 
         lock = self.conversation_locks.setdefault(conversation_id, asyncio.Lock())
         if lock.locked():
@@ -287,11 +329,29 @@ class AgentApplication:
                 tool_calls=[],
                 error_code="CONVERSATION_BUSY",
             )
+            run_span.set_attribute("operion.run.status", "rejected")
+            run_span.end()
             raise HTTPException(
                 status_code=409, detail="conversation already has a run"
             )
         await lock.acquire()
-        await self.semaphore.acquire()
+        try:
+            await self.semaphore.acquire()
+        except BaseException:
+            lock.release()
+            self.store.finish_run(
+                run_id,
+                status="cancelled",
+                tool_calls=[],
+                error_code="ADMISSION_INTERRUPTED",
+            )
+            run_span.set_attribute("operion.run.status", "cancelled")
+            run_span.end()
+            raise
+        run_span.set_attribute(
+            "operion.run.queue_wait_ms",
+            round((time.monotonic() - run_started) * 1000, 3),
+        )
         cancellation = CancellationToken()
         self.active_runs[run_id] = (owner_id, cancellation)
         allowed_tools = READ_TOOLS
@@ -312,10 +372,42 @@ class AgentApplication:
             tenant_id=identity.tenant_id,
         )
         completed = False
+        run_status = "running"
+        held_text_events: list[Any] = []
+        held_text_parts: list[str] = []
+        held_text_size = 0
+        text_overflow = False
+        output_decision: GuardrailDecision | None = None
 
         async def on_complete(result: AgentRunResult[Any]) -> None:
-            nonlocal completed
+            nonlocal completed, run_status, output_decision
             completed = True
+            output_decision = (
+                GuardrailDecision(
+                    "output_facts", GuardrailVerdict.UNKNOWN, "OUTPUT_TOO_LARGE"
+                )
+                if text_overflow
+                else verify_business_answer(
+                    deps.tool_calls, "".join(held_text_parts) or result.output
+                )
+            )
+            record_guardrail(output_decision)
+            run_span.set_attribute(
+                "operion.guardrail.output.verdict", output_decision.verdict.value
+            )
+            run_span.set_attribute(
+                "operion.guardrail.output.reason_code", output_decision.reason_code
+            )
+            if output_decision.verdict is not GuardrailVerdict.ALLOW:
+                run_status = "blocked"
+                self.store.finish_run(
+                    run_id,
+                    status="failed",
+                    tool_calls=deps.tool_calls,
+                    error_code=output_decision.reason_code,
+                )
+                return
+            run_status = "succeeded"
             self.store.save_history(conversation_id, owner_id, result.all_messages())
             usage = result.usage
             self.store.finish_run(
@@ -327,8 +419,9 @@ class AgentApplication:
             )
 
         async def on_cancel(cancelled: RunCancelled) -> None:
-            nonlocal completed
+            nonlocal completed, run_status
             completed = True
+            run_status = "cancelled"
             self.store.save_history(conversation_id, owner_id, cancelled.all_messages())
             self.store.finish_run(
                 run_id,
@@ -338,58 +431,134 @@ class AgentApplication:
             )
 
         async def events() -> AsyncIterator[Any]:
-            nonlocal completed
-            try:
-                async with asyncio.timeout(self.settings.run_timeout_seconds):
-                    source = adapter.run_stream(
-                        message_history=history,
-                        conversation_id=conversation_id,
-                        run_id=run_id,
-                        deps=deps,
-                        usage_limits=self.settings.usage_limits(),
-                        cancellation_token=cancellation,
-                        on_complete=on_complete,
-                        on_cancel=on_cancel,
-                    )
-                    async for event in _ordered_tool_events(source):
-                        if isinstance(event, RunErrorEvent):
-                            event = _public_run_error(event)
-                            if not completed:
-                                completed = True
-                                self.store.finish_run(
-                                    run_id,
-                                    status="failed",
-                                    tool_calls=deps.tool_calls,
-                                    error_code=event.code or "AGENT_ERROR",
+            nonlocal completed, run_status, held_text_size, text_overflow
+            first_event = True
+            with (
+                agent_run_labels(conversation_id, run_id),
+                trace.use_span(
+                    run_span,
+                    end_on_exit=False,
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ),
+            ):
+                try:
+                    async with asyncio.timeout(self.settings.run_timeout_seconds):
+                        source = adapter.run_stream(
+                            message_history=history,
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            deps=deps,
+                            usage_limits=self.settings.usage_limits(),
+                            cancellation_token=cancellation,
+                            on_complete=on_complete,
+                            on_cancel=on_cancel,
+                        )
+                        async for event in _ordered_tool_events(source):
+                            if first_event:
+                                first_event = False
+                                run_span.set_attribute(
+                                    "operion.run.first_sse_ms",
+                                    round((time.monotonic() - run_started) * 1000, 3),
                                 )
-                        yield event
-            except TimeoutError:
-                completed = True
-                cancellation.cancel()
-                self.store.finish_run(
-                    run_id,
-                    status="failed",
-                    tool_calls=deps.tool_calls,
-                    error_code="LIMIT_EXCEEDED",
-                )
-                yield RunErrorEvent(
-                    type=EventType.RUN_ERROR,
-                    message="Agent run exceeded its time limit.",
-                    code="LIMIT_EXCEEDED",
-                )
-            except asyncio.CancelledError:
-                if not completed:
+                            if isinstance(
+                                event,
+                                (
+                                    TextMessageStartEvent,
+                                    TextMessageContentEvent,
+                                    TextMessageEndEvent,
+                                ),
+                            ):
+                                if isinstance(event, TextMessageContentEvent):
+                                    held_text_size += len(event.delta)
+                                    if held_text_size > 256_000:
+                                        text_overflow = True
+                                    if not text_overflow:
+                                        held_text_parts.append(event.delta)
+                                if not text_overflow:
+                                    held_text_events.append(event)
+                                continue
+                            if (
+                                isinstance(event, RunFinishedEvent)
+                                and output_decision is not None
+                            ):
+                                if output_decision.verdict is GuardrailVerdict.ALLOW:
+                                    for held_event in held_text_events:
+                                        yield held_event
+                                else:
+                                    yield RunErrorEvent(
+                                        type=EventType.RUN_ERROR,
+                                        code="OUTPUT_UNVERIFIED",
+                                        message=(
+                                            "The answer could not be verified against business evidence. "
+                                            "No business data was changed. Please retry with a narrower question."
+                                        ),
+                                    )
+                                    continue
+                            if isinstance(event, RunErrorEvent):
+                                held_text_events.clear()
+                                event = _public_run_error(event)
+                                if not completed:
+                                    completed = True
+                                    run_status = "failed"
+                                    self.store.finish_run(
+                                        run_id,
+                                        status="failed",
+                                        tool_calls=deps.tool_calls,
+                                        error_code=event.code or "AGENT_ERROR",
+                                    )
+                            yield event
+                except TimeoutError:
+                    completed = True
+                    run_status = "timeout"
+                    cancellation.cancel()
                     self.store.finish_run(
                         run_id,
-                        status="cancelled",
+                        status="failed",
                         tool_calls=deps.tool_calls,
-                        error_code="CLIENT_DISCONNECTED",
+                        error_code="LIMIT_EXCEEDED",
                     )
-                raise
-            finally:
-                self.active_runs.pop(run_id, None)
-                self.semaphore.release()
-                lock.release()
+                    yield RunErrorEvent(
+                        type=EventType.RUN_ERROR,
+                        message="Agent run exceeded its time limit.",
+                        code="LIMIT_EXCEEDED",
+                    )
+                except asyncio.CancelledError:
+                    run_status = "cancelled"
+                    if not completed:
+                        completed = True
+                        self.store.finish_run(
+                            run_id,
+                            status="cancelled",
+                            tool_calls=deps.tool_calls,
+                            error_code="CLIENT_DISCONNECTED",
+                        )
+                    raise
+                except Exception:
+                    run_status = "error"
+                    if not completed:
+                        completed = True
+                        self.store.finish_run(
+                            run_id,
+                            status="failed",
+                            tool_calls=deps.tool_calls,
+                            error_code="AGENT_ERROR",
+                        )
+                    raise
+                finally:
+                    if not completed:
+                        run_status = "cancelled"
+                        self.store.finish_run(
+                            run_id,
+                            status="cancelled",
+                            tool_calls=deps.tool_calls,
+                            error_code="STREAM_CLOSED",
+                        )
+                    run_span.set_attribute("operion.run.status", run_status)
+                    run_span.end()
+                    self.active_runs.pop(run_id, None)
+                    self.semaphore.release()
+                    lock.release()
 
         return adapter.streaming_response(events())
 
@@ -472,12 +641,14 @@ class AgentApplication:
         return JSONResponse({"run_id": run_id, "status": "cancelling"})
 
 
-def create_app(application: AgentApplication) -> FastAPI:
+def create_app(application: AgentApplication, telemetry_provider=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
         for _, cancellation in application.active_runs.values():
             cancellation.cancel()
+        if telemetry_provider is not None:
+            telemetry_provider.shutdown()
 
     app = FastAPI(title="Operion controlled Agent", version="0.4.0", lifespan=lifespan)
     origins = [
@@ -557,6 +728,7 @@ def create_app(application: AgentApplication) -> FastAPI:
     async def cancel_endpoint(request: Request, run_id: str) -> JSONResponse:
         return application.cancel_run(request, run_id)
 
+    instrument_fastapi(app, telemetry_provider)
     return app
 
 
@@ -624,7 +796,10 @@ def application_from_environment() -> AgentApplication:
 def main() -> None:
     host = os.environ.get("OPERION_AGENT_HOST", "127.0.0.1")
     port = int(os.environ.get("OPERION_AGENT_PORT", "8000"))
-    uvicorn.run(create_app(application_from_environment()), host=host, port=port)
+    provider = configure_observability("operion-agent", agent=True)
+    uvicorn.run(
+        create_app(application_from_environment(), provider), host=host, port=port
+    )
 
 
 if __name__ == "__main__":
