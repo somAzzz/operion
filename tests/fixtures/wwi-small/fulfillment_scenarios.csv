@@ -1,0 +1,7 @@
+case_id,scenario_version,scenario_type,derived_from,business_date,timezone,promise_scope,promise_date,warehouse,product_canonical_id,uom,ordered_quantity,delivered_quantity,remaining_quantity,on_hand_quantity,reserved_for_other_orders,current_order_in_reservations,unallocated_inbound_quantity,expected_inbound_date,expected_result,data_class
+F01,fulfillment-v1,stock_sufficient,wwi:sales_order_line:231178,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:77,Each,108,0,108,113,0,false,0,,satisfiable,simulated
+F02,fulfillment-v1,on_time_inbound,wwi:sales_order_line:231181,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:193,Each,72,0,72,70,0,false,2,2016-06-02,satisfiable,simulated
+F03,fulfillment-v1,late_inbound,wwi:sales_order_line:231206,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:78,Each,96,0,96,94,0,false,2,2016-06-04,shortfall,simulated
+F04,fulfillment-v1,other_order_reservation,wwi:sales_order_line:231227,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:77,Each,36,0,36,36,1,false,0,,shortfall,simulated
+F05,fulfillment-v1,partially_delivered,wwi:sales_order_line:231265,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:98,Each,48,24,24,24,0,false,0,,satisfiable,simulated
+F06,fulfillment-v1,missing_inbound_date,wwi:sales_order_line:231267,2016-05-31,Europe/Berlin,ship_by,2016-06-03,WWI Main Warehouse,wwi:product:204,Each,90,0,90,88,0,false,2,,insufficient_information,simulated

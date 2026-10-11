@@ -15,8 +15,8 @@ from operion_etl.read_tools import (
     CanonicalRepository,
 )
 
-BASE = Path("data/canonical/wwi-v1-small-20260919-e1")
-IDENTITY = Path("reports/enterprise/e1/20260919T-e1-complete/identity_map.csv")
+BASE = Path("tests/fixtures/wwi-small")
+IDENTITY = Path("tests/fixtures/wwi-small-identity.csv")
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:

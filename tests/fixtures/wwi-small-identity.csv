@@ -1,0 +1,138 @@
+entity_type,source_system,source_id,canonical_id,target_system,target_id,batch_id,mapping_version,load_status,error
+organization,wwi,11,wwi:organization:customer:11,erpnext,fixture-2ac4124c97cd19fd,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,11,wwi:organization:customer:11,twenty,fixture-331e5ce03146c484,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,150,wwi:organization:customer:150,erpnext,fixture-07f47045c275e3b2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,150,wwi:organization:customer:150,twenty,fixture-c63f72e08aacfb37,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,417,wwi:organization:customer:417,erpnext,fixture-0f6eed8ad1fe53cb,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,417,wwi:organization:customer:417,twenty,fixture-cc428f185ea85c15,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,466,wwi:organization:customer:466,erpnext,fixture-0151be638c0624ba,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,466,wwi:organization:customer:466,twenty,fixture-d9eede59e90dec54,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,532,wwi:organization:customer:532,erpnext,fixture-d04d74a43bb7d0da,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,532,wwi:organization:customer:532,twenty,fixture-5627487302e34074,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,552,wwi:organization:customer:552,erpnext,fixture-773c3320efc2c449,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,552,wwi:organization:customer:552,twenty,fixture-757df7cc26eac002,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,915,wwi:organization:customer:915,erpnext,fixture-6e8465ff99edb8ce,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,915,wwi:organization:customer:915,twenty,fixture-b31a1c0cccb1010c,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,1028,wwi:organization:customer:1028,erpnext,fixture-2bffef47f473dd67,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,1028,wwi:organization:customer:1028,twenty,fixture-74db107ba777a37d,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,4,wwi:organization:supplier:4,erpnext,fixture-7af344534a61e014,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,4,wwi:organization:supplier:4,twenty,fixture-8ecf433bfe525305,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,7,wwi:organization:supplier:7,erpnext,fixture-d6c1a912fa7737b1,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+organization,wwi,7,wwi:organization:supplier:7,twenty,fixture-e34a3f919816fc41,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2,wwi:contact:2,erpnext,fixture-a23bc18d84ff175e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2,wwi:contact:2,twenty,fixture-e1aba2a7019695b6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3,wwi:contact:3,erpnext,fixture-f4d8152712a8d207,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3,wwi:contact:3,twenty,fixture-b22a878cc308fffa,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,7,wwi:contact:7,erpnext,fixture-ef08417cc48f370b,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,7,wwi:contact:7,twenty,fixture-bb40350742abd857,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,13,wwi:contact:13,erpnext,fixture-c27204a8c7b50072,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,13,wwi:contact:13,twenty,fixture-7a0a4ee6cd3b1330,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,14,wwi:contact:14,erpnext,fixture-a2eff41325e3b4a3,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,14,wwi:contact:14,twenty,fixture-2ef60e686f28e5c2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,16,wwi:contact:16,erpnext,fixture-bbb28bf48f1ea655,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,16,wwi:contact:16,twenty,fixture-29703d320bc55144,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,20,wwi:contact:20,erpnext,fixture-f28df53c1481d0b7,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,20,wwi:contact:20,twenty,fixture-90376ecc7a7dd7b1,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,27,wwi:contact:27,erpnext,fixture-6323f00a03f5a480,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,27,wwi:contact:27,twenty,fixture-928d227fdbcc603a,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,28,wwi:contact:28,erpnext,fixture-cea66bfdf3e7e583,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,28,wwi:contact:28,twenty,fixture-63f72861cb8326c6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,33,wwi:contact:33,erpnext,fixture-4d8964978a5e9915,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,33,wwi:contact:33,twenty,fixture-a29ec578bbd44c44,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,34,wwi:contact:34,erpnext,fixture-425ab236a28b5dd2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,34,wwi:contact:34,twenty,fixture-b8ea77ab00e64f3e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1021,wwi:contact:1021,erpnext,fixture-b901ba8fecd8940c,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1021,wwi:contact:1021,twenty,fixture-191af871b2e2e0e2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1022,wwi:contact:1022,erpnext,fixture-24a2141f4b6f51c5,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1022,wwi:contact:1022,twenty,fixture-d8dc3bd210d60b84,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1299,wwi:contact:1299,erpnext,fixture-5e2871448247a608,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1299,wwi:contact:1299,twenty,fixture-ab7e7b54f8b6ce14,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1300,wwi:contact:1300,erpnext,fixture-443435f52d49e715,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,1300,wwi:contact:1300,twenty,fixture-0741f600e19acc3e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2033,wwi:contact:2033,erpnext,fixture-8470bddcf0243d59,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2033,wwi:contact:2033,twenty,fixture-0a6d1101789a3041,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2034,wwi:contact:2034,erpnext,fixture-0333a737f9d2240d,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2034,wwi:contact:2034,twenty,fixture-bbe0f1b27e142c02,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2131,wwi:contact:2131,erpnext,fixture-5c86777f5670e24c,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2131,wwi:contact:2131,twenty,fixture-a68861b69a63cd80,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2132,wwi:contact:2132,erpnext,fixture-56a71f64dec8050a,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2132,wwi:contact:2132,twenty,fixture-c0f5c2c4baabc871,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2263,wwi:contact:2263,erpnext,fixture-035cc1d669da034d,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2263,wwi:contact:2263,twenty,fixture-a4b6b68a6abec0f7,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2264,wwi:contact:2264,erpnext,fixture-1c43c78dcaf439bb,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2264,wwi:contact:2264,twenty,fixture-82847ad731425273,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2303,wwi:contact:2303,erpnext,fixture-f859c5a96a542df9,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2303,wwi:contact:2303,twenty,fixture-5012c06923bb9039,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2304,wwi:contact:2304,erpnext,fixture-b61aa524a0bb7f25,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,2304,wwi:contact:2304,twenty,fixture-d5d1b3489f4a069e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3115,wwi:contact:3115,erpnext,fixture-0c828976b20977a7,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3115,wwi:contact:3115,twenty,fixture-220bf38ea615b0d3,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3228,wwi:contact:3228,erpnext,fixture-f2ab2fe14d0fd7d3,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+contact,wwi,3228,wwi:contact:3228,twenty,fixture-b7875e779a37886e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,77,wwi:product:77,erpnext,fixture-508f34c0f003c3df,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,78,wwi:product:78,erpnext,fixture-e8877f943ca03f4e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,80,wwi:product:80,erpnext,fixture-d19e8f411a05dc84,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,86,wwi:product:86,erpnext,fixture-4daa3cbd64e5d64c,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,95,wwi:product:95,erpnext,fixture-5c2b6c9b9310c7b2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,98,wwi:product:98,erpnext,fixture-a78ed22943bd66c6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,184,wwi:product:184,erpnext,fixture-01b3fa6d76c34dae,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,193,wwi:product:193,erpnext,fixture-5a2320f7f048248f,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+product,wwi,204,wwi:product:204,erpnext,fixture-dcef9b5fe6c57bc8,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73595,wwi:sales_order:73595,erpnext,fixture-8b6409b50acb64b6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73594,wwi:sales_order:73594,erpnext,fixture-93f5f8bedb1455fa,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73593,wwi:sales_order:73593,erpnext,fixture-56a6f392c8846bc6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73592,wwi:sales_order:73592,erpnext,fixture-ea6848e9807a435c,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73591,wwi:sales_order:73591,erpnext,fixture-702ce2abaf8d1fa0,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73590,wwi:sales_order:73590,erpnext,fixture-d4ac7ea362b7eb32,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73589,wwi:sales_order:73589,erpnext,fixture-e1d41a9ef33cfa42,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order,wwi,73588,wwi:sales_order:73588,erpnext,fixture-ea8e5459aa802d37,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231178,wwi:sales_order_line:231178,erpnext,fixture-c080a709020c2ec8,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231181,wwi:sales_order_line:231181,erpnext,fixture-cb101156a5b80124,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231206,wwi:sales_order_line:231206,erpnext,fixture-3ef95cc89bd45168,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231227,wwi:sales_order_line:231227,erpnext,fixture-c7fa53168bc9d60e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231265,wwi:sales_order_line:231265,erpnext,fixture-9c6dc4f316108d05,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231267,wwi:sales_order_line:231267,erpnext,fixture-339d069b4176c088,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231346,wwi:sales_order_line:231346,erpnext,fixture-e37a24f5d73b6054,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231357,wwi:sales_order_line:231357,erpnext,fixture-c34dbd87f176abc6,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+sales_order_line,wwi,231360,wwi:sales_order_line:231360,erpnext,fixture-1d1539c44da431be,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order,wwi,2067,wwi:purchase_order:2067,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2068,wwi:purchase_order:2068,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2069,wwi:purchase_order:2069,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2070,wwi:purchase_order:2070,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2071,wwi:purchase_order:2071,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2072,wwi:purchase_order:2072,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order,wwi,2073,wwi:purchase_order:2073,erpnext,fixture-1045010740ca5997,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order,wwi,2074,wwi:purchase_order:2074,erpnext,fixture-5a47ff63c77a40aa,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8335,wwi:purchase_order_line:8335,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8336,wwi:purchase_order_line:8336,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8337,wwi:purchase_order_line:8337,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8338,wwi:purchase_order_line:8338,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8339,wwi:purchase_order_line:8339,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8340,wwi:purchase_order_line:8340,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8341,wwi:purchase_order_line:8341,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8342,wwi:purchase_order_line:8342,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8343,wwi:purchase_order_line:8343,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8344,wwi:purchase_order_line:8344,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8345,wwi:purchase_order_line:8345,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8346,wwi:purchase_order_line:8346,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8347,wwi:purchase_order_line:8347,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8348,wwi:purchase_order_line:8348,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8349,wwi:purchase_order_line:8349,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8350,wwi:purchase_order_line:8350,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8351,wwi:purchase_order_line:8351,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8352,wwi:purchase_order_line:8352,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8353,wwi:purchase_order_line:8353,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8354,wwi:purchase_order_line:8354,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8355,wwi:purchase_order_line:8355,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8356,wwi:purchase_order_line:8356,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8357,wwi:purchase_order_line:8357,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8358,wwi:purchase_order_line:8358,erpnext,,wwi-v1-small-20260919-e1,wwi-minimal-v1,not_applicable,excluded: no open commitment
+purchase_order_line,wwi,8359,wwi:purchase_order_line:8359,erpnext,fixture-27451530d2667344,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8360,wwi:purchase_order_line:8360,erpnext,fixture-0f11720cc5313c17,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8361,wwi:purchase_order_line:8361,erpnext,fixture-f5db50db41c03440,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8362,wwi:purchase_order_line:8362,erpnext,fixture-d9baed7d554b77a2,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8363,wwi:purchase_order_line:8363,erpnext,fixture-d5796328fd3a1a08,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8364,wwi:purchase_order_line:8364,erpnext,fixture-f44a4010a4874498,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8365,wwi:purchase_order_line:8365,erpnext,fixture-5e2f66a56420395f,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8366,wwi:purchase_order_line:8366,erpnext,fixture-9a5544960ee14c4e,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,
+purchase_order_line,wwi,8367,wwi:purchase_order_line:8367,erpnext,fixture-84a0eb1d7e537a49,wwi-v1-small-20260919-e1,wwi-minimal-v1,loaded,

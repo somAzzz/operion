@@ -15,7 +15,7 @@ from operion_etl.agent_runtime import (
 )
 from operion_etl.read_tools import AccessScope, CanonicalRepository
 
-CANONICAL = Path("data/canonical/wwi-v1-small-20260913-v4")
+CANONICAL = Path("tests/fixtures/wwi-small")
 CUSTOMER_ID = "wwi:organization:customer:11"
 
 

@@ -1,0 +1,10 @@
+canonical_id,source_system,source_id,name,supplier_source_id,uom,outer_uom,units_per_outer,brand,size,barcode,unit_price_ex_tax,tax_rate_percent,quantity_on_hand,warehouse,bin_location,data_class
+wwi:product:77,wwi,77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",4,Each,Carton,12,,XXS,,18.00,15,27,WWI Main Warehouse,K-1,public_sample
+wwi:product:78,wwi,78,"""The Gu"" red shirt XML tag t-shirt (White) XS",4,Each,Carton,12,,XS,,18.00,15,16,WWI Main Warehouse,K-1,public_sample
+wwi:product:80,wwi,80,"""The Gu"" red shirt XML tag t-shirt (White) M",4,Each,Carton,12,,M,,18.00,15,20,WWI Main Warehouse,K-1,public_sample
+wwi:product:86,wwi,86,"""The Gu"" red shirt XML tag t-shirt (White) 5XL",4,Each,Carton,12,,5XL,,18.00,15,3,WWI Main Warehouse,K-1,public_sample
+wwi:product:95,wwi,95,"""The Gu"" red shirt XML tag t-shirt (Black) XL",4,Each,Carton,12,,XL,,18.00,15,48,WWI Main Warehouse,K-2,public_sample
+wwi:product:98,wwi,98,"""The Gu"" red shirt XML tag t-shirt (Black) 4XL",4,Each,Carton,12,,4XL,,18.00,15,25,WWI Main Warehouse,K-2,public_sample
+wwi:product:184,wwi,184,Shipping carton (Brown) 305x305x305mm,7,Each,Each,25,,305x305x305mm,,3.50,15,38,WWI Main Warehouse,D-3,public_sample
+wwi:product:193,wwi,193,Black and orange glass with care despatch tape 48mmx75m,7,Each,Each,24,,48mmx75m,,3.70,15,50,WWI Main Warehouse,D-4,public_sample
+wwi:product:204,wwi,204,Tape dispenser (Red),7,Each,Each,10,,,,32.00,15,24,WWI Main Warehouse,D-4,public_sample

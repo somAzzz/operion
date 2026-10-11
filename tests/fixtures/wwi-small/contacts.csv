@@ -1,0 +1,26 @@
+canonical_id,source_system,source_id,full_name,preferred_name,email,phone,company_canonical_id,is_employee,is_salesperson,data_class
+wwi:contact:2,wwi,2,Kayla Woodcock,Kayla,kaylaw@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:3,wwi,3,Hudson Onslow,Hudson,hudsono@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:7,wwi,7,Amy Trefl,Amy,amyt@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:13,wwi,13,Hudson Hollinworth,Hudson,hudsonh@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:14,wwi,14,Lily Code,Lily,lilyc@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:16,wwi,16,Archer Lamble,Archer,archerl@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:20,wwi,20,Jack Potter,Jack,jackp@wideworldimporters.com,(415) 555-0102,,true,true,public_sample
+wwi:contact:27,wwi,27,Bill Lawson,Bill,billl@fabrikam.com,(203) 555-0107,wwi:organization:supplier:4,false,false,public_sample
+wwi:contact:28,wwi,28,Helen Moore,Helen,helenm@fabrikam.com,(203) 555-0104,wwi:organization:supplier:4,false,false,public_sample
+wwi:contact:33,wwi,33,Elias Myllari,Elias,eliasm@litwareinc.com,(209) 555-0101,wwi:organization:supplier:7,false,false,public_sample
+wwi:contact:34,wwi,34,Vilma Niva,Vilma,vilman@litwareinc.com,(209) 555-0103,wwi:organization:supplier:7,false,false,public_sample
+wwi:contact:1021,wwi,1021,Elnaz Javan,Elnaz,elnaz@tailspintoys.com,(215) 555-0100,wwi:organization:customer:11,false,false,public_sample
+wwi:contact:1022,wwi,1022,Jayashish Ghatak,Jayashish,jayashish@tailspintoys.com,(215) 555-0100,wwi:organization:customer:11,false,false,public_sample
+wwi:contact:1299,wwi,1299,Brita Jarvi,Brita,brita@tailspintoys.com,(212) 555-0100,wwi:organization:customer:150,false,false,public_sample
+wwi:contact:1300,wwi,1300,Lucie Hrdlickova,Lucie,lucie@tailspintoys.com,(212) 555-0100,wwi:organization:customer:150,false,false,public_sample
+wwi:contact:2033,wwi,2033,Chandranath Bose,Chandranath,chandranath@wingtiptoys.com,(262) 555-0100,wwi:organization:customer:417,false,false,public_sample
+wwi:contact:2034,wwi,2034,Gaurav Acharya,Gaurav,gaurav@wingtiptoys.com,(262) 555-0100,wwi:organization:customer:417,false,false,public_sample
+wwi:contact:2131,wwi,2131,Sintja Buecek,Sintja,sintja@wingtiptoys.com,(210) 555-0100,wwi:organization:customer:466,false,false,public_sample
+wwi:contact:2132,wwi,2132,Esha Singh,Esha,esha@wingtiptoys.com,(210) 555-0100,wwi:organization:customer:466,false,false,public_sample
+wwi:contact:2263,wwi,2263,Akhtar Shahrestaani,Akhtar,akhtar@wingtiptoys.com,(229) 555-0100,wwi:organization:customer:532,false,false,public_sample
+wwi:contact:2264,wwi,2264,Priya Joshi,Priya,priya@wingtiptoys.com,(229) 555-0100,wwi:organization:customer:532,false,false,public_sample
+wwi:contact:2303,wwi,2303,Noel Cartier,Noel,noel@wingtiptoys.com,(215) 555-0100,wwi:organization:customer:552,false,false,public_sample
+wwi:contact:2304,wwi,2304,Aet Kasesalu,Aet,aet@wingtiptoys.com,(215) 555-0100,wwi:organization:customer:552,false,false,public_sample
+wwi:contact:3115,wwi,3115,Ana Florea,Ana,ana@example.com,(210) 555-0100,wwi:organization:customer:915,false,false,public_sample
+wwi:contact:3228,wwi,3228,Emma Van Zant,Emma,emma@example.com,(303) 555-0100,wwi:organization:customer:1028,false,false,public_sample

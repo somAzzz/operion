@@ -1,0 +1,9 @@
+canonical_id,source_system,source_id,customer_canonical_id,contact_canonical_id,salesperson_canonical_id,order_date,expected_delivery_date,customer_po_number,source_status,data_class
+wwi:sales_order:73595,wwi,73595,wwi:organization:customer:11,wwi:contact:1021,wwi:contact:14,2016-05-31,2016-06-01,13484,open,public_sample
+wwi:sales_order:73594,wwi,73594,wwi:organization:customer:552,wwi:contact:2303,wwi:contact:16,2016-05-31,2016-06-01,15671,open,public_sample
+wwi:sales_order:73593,wwi,73593,wwi:organization:customer:417,wwi:contact:2033,wwi:contact:2,2016-05-31,2016-06-01,11230,open,public_sample
+wwi:sales_order:73592,wwi,73592,wwi:organization:customer:1028,wwi:contact:3228,wwi:contact:13,2016-05-31,2016-06-01,14742,open,public_sample
+wwi:sales_order:73591,wwi,73591,wwi:organization:customer:150,wwi:contact:1299,wwi:contact:20,2016-05-31,2016-06-01,10744,open,public_sample
+wwi:sales_order:73590,wwi,73590,wwi:organization:customer:532,wwi:contact:2263,wwi:contact:16,2016-05-31,2016-06-01,17942,open,public_sample
+wwi:sales_order:73589,wwi,73589,wwi:organization:customer:466,wwi:contact:2131,wwi:contact:3,2016-05-31,2016-06-01,18164,open,public_sample
+wwi:sales_order:73588,wwi,73588,wwi:organization:customer:915,wwi:contact:3115,wwi:contact:7,2016-05-31,2016-06-01,14324,open,public_sample

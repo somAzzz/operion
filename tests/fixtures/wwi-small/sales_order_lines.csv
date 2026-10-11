@@ -1,0 +1,10 @@
+canonical_id,source_system,source_id,sales_order_canonical_id,product_canonical_id,description,uom,ordered_quantity,delivered_quantity,open_quantity,unit_price_ex_tax,tax_rate_percent,net_amount,data_class
+wwi:sales_order_line:231178,wwi,231178,wwi:sales_order:73588,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Each,108,0,108,18.00,15,1944.00,public_sample
+wwi:sales_order_line:231181,wwi,231181,wwi:sales_order:73588,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,72,0,72,3.70,15,266.40,public_sample
+wwi:sales_order_line:231206,wwi,231206,wwi:sales_order:73589,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Each,96,0,96,18.00,15,1728.00,public_sample
+wwi:sales_order_line:231227,wwi,231227,wwi:sales_order:73590,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Each,36,0,36,18.00,15,648.00,public_sample
+wwi:sales_order_line:231265,wwi,231265,wwi:sales_order:73591,wwi:product:98,"""The Gu"" red shirt XML tag t-shirt (Black) 4XL",Each,48,0,48,18.00,15,864.00,public_sample
+wwi:sales_order_line:231267,wwi,231267,wwi:sales_order:73592,wwi:product:204,Tape dispenser (Red),Each,90,0,90,32.00,15,2880.00,public_sample
+wwi:sales_order_line:231346,wwi,231346,wwi:sales_order:73593,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Each,72,0,72,18.00,15,1296.00,public_sample
+wwi:sales_order_line:231357,wwi,231357,wwi:sales_order:73594,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Each,84,0,84,18.00,15,1512.00,public_sample
+wwi:sales_order_line:231360,wwi,231360,wwi:sales_order:73595,wwi:product:80,"""The Gu"" red shirt XML tag t-shirt (White) M",Each,120,0,120,18.00,15,2160.00,public_sample

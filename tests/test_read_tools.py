@@ -13,7 +13,7 @@ from operion_etl.read_tools import (
     evaluate_fulfillment,
 )
 
-CANONICAL = Path("data/canonical/wwi-v1-small-20260913-v4")
+CANONICAL = Path("tests/fixtures/wwi-small")
 
 
 class ReadToolAcceptanceTests(unittest.TestCase):

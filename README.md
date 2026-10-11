@@ -112,6 +112,14 @@ PYTHONPATH=src python3 -m operion_etl run \
   --batch-id <unique-batch-id>
 ```
 
+Run the reproducible verification entry point with the checked-in uv and npm lockfiles:
+
+- scripts/verify.sh setup: install locked Python and Web dependencies.
+- scripts/verify.sh offline: Python lint and offline tests.
+- scripts/verify.sh web: Web type check and production build.
+
+Offline tests use public sample inputs in tests/fixtures and need no restored WWI database. PostgreSQL action tests are a separate destructive group: create a disposable database whose name ends in _test, set OPERION_TEST_ACTION_DATABASE_URL to that database, then run scripts/verify.sh postgres. The runner fails when the variable is absent or tests are skipped. CI runs both groups and the Web build. The Web check uses Next.js webpack mode.
+
 Run the deterministic test suite with:
 
 ```bash

@@ -68,7 +68,7 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(any(error["rule"] == "reference" for error in errors))
 
     def test_twenty_company_export_matches_reference_template(self):
-        reference = Path("data/test_data/companies-sample.csv")
+        reference = Path("tests/fixtures/companies-template-header.csv")
         with reference.open(encoding="utf-8", newline="") as stream:
             expected_headers = next(csv.reader(stream))
         self.assertEqual(

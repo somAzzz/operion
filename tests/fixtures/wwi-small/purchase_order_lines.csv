@@ -1,0 +1,34 @@
+canonical_id,source_system,source_id,purchase_order_canonical_id,product_canonical_id,description,source_uom,canonical_uom,units_per_outer,ordered_outers,received_outers,open_quantity,expected_unit_price_per_outer,expected_unit_price_each,last_receipt_date,data_class
+wwi:purchase_order_line:8335,wwi,8335,wwi:purchase_order:2067,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,Each,25,1654,1654,0,47.50,1.90,2016-05-27,public_sample
+wwi:purchase_order_line:8336,wwi,8336,wwi:purchase_order:2067,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,Each,24,2800,2800,0,38.40,1.60,2016-05-27,public_sample
+wwi:purchase_order_line:8337,wwi,8337,wwi:purchase_order:2067,wwi:product:204,Tape dispenser (Red),Each,Each,10,3237,3237,0,170.00,17.00,2016-05-27,public_sample
+wwi:purchase_order_line:8338,wwi,8338,wwi:purchase_order:2068,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Carton,Each,12,3377,3377,0,84.00,7.00,2016-05-30,public_sample
+wwi:purchase_order_line:8339,wwi,8339,wwi:purchase_order:2068,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Carton,Each,12,3653,3653,0,84.00,7.00,2016-05-30,public_sample
+wwi:purchase_order_line:8340,wwi,8340,wwi:purchase_order:2068,wwi:product:80,"""The Gu"" red shirt XML tag t-shirt (White) M",Carton,Each,12,1822,1822,0,84.00,7.00,2016-05-30,public_sample
+wwi:purchase_order_line:8341,wwi,8341,wwi:purchase_order:2068,wwi:product:86,"""The Gu"" red shirt XML tag t-shirt (White) 5XL",Carton,Each,12,3755,3755,0,96.00,8.00,2016-05-30,public_sample
+wwi:purchase_order_line:8342,wwi,8342,wwi:purchase_order:2068,wwi:product:95,"""The Gu"" red shirt XML tag t-shirt (Black) XL",Carton,Each,12,1827,1827,0,90.00,7.50,2016-05-30,public_sample
+wwi:purchase_order_line:8343,wwi,8343,wwi:purchase_order:2068,wwi:product:98,"""The Gu"" red shirt XML tag t-shirt (Black) 4XL",Carton,Each,12,3710,3710,0,96.00,8.00,2016-05-30,public_sample
+wwi:purchase_order_line:8344,wwi,8344,wwi:purchase_order:2069,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,Each,25,1672,1672,0,47.50,1.90,2016-05-30,public_sample
+wwi:purchase_order_line:8345,wwi,8345,wwi:purchase_order:2069,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,Each,24,2807,2807,0,38.40,1.60,2016-05-30,public_sample
+wwi:purchase_order_line:8346,wwi,8346,wwi:purchase_order:2069,wwi:product:204,Tape dispenser (Red),Each,Each,10,3235,3235,0,170.00,17.00,2016-05-30,public_sample
+wwi:purchase_order_line:8347,wwi,8347,wwi:purchase_order:2070,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Carton,Each,12,2,2,0,84.00,7.00,2016-05-30,public_sample
+wwi:purchase_order_line:8348,wwi,8348,wwi:purchase_order:2070,wwi:product:80,"""The Gu"" red shirt XML tag t-shirt (White) M",Carton,Each,12,5,5,0,84.00,7.00,2016-05-30,public_sample
+wwi:purchase_order_line:8349,wwi,8349,wwi:purchase_order:2070,wwi:product:86,"""The Gu"" red shirt XML tag t-shirt (White) 5XL",Carton,Each,12,6,6,0,96.00,8.00,2016-05-30,public_sample
+wwi:purchase_order_line:8350,wwi,8350,wwi:purchase_order:2071,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Carton,Each,12,3385,3385,0,84.00,7.00,2016-05-31,public_sample
+wwi:purchase_order_line:8351,wwi,8351,wwi:purchase_order:2071,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Carton,Each,12,3654,3654,0,84.00,7.00,2016-05-31,public_sample
+wwi:purchase_order_line:8352,wwi,8352,wwi:purchase_order:2071,wwi:product:80,"""The Gu"" red shirt XML tag t-shirt (White) M",Carton,Each,12,1825,1825,0,84.00,7.00,2016-05-31,public_sample
+wwi:purchase_order_line:8353,wwi,8353,wwi:purchase_order:2071,wwi:product:86,"""The Gu"" red shirt XML tag t-shirt (White) 5XL",Carton,Each,12,3768,3768,0,96.00,8.00,2016-05-31,public_sample
+wwi:purchase_order_line:8354,wwi,8354,wwi:purchase_order:2071,wwi:product:95,"""The Gu"" red shirt XML tag t-shirt (Black) XL",Carton,Each,12,1831,1831,0,90.00,7.50,2016-05-31,public_sample
+wwi:purchase_order_line:8355,wwi,8355,wwi:purchase_order:2071,wwi:product:98,"""The Gu"" red shirt XML tag t-shirt (Black) 4XL",Carton,Each,12,3715,3715,0,96.00,8.00,2016-05-31,public_sample
+wwi:purchase_order_line:8356,wwi,8356,wwi:purchase_order:2072,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,Each,25,1677,1677,0,47.50,1.90,2016-05-31,public_sample
+wwi:purchase_order_line:8357,wwi,8357,wwi:purchase_order:2072,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,Each,24,2803,2803,0,38.40,1.60,2016-05-31,public_sample
+wwi:purchase_order_line:8358,wwi,8358,wwi:purchase_order:2072,wwi:product:204,Tape dispenser (Red),Each,Each,10,3245,3245,0,170.00,17.00,2016-05-31,public_sample
+wwi:purchase_order_line:8359,wwi,8359,wwi:purchase_order:2073,wwi:product:77,"""The Gu"" red shirt XML tag t-shirt (White) XXS",Carton,Each,12,3401,0,40812,84.00,7.00,,public_sample
+wwi:purchase_order_line:8360,wwi,8360,wwi:purchase_order:2073,wwi:product:78,"""The Gu"" red shirt XML tag t-shirt (White) XS",Carton,Each,12,3667,0,44004,84.00,7.00,,public_sample
+wwi:purchase_order_line:8361,wwi,8361,wwi:purchase_order:2073,wwi:product:80,"""The Gu"" red shirt XML tag t-shirt (White) M",Carton,Each,12,1831,0,21972,84.00,7.00,,public_sample
+wwi:purchase_order_line:8362,wwi,8362,wwi:purchase_order:2073,wwi:product:86,"""The Gu"" red shirt XML tag t-shirt (White) 5XL",Carton,Each,12,3768,0,45216,96.00,8.00,,public_sample
+wwi:purchase_order_line:8363,wwi,8363,wwi:purchase_order:2073,wwi:product:95,"""The Gu"" red shirt XML tag t-shirt (Black) XL",Carton,Each,12,1827,0,21924,90.00,7.50,,public_sample
+wwi:purchase_order_line:8364,wwi,8364,wwi:purchase_order:2073,wwi:product:98,"""The Gu"" red shirt XML tag t-shirt (Black) 4XL",Carton,Each,12,3717,0,44604,96.00,8.00,,public_sample
+wwi:purchase_order_line:8365,wwi,8365,wwi:purchase_order:2074,wwi:product:184,Shipping carton (Brown) 305x305x305mm,Each,Each,25,1674,0,41850,47.50,1.90,,public_sample
+wwi:purchase_order_line:8366,wwi,8366,wwi:purchase_order:2074,wwi:product:193,Black and orange glass with care despatch tape 48mmx75m,Each,Each,24,2804,0,67296,38.40,1.60,,public_sample
+wwi:purchase_order_line:8367,wwi,8367,wwi:purchase_order:2074,wwi:product:204,Tape dispenser (Red),Each,Each,10,3260,0,32600,170.00,17.00,,public_sample

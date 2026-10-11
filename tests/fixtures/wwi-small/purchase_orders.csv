@@ -1,0 +1,9 @@
+canonical_id,source_system,source_id,supplier_canonical_id,contact_canonical_id,order_date,expected_delivery_date,supplier_reference,source_status,data_class
+wwi:purchase_order:2067,wwi,2067,wwi:organization:supplier:7,wwi:contact:2,2016-05-26,2016-06-15,BC0280982,finalized,public_sample
+wwi:purchase_order:2068,wwi,2068,wwi:organization:supplier:4,wwi:contact:2,2016-05-27,2016-06-16,293092,finalized,public_sample
+wwi:purchase_order:2069,wwi,2069,wwi:organization:supplier:7,wwi:contact:2,2016-05-27,2016-06-16,BC0280982,finalized,public_sample
+wwi:purchase_order:2070,wwi,2070,wwi:organization:supplier:4,wwi:contact:2,2016-05-28,2016-06-04,293092,finalized,public_sample
+wwi:purchase_order:2071,wwi,2071,wwi:organization:supplier:4,wwi:contact:2,2016-05-30,2016-06-19,293092,finalized,public_sample
+wwi:purchase_order:2072,wwi,2072,wwi:organization:supplier:7,wwi:contact:2,2016-05-30,2016-06-19,BC0280982,finalized,public_sample
+wwi:purchase_order:2073,wwi,2073,wwi:organization:supplier:4,wwi:contact:2,2016-05-31,2016-06-20,293092,open,public_sample
+wwi:purchase_order:2074,wwi,2074,wwi:organization:supplier:7,wwi:contact:2,2016-05-31,2016-06-20,BC0280982,open,public_sample
