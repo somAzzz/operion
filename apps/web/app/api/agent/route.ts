@@ -1,4 +1,5 @@
 import { upstreamAuthorization } from "@/lib/upstream-auth";
+import { upstreamTraceHeaders } from "@/lib/trace-headers";
 
 const upstream = () =>
   process.env.OPERION_AGENT_URL ?? "http://127.0.0.1:8000/api/agent";
@@ -9,11 +10,11 @@ export async function POST(request: Request) {
   if (!authorization) return new Response("Authentication is required.", { status: 401 });
   const response = await fetch(upstream(), {
     method: "POST",
-    headers: {
+    headers: upstreamTraceHeaders({
       Authorization: authorization,
       Accept: "text/event-stream",
       "Content-Type": request.headers.get("content-type") ?? "application/json",
-    },
+    }),
     body: request.body,
     duplex: "half",
     signal: request.signal,

@@ -82,6 +82,8 @@ services:
       # No action service/worker in this read-only acceptance stack.
       OPERION_ACTION_URL: http://127.0.0.1:1/api
       NEXT_TELEMETRY_DISABLED: "1"
+      OPERION_OTEL_ENABLED: ${OPERION_OTEL_ENABLED:-0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
     networks: [frontend, backend]
     depends_on:
       agent:
@@ -123,6 +125,8 @@ services:
       OPERION_MAX_RUN_OUTPUT_TOKENS: "12000"
       OPERION_RUN_TIMEOUT_SECONDS: "90"
       PYDANTIC_AI_NO_BANNER: "1"
+      OPERION_OTEL_ENABLED: ${OPERION_OTEL_ENABLED:-0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
     volumes:
       - ../../var/gateway/policy:/run/policy:ro
       - ../../var/gateway/tls/ca.crt:/run/tls/ca.crt:ro
@@ -133,6 +137,20 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+    restart: unless-stopped
+
+  collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector:0.162.0
+    command: [--config=/etc/otelcol/config.yaml]
+    environment:
+      LANGFUSE_OTLP_ENDPOINT: ${LANGFUSE_OTLP_ENDPOINT:-}
+      LANGFUSE_AUTH: ${LANGFUSE_AUTH:-}
+    volumes:
+      - ../observability/${OPERION_OTEL_COLLECTOR_CONFIG:-collector-debug.yaml}:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318"
+    networks: [backend, telemetry-egress]
     restart: unless-stopped
 
   # Agent gets only a fixed model upstream, not general access to host services.
@@ -156,6 +174,7 @@ networks:
   sessions:
     internal: true
   model-egress:
+  telemetry-egress:
 
 volumes:
   keycloak-data:

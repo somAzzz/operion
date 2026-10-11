@@ -141,6 +141,8 @@ class ConversationStore:
                     conversation_id TEXT NOT NULL,
                     owner_id TEXT NOT NULL,
                     model_name TEXT NOT NULL,
+                    trace_id TEXT,
+                    span_id TEXT,
                     status TEXT NOT NULL,
                     tool_calls_json TEXT NOT NULL DEFAULT '[]',
                     input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -169,6 +171,12 @@ class ConversationStore:
                 BEGIN SELECT RAISE(ABORT, 'immutable access event'); END;
                 """
             )
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(agent_runs)")
+            }
+            for column in ("trace_id", "span_id"):
+                if column not in columns:
+                    connection.execute(f"ALTER TABLE agent_runs ADD COLUMN {column} TEXT")
 
     def record_access(
         self,
@@ -369,6 +377,9 @@ class ConversationStore:
         conversation_id: str,
         owner_id: str,
         model_name: str,
+        *,
+        trace_id: str | None = None,
+        span_id: str | None = None,
     ) -> None:
         try:
             with self._lock, self._connect() as connection:
@@ -376,10 +387,13 @@ class ConversationStore:
                     """
                     INSERT INTO agent_runs(
                         run_id, conversation_id, owner_id, model_name,
-                        status, started_at
-                    ) VALUES (?, ?, ?, ?, 'running', ?)
+                        trace_id, span_id, status, started_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?)
                     """,
-                    (run_id, conversation_id, owner_id, model_name, _now()),
+                    (
+                        run_id, conversation_id, owner_id, model_name,
+                        trace_id, span_id, _now(),
+                    ),
                 )
         except sqlite3.IntegrityError as error:
             raise RunReplayError("run_id was already used") from error

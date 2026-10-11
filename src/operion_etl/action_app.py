@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -26,6 +27,7 @@ from .enterprise_auth import (
     AuthorizationError,
     OIDCAuthenticator,
 )
+from .observability import configure_observability, instrument_fastapi
 
 
 class CancelRequest(StrictModel):
@@ -97,8 +99,16 @@ class ActionApplication:
         raise HTTPException(status_code=401, detail="invalid action credential")
 
 
-def create_action_app(application: ActionApplication) -> FastAPI:
-    app = FastAPI(title="Operion action control", version="0.3.0")
+def create_action_app(application: ActionApplication, telemetry_provider=None) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        if telemetry_provider is not None:
+            telemetry_provider.shutdown()
+
+    app = FastAPI(
+        title="Operion action control", version="0.3.0", lifespan=lifespan
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -229,6 +239,7 @@ def create_action_app(application: ActionApplication) -> FastAPI:
         )
         return {"scope": body.scope, "paused": body.paused}
 
+    instrument_fastapi(app, telemetry_provider)
     return app
 
 
@@ -285,7 +296,12 @@ def application_from_environment() -> ActionApplication:
 def main() -> None:
     host = os.environ.get("OPERION_ACTION_HOST", "127.0.0.1")
     port = int(os.environ.get("OPERION_ACTION_PORT", "8001"))
-    uvicorn.run(create_action_app(application_from_environment()), host=host, port=port)
+    provider = configure_observability("operion-action-api")
+    uvicorn.run(
+        create_action_app(application_from_environment(), provider),
+        host=host,
+        port=port,
+    )
 
 
 if __name__ == "__main__":

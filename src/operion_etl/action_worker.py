@@ -8,9 +8,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.context import Context
+
 from .action_models import ActionState
 from .action_store import ActionStore
 from .identity_readback import ERPNextReadClient
+from .observability import action_trace_links, configure_observability
 from .twenty import TwentyClient, read_env
 from .twenty_actions import (
     TwentyActionMismatch,
@@ -68,6 +72,20 @@ class ActionWorker:
         self.twenty_gateway = twenty_gateway
 
     def _preflight(self, action: dict[str, Any]) -> str | None:
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.preflight",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._preflight_untraced(action)
+            except Exception:
+                span.set_attribute("operion.action.result", "error")
+                raise
+            span.set_attribute("operion.action.result", "success")
+            return result
+
+    def _preflight_untraced(self, action: dict[str, Any]) -> str | None:
         error = self.policy.validate(action)
         if error or action["action_type"] == "stub.followup_task":
             return error
@@ -78,6 +96,20 @@ class ActionWorker:
         return "UNSUPPORTED_ACTION_TYPE"
 
     def _submit(self, action: dict[str, Any]) -> dict[str, Any]:
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.submit",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._submit_untraced(action)
+            except Exception:
+                span.set_attribute("operion.action.result", "error")
+                raise
+            span.set_attribute("operion.action.result", "success")
+            return result
+
+    def _submit_untraced(self, action: dict[str, Any]) -> dict[str, Any]:
         if action["action_type"] == "stub.followup_task":
             return self.store.stub_submit(action["action_id"], action["payload_hash"])
         if action["action_type"] == "twenty.followup_task" and self.twenty_gateway:
@@ -85,6 +117,20 @@ class ActionWorker:
         raise TwentyActionMismatch("UNSUPPORTED_ACTION_TYPE")
 
     def _reconcile_effects(self, action: dict[str, Any]) -> list[dict[str, Any]]:
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.readback",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._reconcile_effects_untraced(action)
+            except Exception:
+                span.set_attribute("operion.action.result", "error")
+                raise
+            span.set_attribute("operion.action.result", "success")
+            return result
+
+    def _reconcile_effects_untraced(self, action: dict[str, Any]) -> list[dict[str, Any]]:
         if action["action_type"] == "stub.followup_task":
             return self.store.stub_effects(action["action_id"])
         if action["action_type"] == "twenty.followup_task" and self.twenty_gateway:
@@ -118,6 +164,30 @@ class ActionWorker:
         if action is None:
             self.store.worker_heartbeat(self.worker_id, "idle", release_id=release_id)
             return {"status": "idle"}
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.execute",
+            context=Context(),
+            links=action_trace_links(action),
+            attributes={
+                "operion.action.id": action["action_id"],
+                "operion.action.type": action["action_type"],
+                "operion.action.attempt_id": action["attempt_id"],
+            },
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._execute_claimed(action, fault)
+            except Exception:
+                span.set_attribute("operion.action.result", "error")
+                raise
+            span.set_attribute("operion.action.result", result["status"])
+            return result
+
+    def _execute_claimed(
+        self, action: dict[str, Any], fault: FaultPoint
+    ) -> dict[str, Any]:
+        release_id = os.environ.get("OPERION_RELEASE_ID") or None
         action_id = action["action_id"]
         attempt_id = action["attempt_id"]
         lease_token = action["lease_token"]
@@ -231,6 +301,25 @@ class ActionWorker:
             os.environ.get("OPERION_RELEASE_ID") or None,
         )
         action = self.store.mark_reconciling(action_id, self.worker_id)
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.reconcile",
+            context=Context(),
+            links=action_trace_links(action),
+            attributes={"operion.action.id": action_id},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._reconcile_claimed(action_id, action)
+            except Exception:
+                span.set_attribute("operion.action.result", "error")
+                raise
+            span.set_attribute("operion.action.result", result["status"])
+            return result
+
+    def _reconcile_claimed(
+        self, action_id: str, action: dict[str, Any]
+    ) -> dict[str, Any]:
         attempt_id = self._latest_attempt(action_id)
         lease_token = action["lease_token"]
         if not attempt_id or not lease_token:
@@ -365,11 +454,16 @@ def main() -> None:
         args.worker_id,
         twenty_gateway=twenty_gateway,
     )
-    if args.reconcile:
-        result = worker.reconcile(args.reconcile)
-    else:
-        result = worker.recover_expired() if args.recover else worker.execute_once()
-    print(json.dumps(result, default=str))
+    provider = configure_observability("operion-action-worker")
+    try:
+        if args.reconcile:
+            result = worker.reconcile(args.reconcile)
+        else:
+            result = worker.recover_expired() if args.recover else worker.execute_once()
+        print(json.dumps(result, default=str))
+    finally:
+        if provider is not None:
+            provider.shutdown()
 
 
 if __name__ == "__main__":

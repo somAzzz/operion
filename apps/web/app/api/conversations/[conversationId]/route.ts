@@ -1,4 +1,5 @@
 import { upstreamAuthorization } from "@/lib/upstream-auth";
+import { upstreamTraceHeaders } from "@/lib/trace-headers";
 
 export async function GET(
   _request: Request,
@@ -11,7 +12,7 @@ export async function GET(
   const base = process.env.OPERION_AGENT_URL ?? "http://127.0.0.1:8000/api/agent";
   const url = new URL(`conversations/${encodeURIComponent(conversationId)}`, base.replace(/agent$/, ""));
   const response = await fetch(url, {
-    headers: { Authorization: authorization },
+    headers: upstreamTraceHeaders({ Authorization: authorization }),
     cache: "no-store",
   });
   return new Response(response.body, {
@@ -43,10 +44,10 @@ export async function DELETE(
   );
   const response = await fetch(url, {
     method: "DELETE",
-    headers: {
+    headers: upstreamTraceHeaders({
       Authorization: authorization,
       "X-Operion-Intent": "delete-conversation",
-    },
+    }),
     cache: "no-store",
   });
   return new Response(response.body, {

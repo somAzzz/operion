@@ -1,5 +1,6 @@
 import "server-only";
 import { upstreamAuthorization } from "@/lib/upstream-auth";
+import { upstreamTraceHeaders } from "@/lib/trace-headers";
 
 const actionBase = () =>
   process.env.OPERION_ACTION_URL ?? "http://127.0.0.1:8001/api";
@@ -13,13 +14,14 @@ export async function actionServerFetch(path: string, init?: RequestInit) {
       headers: { "Content-Type": "application/json" },
     });
   }
+  const headers = upstreamTraceHeaders(init?.headers);
+  headers.set("Authorization", authorization);
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   return fetch(`${actionBase()}${path}`, {
     ...init,
-    headers: {
-      Authorization: authorization,
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers ?? {}),
-    },
+    headers,
     cache: "no-store",
   });
 }

@@ -8,6 +8,10 @@ from unittest.mock import patch
 
 import psycopg
 from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import ValidationError
 
 from operion_etl.action_app import (
@@ -152,6 +156,37 @@ class ActionControlTests(unittest.TestCase):
             None,
             self.approver,
         )
+
+    def test_worker_span_links_to_persisted_approval(self):
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        tracer = provider.get_tracer("operion.action")
+        try:
+            with patch.object(trace, "get_tracer", return_value=tracer):
+                proposal = self.store.propose(
+                    self.proposal("trace-link"), self.requester
+                )
+                approved = self.store.decide(
+                    proposal["action_id"], 1, "approve", "trace-link-decision",
+                    None, self.approver,
+                )
+                self.assertEqual("succeeded", ActionWorker(
+                    self.store, "trace-worker"
+                ).execute_once()["status"])
+            spans = exporter.get_finished_spans()
+            decision = next(s for s in spans if s.name == "operion.action.decide")
+            execution = next(s for s in spans if s.name == "operion.action.execute")
+            self.assertEqual(
+                f"{decision.context.trace_id:032x}", approved["approval_trace_id"]
+            )
+            self.assertEqual(
+                decision.context.span_id, execution.links[0].context.span_id
+            )
+            self.assertNotEqual(decision.context.trace_id, execution.context.trace_id)
+            self.assertEqual("succeeded", execution.attributes["operion.action.result"])
+        finally:
+            provider.shutdown()
 
     def test_w01_unapproved_and_forged_approval_do_not_execute(self):
         action = self.store.propose(self.proposal("w01"), self.requester)

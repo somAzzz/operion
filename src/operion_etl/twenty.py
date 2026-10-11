@@ -7,6 +7,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from opentelemetry import trace
+
 from .preimport import COMPANY_EXTERNAL_ID, normalize_domain, validate_files
 
 
@@ -39,6 +41,21 @@ class TwentyClient:
         )
 
     def _request(self, path: str, payload: dict | None = None) -> dict:
+        with trace.get_tracer("operion.upstream").start_as_current_span(
+            "operion.upstream.twenty",
+            attributes={"operion.upstream.method": "POST" if payload else "GET"},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._raw_request(path, payload)
+            except (OSError, RuntimeError):
+                span.set_attribute("operion.upstream.result", "unavailable")
+                raise
+            span.set_attribute("operion.upstream.result", "success")
+            return result
+
+    def _raw_request(self, path: str, payload: dict | None = None) -> dict:
         data = json.dumps(payload).encode() if payload is not None else None
         headers = {"Authorization": f"Bearer {self.api_key}"}
         if data is not None:

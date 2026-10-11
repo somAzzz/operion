@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import httpx2
 from openai import AsyncOpenAI
+from opentelemetry import trace
 from pydantic_ai import Agent, ModelSettings, RunContext, UsageLimits
 from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -221,21 +222,14 @@ def get_customer_overview(
         customer: Canonical ID, numeric WWI source ID, or exact display name.
         max_orders: Maximum recent orders to return, from 1 through 50.
     """
-    try:
-        result = ctx.deps.repository.customer_overview(
+    return _record_tool(
+        ctx,
+        "get_customer_overview",
+        {"customer": customer, "max_orders": max_orders},
+        lambda: ctx.deps.repository.customer_overview(
             customer, ctx.deps.scope, max_orders
-        )
-        payload = {"ok": True, "data": result}
-    except ReadToolError as error:
-        payload = _tool_error(error)
-    ctx.deps.tool_calls.append(
-        {
-            "name": "get_customer_overview",
-            "arguments": {"customer": customer, "max_orders": max_orders},
-            "result": payload,
-        }
+        ),
     )
-    return payload
 
 
 def get_customer_portfolio_summary(
@@ -248,19 +242,12 @@ def get_customer_portfolio_summary(
         customer: Constant ``*`` meaning every customer already authorized by the
             server. It cannot expand the server-defined access scope.
     """
-    try:
-        result = ctx.deps.repository.customer_portfolio_summary(ctx.deps.scope)
-        payload = {"ok": True, "data": result}
-    except ReadToolError as error:
-        payload = _tool_error(error)
-    ctx.deps.tool_calls.append(
-        {
-            "name": "get_customer_portfolio_summary",
-            "arguments": {"customer": customer},
-            "result": payload,
-        }
+    return _record_tool(
+        ctx,
+        "get_customer_portfolio_summary",
+        {"customer": customer},
+        lambda: ctx.deps.repository.customer_portfolio_summary(ctx.deps.scope),
     )
-    return payload
 
 
 def _record_tool(
@@ -269,14 +256,22 @@ def _record_tool(
     arguments: dict[str, Any],
     call: Any,
 ) -> dict[str, Any]:
-    try:
-        payload = {"ok": True, "data": call()}
-    except ReadToolError as error:
-        payload = _tool_error(error)
-    ctx.deps.tool_calls.append(
-        {"name": name, "arguments": arguments, "result": payload}
-    )
-    return payload
+    with trace.get_tracer("operion.domain").start_as_current_span(
+        "operion.domain.read",
+        attributes={"operion.tool.name": name},
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        try:
+            payload = {"ok": True, "data": call()}
+            span.set_attribute("operion.result", "success")
+        except ReadToolError as error:
+            payload = _tool_error(error)
+            span.set_attribute("operion.result", error.code)
+        ctx.deps.tool_calls.append(
+            {"name": name, "arguments": arguments, "result": payload}
+        )
+        return payload
 
 
 def get_customer_order_distribution(
@@ -692,6 +687,10 @@ def build_model(settings: AgentSettings) -> Model:
     http_client = httpx2.AsyncClient(
         event_hooks={"response": [sanitize_sglang_response]}
     )
+    if os.environ.get("OPERION_OTEL_ENABLED") == "1":
+        from opentelemetry.instrumentation.httpx import HTTPX2ClientInstrumentor
+
+        HTTPX2ClientInstrumentor.instrument_client(http_client)
     provider = OpenAIProvider(
         openai_client=AsyncOpenAI(
             base_url=settings.model_base_url,

@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 import psycopg
+from opentelemetry import trace
 from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -23,6 +24,7 @@ from .action_models import (
     RevisionRequest,
     validate_action_contract,
 )
+from .observability import current_span_ids
 
 POLICY_VERSION = "e3-action-policy-v1"
 
@@ -61,13 +63,17 @@ class ActionStore:
         return connection
 
     def migrate(self) -> None:
-        migration = (
-            files("operion_etl")
-            .joinpath("migrations/0001_action_control.sql")
-            .read_text(encoding="utf-8")
-        )
         with self._connect(privileged=True) as connection:
-            connection.execute(migration)
+            for name in (
+                "0001_action_control.sql",
+                "0002_action_trace_links.sql",
+            ):
+                migration = (
+                    files("operion_etl")
+                    .joinpath("migrations", name)
+                    .read_text(encoding="utf-8")
+                )
+                connection.execute(migration)
 
     def worker_heartbeat(
         self,
@@ -221,6 +227,24 @@ class ActionStore:
     def propose(
         self, proposal: ProposalRequest, principal: Principal
     ) -> dict[str, Any]:
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.propose",
+            attributes={"operion.action.type": proposal.action_type},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._propose(proposal, principal)
+            except Exception as error:
+                span.set_attribute("operion.action.result", type(error).__name__)
+                raise
+            span.set_attribute("operion.action.result", "success")
+            span.set_attribute("operion.action.id", result["action_id"])
+            return result
+
+    def _propose(
+        self, proposal: ProposalRequest, principal: Principal
+    ) -> dict[str, Any]:
         if proposal.target.company not in principal.companies:
             raise ActionDenied("target company is outside the authorized scope")
         if (
@@ -233,6 +257,7 @@ class ActionStore:
         payload = proposal.model_dump(mode="json")
         payload_hash = content_hash(payload)
         action_id = str(uuid4())
+        proposal_trace_id, proposal_span_id = current_span_ids()
         with self._connect() as connection:
             if proposal.compensates_action_id:
                 original = self._select_action(
@@ -247,8 +272,9 @@ class ActionStore:
                 """
                 INSERT INTO operion_actions(
                     action_id, tenant_id, owner_id, action_type, idempotency_key,
-                    payload_hash, state, expires_at, compensates_action_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, 'PENDING_APPROVAL', %s, %s)
+                    payload_hash, state, expires_at, compensates_action_id,
+                    proposal_trace_id, proposal_span_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, 'PENDING_APPROVAL', %s, %s, %s, %s)
                 ON CONFLICT (tenant_id, owner_id, action_type, idempotency_key)
                 DO NOTHING RETURNING action_id
                 """,
@@ -261,6 +287,8 @@ class ActionStore:
                     payload_hash,
                     proposal.expires_at,
                     proposal.compensates_action_id,
+                    proposal_trace_id,
+                    proposal_span_id,
                 ),
             ).fetchone()
             if inserted is None:
@@ -437,6 +465,31 @@ class ActionStore:
         reason: str | None,
         principal: Principal,
     ) -> dict[str, Any]:
+        with trace.get_tracer("operion.action").start_as_current_span(
+            "operion.action.decide",
+            attributes={"operion.action.id": action_id, "operion.decision": decision},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._decide(
+                    action_id, revision, decision, request_id, reason, principal
+                )
+            except Exception as error:
+                span.set_attribute("operion.action.result", type(error).__name__)
+                raise
+            span.set_attribute("operion.action.result", "success")
+            return result
+
+    def _decide(
+        self,
+        action_id: str,
+        revision: int,
+        decision: str,
+        request_id: str,
+        reason: str | None,
+        principal: Principal,
+    ) -> dict[str, Any]:
         expired = False
         with self._connect() as connection:
             current = self._select_action(connection, action_id, for_update=True)
@@ -520,6 +573,16 @@ class ActionStore:
                     """,
                     (next_state, action_id),
                 )
+                if decision == "approve":
+                    trace_id, span_id = current_span_ids()
+                    connection.execute(
+                        """
+                        UPDATE operion_actions
+                        SET approval_trace_id = %s, approval_span_id = %s
+                        WHERE action_id = %s
+                        """,
+                        (trace_id, span_id, action_id),
+                    )
                 self._append_event(
                     connection,
                     action_id,

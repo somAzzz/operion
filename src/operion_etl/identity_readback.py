@@ -12,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from opentelemetry import trace
+
 IDENTITY_FIELDS = [
     "entity_type",
     "source_system",
@@ -93,6 +95,24 @@ class JsonReadClient:
         self._open_url = open_url or urllib.request.urlopen
 
     def get_json(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        source = type(self).__name__.removesuffix("ReadClient").lower()
+        with trace.get_tracer("operion.upstream").start_as_current_span(
+            "operion.upstream.read",
+            attributes={"operion.upstream.system": source},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                result = self._get_json(path, params)
+            except IdentityReadbackError:
+                span.set_attribute("operion.upstream.result", "unavailable")
+                raise
+            span.set_attribute("operion.upstream.result", "success")
+            return result
+
+    def _get_json(
         self, path: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         query = urllib.parse.urlencode(params or {})
