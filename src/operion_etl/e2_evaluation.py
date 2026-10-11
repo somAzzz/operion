@@ -3,15 +3,33 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Any
+from uuid import uuid4
 
 from pydantic_ai import Agent
 
 from .agent_runtime import AgentDependencies, AgentSettings, create_operion_agent
+from .answer_claims import (
+    AMOUNT_PATTERN as _AMOUNT_PATTERN,
+)
+from .answer_claims import (
+    CANONICAL_ID_PATTERN as _CANONICAL_ID_PATTERN,
+)
+from .answer_claims import (
+    asserted_fulfillment_results,
+    asserted_statuses,
+)
+from .answer_claims import (
+    asserted_order_counts as _asserted_order_counts,
+)
+from .evaluation_observability import publish_langfuse_scores, synthetic_case_span
+from .observability import configure_observability, run_span_ids
 from .read_tools import AccessScope, CanonicalRepository, SourceUnavailableError
 
 
@@ -32,6 +50,8 @@ class EvaluationInputs:
     identity_map: Path
     output: Path
     observed_at: str
+    langfuse_experiment: bool = False
+    synthetic_data_confirmed: bool = False
 
 
 def _walk_keys(value: Any) -> set[str]:
@@ -42,10 +62,118 @@ def _walk_keys(value: Any) -> set[str]:
     return set()
 
 
+def _answer_facts(
+    case: dict[str, Any], payload: dict[str, Any], answer: str
+) -> list[str]:
+    failures: list[str] = []
+    data = payload.get("data", {})
+    expected = case.get("expected", {})
+    actual_count = next(
+        (
+            int(data[key])
+            for key in ("order_count", "sales_order_count")
+            if isinstance(data.get(key), int)
+        ),
+        None,
+    )
+    if actual_count is None and isinstance(data.get("completeness"), dict):
+        total = data["completeness"].get("total_count")
+        if isinstance(total, int):
+            actual_count = total
+    if actual_count is None and isinstance(data.get("orders"), list):
+        actual_count = len(data["orders"])
+    counts = [] if case.get("expected_result") else _asserted_order_counts(answer)
+    if counts:
+        if actual_count is None:
+            failures.append("unsupported_order_count_claim")
+        elif any(count != actual_count for count in counts):
+            failures.append("answer_order_count_mismatch")
+    elif expected and "order_count" in expected and actual_count is not None:
+        failures.append("answer_missing_order_count")
+
+    claimed_ids = set(_CANONICAL_ID_PATTERN.findall(answer))
+    if (
+        claimed_ids
+        and payload.get("ok")
+        and case.get("tool") != "check_operation_capability"
+    ):
+        evidence_ids = set(
+            _CANONICAL_ID_PATTERN.findall(json.dumps(data, ensure_ascii=False))
+        )
+        if claimed_ids - evidence_ids:
+            failures.append("unsupported_object_claim")
+
+    claimed_amounts = {
+        match.group(1) or match.group(2) or match.group(3)
+        for match in _AMOUNT_PATTERN.finditer(answer)
+    }
+    if claimed_amounts:
+        from decimal import Decimal, InvalidOperation
+
+        evidence_amounts = set()
+
+        def collect(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key in {"net_total_ex_tax", "net_amount", "unit_price_ex_tax"}:
+                        try:
+                            evidence_amounts.add(Decimal(str(child).replace(",", "")))
+                        except InvalidOperation:
+                            pass
+                    else:
+                        collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+
+        collect(data)
+        if any(
+            Decimal(amount.replace(",", "")) not in evidence_amounts
+            for amount in claimed_amounts
+        ):
+            failures.append("unsupported_amount_claim")
+
+    orders = data.get("orders", [])
+    orders = orders if isinstance(orders, list) else []
+    if isinstance(data.get("order"), dict):
+        orders = [*orders, data["order"]]
+    order_statuses = {
+        str(order[key]).casefold().replace(" ", "_")
+        for order in orders
+        if isinstance(order, dict)
+        for key in ("business_status", "source_status")
+        if order.get(key)
+    }
+    if asserted_statuses(answer) - order_statuses:
+        failures.append("unsupported_status_claim")
+
+    result = data.get("result")
+    if case.get("expected_result"):
+        claims = asserted_fulfillment_results(answer)
+        if not result and claims:
+            failures.append("unsupported_result_claim")
+        elif result and not claims:
+            failures.append("answer_missing_result")
+        elif result and (result not in claims or len(claims) > 1):
+            failures.append("answer_result_mismatch")
+    return failures
+
+
 def grade_case(
     case: dict[str, Any], calls: list[dict[str, Any]], answer: str
 ) -> list[str]:
     failures: list[str] = []
+    forbidden_tools = tuple(case.get("forbidden_tools", []))
+    if any(
+        call["name"].casefold().startswith(prefix.casefold())
+        for call in calls
+        for prefix in forbidden_tools
+    ):
+        failures.append("forbidden_tool_called")
+    if "allowed_tools" in case and any(
+        call["name"] not in case["allowed_tools"] for call in calls
+    ):
+        failures.append("unexpected_tool_call")
     expected_tool = case.get("tool")
     matching = (
         [call for call in calls if call["name"] == expected_tool]
@@ -55,12 +183,19 @@ def grade_case(
     if case.get("expected_tool_call", "not-set") is None:
         if calls:
             failures.append("unexpected_tool_call")
-        return failures
+        return list(dict.fromkeys(failures))
     tool_is_optional = bool(case.get("tool_optional", False))
     if expected_tool and not matching and not tool_is_optional:
         return ["expected_tool_not_called"]
 
     payload = matching[-1]["result"] if matching else {}
+    if expected_arguments := case.get("expected_arguments"):
+        actual_arguments = matching[-1].get("arguments", {}) if matching else {}
+        if any(
+            actual_arguments.get(key) != value
+            for key, value in expected_arguments.items()
+        ):
+            failures.append("wrong_tool_arguments")
     if expected_error := case.get("expected_error"):
         if payload.get("error", {}).get("code") != expected_error:
             failures.append("wrong_error")
@@ -69,7 +204,9 @@ def grade_case(
         customer = data.get("customer", {})
         if customer.get("canonical_id") != expected.get("customer_id"):
             failures.append("wrong_customer")
-        if len(data.get("orders", [])) != expected.get("order_count"):
+        if data.get("order_count", len(data.get("orders", []))) != expected.get(
+            "order_count"
+        ):
             failures.append("wrong_order_count")
         if expected.get("has_twenty_id") and not customer.get("twenty_id"):
             failures.append("missing_twenty_id")
@@ -101,6 +238,8 @@ def grade_case(
             failures.append("forbidden_claim")
     if not answer.strip():
         failures.append("empty_answer")
+    elif matching:
+        failures.extend(_answer_facts(case, payload, answer))
     return failures
 
 
@@ -119,6 +258,10 @@ def _repository(inputs: EvaluationInputs, case: dict[str, Any]) -> Any:
 
 
 async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[str, Any]:
+    if inputs.langfuse_experiment and not inputs.synthetic_data_confirmed:
+        raise ValueError("Langfuse experiment export requires confirmed synthetic data")
+    if inputs.langfuse_experiment and os.environ.get("OPERION_OTEL_ENABLED") != "1":
+        raise ValueError("Langfuse experiment export requires OPERION_OTEL_ENABLED=1")
     definition = json.loads(inputs.cases.read_text(encoding="utf-8"))
     scope_definition = definition["default_scope"]
     scope = AccessScope(
@@ -127,6 +270,8 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
     )
     agent: Agent[AgentDependencies, str] = create_operion_agent(settings)
     runs: list[dict[str, Any]] = []
+    score_records: list[dict[str, Any]] = []
+    experiment_id = uuid4().hex if inputs.langfuse_experiment else None
     started_at = datetime.now(UTC)
     for repeat in range(1, definition["repeat_count"] + 1):
         for case in definition["cases"]:
@@ -135,41 +280,87 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
                 scope=scope,
                 user_id="e2-evaluator",
             )
-            started = monotonic()
-            error: str | None = None
-            answer = ""
-            try:
-                result = await agent.run(
+            expected = {
+                key: value
+                for key, value in case.items()
+                if key.startswith("expected") or key == "required_source"
+            }
+            observation = (
+                synthetic_case_span(
+                    experiment_id,
+                    definition["version"],
+                    case["id"],
+                    repeat,
                     case["question"],
-                    deps=deps,
-                    usage_limits=settings.usage_limits(),
+                    expected,
                 )
-                answer = result.output
-                usage = {
-                    "input_tokens": result.usage.input_tokens,
-                    "output_tokens": result.usage.output_tokens,
-                    "requests": result.usage.requests,
-                    "tool_calls": result.usage.tool_calls,
-                }
-            except Exception as exception:  # evaluator must preserve failed evidence
-                error = f"{type(exception).__name__}: {exception}"
-                usage = {}
-            failures = grade_case(case, deps.tool_calls, answer)
-            if error:
-                failures.append("agent_run_error")
-            runs.append(
-                {
-                    "case_id": case["id"],
-                    "repeat": repeat,
-                    "passed": not failures,
-                    "failures": failures,
-                    "duration_seconds": round(monotonic() - started, 3),
-                    "answer": answer,
-                    "tool_calls": deps.tool_calls,
-                    "usage": usage,
-                    **({"error": error} if error else {}),
-                }
+                if experiment_id is not None
+                else nullcontext(None)
             )
+            started = monotonic()
+            with observation as eval_span:
+                error: str | None = None
+                answer = ""
+                try:
+                    result = await agent.run(
+                        case["question"],
+                        deps=deps,
+                        usage_limits=settings.usage_limits(),
+                    )
+                    answer = result.output
+                    usage = {
+                        "input_tokens": result.usage.input_tokens,
+                        "output_tokens": result.usage.output_tokens,
+                        "requests": result.usage.requests,
+                        "tool_calls": result.usage.tool_calls,
+                    }
+                except Exception as exception:  # preserve local failed evidence
+                    error = f"{type(exception).__name__}: {exception}"
+                    usage = {}
+                failures = grade_case(case, deps.tool_calls, answer)
+                if error:
+                    failures.append("agent_run_error")
+                trace_id, span_id = (
+                    run_span_ids(eval_span) if eval_span is not None else (None, None)
+                )
+                if eval_span is not None:
+                    eval_span.set_attribute("operion.eval.passed", not failures)
+                    eval_span.set_attribute(
+                        "langfuse.observation.output",
+                        json.dumps(
+                            {"answer": answer, "failures": failures},
+                            ensure_ascii=False,
+                        ),
+                    )
+                    score_records.append(
+                        {
+                            "experiment_id": experiment_id,
+                            "case_id": case["id"],
+                            "repeat": repeat,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "passed": not failures,
+                            "failures": failures,
+                        }
+                    )
+                runs.append(
+                    {
+                        "case_id": case["id"],
+                        "repeat": repeat,
+                        "passed": not failures,
+                        "failures": failures,
+                        "duration_seconds": round(monotonic() - started, 3),
+                        "answer": answer,
+                        "tool_calls": deps.tool_calls,
+                        "usage": usage,
+                        **(
+                            {"trace_id": trace_id, "span_id": span_id}
+                            if trace_id and span_id
+                            else {}
+                        ),
+                        **({"error": error} if error else {}),
+                    }
+                )
     case_summary = {
         case["id"]: {
             "passed": all(
@@ -179,8 +370,51 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
         }
         for case in definition["cases"]
     }
+    failure_categories = {
+        "tool_selection": {"unexpected_tool_call", "expected_tool_not_called"},
+        "parameters": {"wrong_tool_arguments"},
+        "facts": {
+            "wrong_customer",
+            "wrong_order_count",
+            "wrong_result",
+            "answer_order_count_mismatch",
+            "answer_result_mismatch",
+            "unsupported_order_count_claim",
+            "unsupported_amount_claim",
+            "unsupported_object_claim",
+            "unsupported_status_claim",
+            "unsupported_result_claim",
+        },
+        "evidence": {
+            "missing_required_source",
+            "missing_required_gap",
+            "wrong_missing_fields",
+            "missing_twenty_id",
+            "missing_erpnext_id",
+        },
+        "permissions": {
+            "wrong_error",
+            "forbidden_field_exposed",
+            "forbidden_claim",
+            "wrong_candidate_count",
+        },
+        "task_completion": {
+            "empty_answer",
+            "agent_run_error",
+            "answer_missing_order_count",
+            "answer_missing_result",
+        },
+    }
+    metrics = {
+        category: {
+            "passed_runs": sum(not (set(run["failures"]) & codes) for run in runs),
+            "run_count": len(runs),
+        }
+        for category, codes in failure_categories.items()
+    }
     report = {
-        "report_version": "operion-e2-agent-evaluation-v1",
+        "report_version": "operion-e2-agent-evaluation-v2",
+        "metrics": metrics,
         "status": "passed" if all(run["passed"] for run in runs) else "failed",
         "started_at": started_at.isoformat(),
         "completed_at": datetime.now(UTC).isoformat(),
@@ -193,9 +427,23 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
         "passed_runs": sum(run["passed"] for run in runs),
         "cases": case_summary,
         "runs": runs,
+        **({"langfuse_experiment_id": experiment_id} if experiment_id else {}),
     }
     inputs.output.parent.mkdir(parents=True, exist_ok=True)
     inputs.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    if score_records:
+        try:
+            publish_langfuse_scores(score_records)
+        except RuntimeError:
+            report["langfuse_score_export"] = "failed"
+            inputs.output.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False) + "\n"
+            )
+            raise
+        report["langfuse_score_export"] = "submitted"
+        inputs.output.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False) + "\n"
+        )
     return report
 
 
@@ -210,19 +458,28 @@ def main() -> None:
     parser.add_argument("--identity-map", type=Path, required=True)
     parser.add_argument("--observed-at", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--langfuse-experiment", action="store_true")
+    parser.add_argument("--synthetic-data-confirmed", action="store_true")
     args = parser.parse_args()
-    report = asyncio.run(
-        evaluate(
-            EvaluationInputs(
-                cases=args.cases,
-                canonical_directory=args.canonical_directory,
-                identity_map=args.identity_map,
-                output=args.output,
-                observed_at=args.observed_at,
-            ),
-            AgentSettings.from_environment(),
+    provider = configure_observability("operion-evaluation", agent=True)
+    try:
+        report = asyncio.run(
+            evaluate(
+                EvaluationInputs(
+                    cases=args.cases,
+                    canonical_directory=args.canonical_directory,
+                    identity_map=args.identity_map,
+                    output=args.output,
+                    observed_at=args.observed_at,
+                    langfuse_experiment=args.langfuse_experiment,
+                    synthetic_data_confirmed=args.synthetic_data_confirmed,
+                ),
+                AgentSettings.from_environment(),
+            )
         )
-    )
+    finally:
+        if provider is not None:
+            provider.shutdown()
     print(
         json.dumps({key: report[key] for key in ("status", "run_count", "passed_runs")})
     )
