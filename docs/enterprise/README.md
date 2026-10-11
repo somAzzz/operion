@@ -6,6 +6,12 @@
 
 ## 阅读顺序
 
+面向个人项目与面试的完整评估见 [系统评估与发展规划](system-assessment-and-roadmap.md)（2026-10-07）：包含当前代码复核、干净检出问题、ERP/CRM 功能差距、面试交付和分阶段工作量；I01–I13 状态仍由总体改进计划统一维护。
+
+开发者调试与测试入口设计见 [Developer observability and testing](developer-observability-and-testing.md)：统一链路证据、guardrails、golden cases、MCP 传输测试及当前可用命令；基础 `scripts/verify.sh` 已落地，完整分层 runner 仍是提案。
+
+OpenTelemetry 和 Langfuse 的实际接入、环境配置见 [运行手册](opentelemetry-langfuse-runbook.md)，分步结果见[验收记录](opentelemetry-langfuse-acceptance.md)。 运行时事实门禁、真实 WWI 快照及在线 ERPNext/Twenty 验收见 [Guardrails 与 Langfuse 实施及验收](guardrails-langfuse-implementation.md)。
+
 1. [企业运行总方案](operating-plan.md)：业务范围、架构、安全、执行可靠性和日常运营。
 2. [阶段计划与验收规范](delivery-plan.md)：依赖、子目标、证据格式和总体放行条件。
 3. [assistant-ui 前端方案](frontend-plan.md)：对话、审批和动作状态界面的技术选择与信任边界。
