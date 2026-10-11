@@ -433,6 +433,8 @@ class InterviewWwiQueryTests(unittest.TestCase):
             supplier_repository.supplier_overview(
                 "wwi:organization:supplier:7", self.scope
             )
+        with self.assertRaises(SourceUnavailableError):
+            supplier_repository.search_contacts("Elias", self.scope)
         customer_repository = LiveReadRepository(
             CANONICAL,
             identity_map=IDENTITY,
@@ -443,6 +445,8 @@ class InterviewWwiQueryTests(unittest.TestCase):
             customer_repository.customer_overview(
                 "wwi:organization:customer:65", self.scope
             )
+        with self.assertRaises(SourceUnavailableError):
+            customer_repository.search_contacts("Hanuman", self.scope)
 
     def test_sales_order_breakdown_reconciles_with_returned_page(self):
         result = self.repository.list_sales_orders(self.scope, limit=50)

@@ -8,7 +8,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from pathlib import Path
+from threading import RLock
 from typing import Any, ClassVar, Literal
 
 from .identity_readback import ERPNextReadClient, TwentyReadClient
@@ -1450,6 +1452,10 @@ class CanonicalRepository:
         return self._get_order(order_id, scope, "purchase")
 
     def fulfillment_case(self, case_id: str) -> dict[str, Any]:
+        if self.data_mode != "snapshot":
+            raise InvalidBusinessInputError(
+                "frozen fulfillment cases are available only in snapshot demo mode"
+            )
         matches = [
             row
             for row in self.data["fulfillment_scenarios"]
@@ -1463,6 +1469,15 @@ class CanonicalRepository:
             source_stale=self.source_stale_by_system["erpnext"],
             source_observed_at={"erpnext": self.source_observed_at["erpnext"]},
         )
+
+
+def _serialized_live_read(method: Any) -> Any:
+    @wraps(method)
+    def wrapped(self: LiveReadRepository, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        with self._read_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapped
 
 
 class LiveReadRepository(CanonicalRepository):
@@ -1490,8 +1505,29 @@ class LiveReadRepository(CanonicalRepository):
         )
         self.twenty = twenty
         self.erpnext = erpnext
+        self._read_lock = RLock()
         self._canonical_snapshot = deepcopy(self.data)
         self._twenty_people_by_key: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _unique_live_keys(
+        records: list[dict[str, Any]], field: str
+    ) -> dict[str, dict[str, Any]]:
+        indexed: dict[str, dict[str, Any]] = {}
+        for record in records:
+            key = str(record.get(field) or "")
+            if key:
+                if key in indexed:
+                    raise SourceUnavailableError("duplicate live source key")
+                indexed[key] = record
+        return indexed
+
+    def _verified_target(self, system: str, canonical_id: str, live_id: Any) -> str:
+        target = str(live_id or "")
+        previous = self.target_ids.get((system, canonical_id))
+        if not target or (previous and previous != target):
+            raise SourceUnavailableError("live object identity could not be verified")
+        return target
 
     def _mark_observed(self, source: str) -> None:
         observed = datetime.now(UTC)
@@ -1509,37 +1545,67 @@ class LiveReadRepository(CanonicalRepository):
             3,
         )
 
-    def _refresh_twenty(self) -> None:
+    def _refresh_twenty(self, scope: AccessScope) -> None:
         try:
             companies = self.twenty.records("companies")
             people = self.twenty.records("people")
         except Exception as error:
             raise SourceUnavailableError("Twenty live source is unavailable") from error
-        company_by_key = {str(row.get("wwiExternalId") or ""): row for row in companies}
-        person_by_key = {str(row.get("wwiExternalId") or ""): row for row in people}
+        company_by_key = self._unique_live_keys(companies, "wwiExternalId")
+        person_by_key = self._unique_live_keys(people, "wwiExternalId")
         self._twenty_people_by_key = person_by_key
+        existing_organizations = {
+            row["canonical_id"]: row
+            for row in self.data["organizations"]
+            if row["roles"] == "supplier"
+        }
+        existing_contacts = {
+            row["canonical_id"]: row
+            for row in self.data["contacts"]
+            if ":supplier:" in row["company_canonical_id"]
+        }
         organizations: list[dict[str, str]] = []
         for base in self._canonical_snapshot["organizations"]:
             if base["roles"] != "customer":
-                organizations.append(dict(base))
+                if scope.allows_supplier(base["canonical_id"]):
+                    organizations.append(
+                        dict(existing_organizations.get(base["canonical_id"], base))
+                    )
+                continue
+            if not scope.allows_customer(base["canonical_id"]):
                 continue
             live = company_by_key.get(base["canonical_id"])
             if not live:
                 continue
+            target_id = self._verified_target(
+                "twenty", base["canonical_id"], live.get("id")
+            )
             row = dict(base)
             row["name"] = str(live.get("name") or base["name"])
             row["source_system"] = "twenty"
             organizations.append(row)
-            if live.get("id"):
-                self.target_ids[("twenty", base["canonical_id"])] = str(live["id"])
+            self.target_ids[("twenty", base["canonical_id"])] = target_id
         contacts: list[dict[str, str]] = []
         for base in self._canonical_snapshot["contacts"]:
             if ":supplier:" in base["company_canonical_id"]:
-                contacts.append(dict(base))
+                if scope.allows_supplier(base["company_canonical_id"]):
+                    contacts.append(
+                        dict(existing_contacts.get(base["canonical_id"], base))
+                    )
+                continue
+            if not scope.allows_customer(base["company_canonical_id"]):
                 continue
             live = person_by_key.get(base["canonical_id"])
             if not live:
                 continue
+            company = company_by_key.get(base["company_canonical_id"])
+            if not company or live.get("companyId") != company.get("id"):
+                raise SourceUnavailableError(
+                    "Twenty contact relation could not be verified"
+                )
+            target_id = self._verified_target(
+                "twenty", base["canonical_id"], live.get("id")
+            )
             row = dict(base)
             name = live.get("name") or {}
             full_name = " ".join(
@@ -1548,13 +1614,33 @@ class LiveReadRepository(CanonicalRepository):
             row["full_name"] = full_name or base["full_name"]
             row["source_system"] = "twenty"
             contacts.append(row)
-            if live.get("id"):
-                self.target_ids[("twenty", base["canonical_id"])] = str(live["id"])
+            self.target_ids[("twenty", base["canonical_id"])] = target_id
         self.data["organizations"] = organizations
         self.data["contacts"] = contacts
         self._mark_observed("twenty")
 
-    def _refresh_erpnext(self) -> None:
+    @staticmethod
+    def _call_scope(args: tuple[Any, ...], kwargs: dict[str, Any]) -> AccessScope:
+        scope = next(
+            (value for value in args if isinstance(value, AccessScope)),
+            kwargs.get("scope"),
+        )
+        if not isinstance(scope, AccessScope):
+            raise InvalidBusinessInputError("scope is required")
+        return scope
+
+    def _erp_detail(self, doctype: str, target_id: str) -> dict[str, Any]:
+        try:
+            detail = self.erpnext.record(doctype, target_id)
+        except Exception as error:
+            raise SourceUnavailableError(
+                "ERPNext live detail is unavailable"
+            ) from error
+        if not isinstance(detail, dict):
+            raise SourceUnavailableError("ERPNext live detail is invalid")
+        return detail
+
+    def _refresh_erpnext(self, scope: AccessScope) -> None:
         try:
             customers = self.erpnext.records(
                 "Customer", ["name", "customer_name", "custom_operion_source_key"]
@@ -1574,6 +1660,7 @@ class LiveReadRepository(CanonicalRepository):
                 [
                     "name",
                     "customer",
+                    "company",
                     "transaction_date",
                     "delivery_date",
                     "status",
@@ -1589,6 +1676,7 @@ class LiveReadRepository(CanonicalRepository):
                 [
                     "name",
                     "supplier",
+                    "company",
                     "transaction_date",
                     "schedule_date",
                     "status",
@@ -1603,18 +1691,41 @@ class LiveReadRepository(CanonicalRepository):
                 "ERPNext live source is unavailable"
             ) from error
 
-        customer_by_key = {
-            str(row.get("custom_operion_source_key") or ""): row for row in customers
+        self._unique_live_keys(sales, "custom_operion_source_key")
+        self._unique_live_keys(purchases, "custom_operion_source_key")
+        customer_by_key = self._unique_live_keys(customers, "custom_operion_source_key")
+        supplier_by_key = self._unique_live_keys(suppliers, "custom_operion_sourcekey")
+        customer_by_target = {
+            str(row["name"]): key
+            for key, row in customer_by_key.items()
+            if row.get("name")
         }
-        supplier_by_key = {
-            str(row.get("custom_operion_sourcekey") or ""): row for row in suppliers
+        supplier_by_target = {
+            str(row["name"]): key
+            for key, row in supplier_by_key.items()
+            if row.get("name")
         }
+        if len(customer_by_target) != len(customer_by_key) or len(
+            supplier_by_target
+        ) != len(supplier_by_key):
+            raise SourceUnavailableError("live counterparty identity is ambiguous")
         live_organizations: list[dict[str, str]] = []
         for base in self._canonical_snapshot["organizations"]:
+            if base["roles"] == "customer" and not scope.allows_customer(
+                base["canonical_id"]
+            ):
+                continue
+            if base["roles"] == "supplier" and not scope.allows_supplier(
+                base["canonical_id"]
+            ):
+                continue
             source = customer_by_key if base["roles"] == "customer" else supplier_by_key
             live = source.get(base["canonical_id"])
             if not live:
                 continue
+            target_id = self._verified_target(
+                "erpnext", base["canonical_id"], live.get("name")
+            )
             row = dict(base)
             name_field = (
                 "customer_name" if base["roles"] == "customer" else "supplier_name"
@@ -1622,18 +1733,41 @@ class LiveReadRepository(CanonicalRepository):
             row["name"] = str(live.get(name_field) or base["name"])
             row["source_system"] = "erpnext"
             live_organizations.append(row)
-            if live.get("name"):
-                self.target_ids[("erpnext", base["canonical_id"])] = str(live["name"])
+            self.target_ids[("erpnext", base["canonical_id"])] = target_id
         self.data["organizations"] = live_organizations
 
-        contact_by_key = {
-            str(row.get("custom_operion_source_key") or ""): row for row in contacts
-        }
+        contact_by_key = self._unique_live_keys(contacts, "custom_operion_source_key")
         live_contacts: list[dict[str, str]] = []
         for base in self._canonical_snapshot["contacts"]:
+            if ":supplier:" not in base["company_canonical_id"]:
+                continue  # Customer contact authority is Twenty.
+            if not scope.allows_supplier(base["company_canonical_id"]):
+                continue
             live = contact_by_key.get(base["canonical_id"])
             if not live:
                 continue
+            target_id = self._verified_target(
+                "erpnext", base["canonical_id"], live.get("name")
+            )
+            detail = self._erp_detail("Contact", target_id)
+            linked_target = (
+                supplier_by_key.get(base["company_canonical_id"]) or {}
+            ).get("name")
+            if (
+                str(detail.get("name") or target_id) != target_id
+                or str(detail.get("custom_operion_source_key") or "")
+                != base["canonical_id"]
+                or not linked_target
+                or not any(
+                    isinstance(link, dict)
+                    and link.get("link_doctype") == "Supplier"
+                    and link.get("link_name") == linked_target
+                    for link in detail.get("links") or []
+                )
+            ):
+                raise SourceUnavailableError(
+                    "ERPNext contact relation could not be verified"
+                )
             row = dict(base)
             full_name = " ".join(
                 str(live.get(field) or "") for field in ("first_name", "last_name")
@@ -1641,13 +1775,10 @@ class LiveReadRepository(CanonicalRepository):
             row["full_name"] = full_name or base["full_name"]
             row["source_system"] = "erpnext"
             live_contacts.append(row)
-            if live.get("name"):
-                self.target_ids[("erpnext", base["canonical_id"])] = str(live["name"])
+            self.target_ids[("erpnext", base["canonical_id"])] = target_id
         self.data["contacts"] = live_contacts
 
-        item_by_key = {
-            str(row.get("custom_operion_source_key") or ""): row for row in items
-        }
+        item_by_key = self._unique_live_keys(items, "custom_operion_source_key")
         target_product: dict[str, str] = {}
         live_products: list[dict[str, str]] = []
         for base in self._canonical_snapshot["products"]:
@@ -1680,6 +1811,48 @@ class LiveReadRepository(CanonicalRepository):
                 base = base_orders.get(canonical_id)
                 if not base:
                     continue
+                relation = "customer" if kind == "sales" else "supplier"
+                relation_field = (
+                    "customer_canonical_id"
+                    if kind == "sales"
+                    else "supplier_canonical_id"
+                )
+                allows = (
+                    scope.allows_customer if kind == "sales" else scope.allows_supplier
+                )
+                if not allows(base[relation_field]):
+                    continue
+                target_id = self._verified_target(
+                    "erpnext", canonical_id, live.get("name")
+                )
+                target_to_canonical = (
+                    customer_by_target if kind == "sales" else supplier_by_target
+                )
+                current_counterparty = target_to_canonical.get(
+                    str(live.get(relation) or "")
+                )
+                if (
+                    current_counterparty != base[relation_field]
+                    or str(live.get("company") or "") != scope.operating_company
+                ):
+                    raise SourceUnavailableError(
+                        "live order relation could not be verified"
+                    )
+                detail = self._erp_detail(
+                    "Sales Order" if kind == "sales" else "Purchase Order",
+                    target_id,
+                )
+                if (
+                    str(detail.get("name") or target_id) != target_id
+                    or str(detail.get("custom_operion_source_key") or "")
+                    != canonical_id
+                    or str(detail.get(relation) or "") != str(live.get(relation) or "")
+                    or str(detail.get("company") or "")
+                    != str(live.get("company") or "")
+                ):
+                    raise SourceUnavailableError(
+                        "live order detail conflicts with list"
+                    )
                 row = dict(base)
                 row["source_system"] = "erpnext"
                 row["order_date"] = str(
@@ -1695,12 +1868,7 @@ class LiveReadRepository(CanonicalRepository):
                 row["currency"] = str(live.get("currency") or "")
                 row["net_total_ex_tax"] = _text(live.get("net_total"))
                 headers.append(row)
-                target_id = str(live.get("name") or "")
-                if target_id:
-                    self.target_ids[("erpnext", canonical_id)] = target_id
-                detail = self.erpnext.record(
-                    "Sales Order" if kind == "sales" else "Purchase Order", target_id
-                )
+                self.target_ids[("erpnext", canonical_id)] = target_id
                 for position, item in enumerate(detail.get("items", []), 1):
                     line_key_field = (
                         "custom_operion_source_key_items"
@@ -1772,28 +1940,33 @@ class LiveReadRepository(CanonicalRepository):
         )
         self._mark_observed("erpnext")
 
+    @_serialized_live_read
     def search_customers(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_twenty()
+        self._refresh_twenty(self._call_scope(args, kwargs))
         return super().search_customers(*args, **kwargs)
 
+    @_serialized_live_read
     def customer_portfolio_summary(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
-        self._refresh_twenty()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
+        self._refresh_twenty(self._call_scope(args, kwargs))
         return super().customer_portfolio_summary(*args, **kwargs)
 
+    @_serialized_live_read
     def customer_order_distribution(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
-        self._refresh_twenty()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
+        self._refresh_twenty(self._call_scope(args, kwargs))
         return super().customer_order_distribution(*args, **kwargs)
 
+    @_serialized_live_read
     def get_organization_orders(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
-        self._refresh_twenty()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
+        self._refresh_twenty(self._call_scope(args, kwargs))
         return super().get_organization_orders(*args, **kwargs)
 
+    @_serialized_live_read
     def customer_overview(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
-        self._refresh_twenty()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
+        self._refresh_twenty(self._call_scope(args, kwargs))
         result = super().customer_overview(*args, **kwargs)
         company_id = result["customer"]["twenty_id"]
         for contact in result["contacts"]:
@@ -1817,8 +1990,9 @@ class LiveReadRepository(CanonicalRepository):
             contact["fields"] = self._communication_fields(contact, "twenty")
         return result
 
+    @_serialized_live_read
     def search_contacts(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         supplier_organizations = [
             row for row in self.data["organizations"] if row["roles"] == "supplier"
         ]
@@ -1828,7 +2002,7 @@ class LiveReadRepository(CanonicalRepository):
             for row in self.data["contacts"]
             if row["company_canonical_id"] in supplier_ids
         ]
-        self._refresh_twenty()
+        self._refresh_twenty(self._call_scope(args, kwargs))
         customer_organizations = [
             row for row in self.data["organizations"] if row["roles"] == "customer"
         ]
@@ -1843,12 +2017,14 @@ class LiveReadRepository(CanonicalRepository):
         self.data["contacts"] = customer_contacts + supplier_contacts
         return super().search_contacts(*args, **kwargs)
 
+    @_serialized_live_read
     def search_suppliers(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         return super().search_suppliers(*args, **kwargs)
 
+    @_serialized_live_read
     def supplier_overview(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         result = super().supplier_overview(*args, **kwargs)
         supplier_id = result["supplier"]["erpnext_id"]
         for contact in result["contacts"]:
@@ -1886,21 +2062,33 @@ class LiveReadRepository(CanonicalRepository):
             contact["fields"] = self._communication_fields(contact, "erpnext")
         return result
 
+    @_serialized_live_read
     def list_sales_orders(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         return super().list_sales_orders(*args, **kwargs)
 
+    @_serialized_live_read
     def list_purchase_orders(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         return super().list_purchase_orders(*args, **kwargs)
 
+    @_serialized_live_read
     def get_sales_order(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         return super().get_sales_order(*args, **kwargs)
 
+    @_serialized_live_read
     def get_purchase_order(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        self._refresh_erpnext()
+        self._refresh_erpnext(self._call_scope(args, kwargs))
         return super().get_purchase_order(*args, **kwargs)
+
+    @_serialized_live_read
+    def get_contact_by_name(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return super().get_contact_by_name(*args, **kwargs)
+
+    @_serialized_live_read
+    def get_customer_order_context(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return super().get_customer_order_context(*args, **kwargs)
 
 
 def evaluate_fulfillment(

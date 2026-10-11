@@ -148,17 +148,19 @@ def create_server(
         """Return one authorized purchase order and its item lines."""
         return repository.get_purchase_order(order_id, scope)
 
-    @server.tool(
-        name="check_fulfillment",
-        description=(
-            "Evaluate one frozen fulfillment case with deterministic quantity and "
-            "date rules. Has no side effects."
-        ),
-        annotations=read_only,
-        structured_output=True,
-    )
-    def check_fulfillment(case_id: str) -> dict[str, Any]:
-        return repository.fulfillment_case(case_id)
+    if repository.data_mode == "snapshot":
+
+        @server.tool(
+            name="check_fulfillment",
+            description=(
+                "Evaluate one snapshot demo fulfillment case with deterministic quantity and "
+                "date rules. Has no side effects."
+            ),
+            annotations=read_only,
+            structured_output=True,
+        )
+        def check_fulfillment(case_id: str) -> dict[str, Any]:
+            return repository.fulfillment_case(case_id)
 
     return server
 

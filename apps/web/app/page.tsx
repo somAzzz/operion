@@ -289,11 +289,11 @@ function FulfillmentResultCard({ args, result, status: toolStatus }: ToolRenderP
   }
   return (
     <section className={`result-card result-${status}`} aria-label="Fulfillment result evidence">
-      <div className="result-card__eyebrow"><PackageCheckIcon aria-hidden="true" />Fulfillment rule check</div>
+      <div className="result-card__eyebrow"><PackageCheckIcon aria-hidden="true" />Frozen demo fulfillment case</div>
       <h3>{String(data.case_id ?? args.case_id ?? "Case")} · {status.replaceAll("_", " ")}</h3>
       <p>{missing.length ? `Missing: ${missing.join(", ")}` : "Required evidence is present."}</p>
       <EvidenceRows data={data} />
-      <small>Deterministic rule result — not a delivery guarantee.</small>
+      <small>Frozen snapshot scenario — not a live delivery guarantee.</small>
     </section>
   );
 }
@@ -519,9 +519,9 @@ function ThreadWithSuggestions() {
         prompt: "检查履约场景 F01。",
       },
       {
-        title: "Propose follow-up",
-        label: "review the F03 shortfall",
-        prompt: "检查 F03，并为这个缺口提出一个两天后到期的内部跟进任务。",
+        title: "Follow-up capability",
+        label: "check whether a proposal is allowed",
+        prompt: "检查本会话是否允许提出内部跟进任务；若不允许，请说明限制。",
       },
     ]),
   });
@@ -550,11 +550,11 @@ export default function Home() {
           <div className="rail-status"><span className="status-dot" />Controlled actions</div>
           <dl>
             <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
-            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>10 reads + 1 proposal</dd></div>
+            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>Server-scoped reads</dd></div>
             <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
           </dl>
           <ConversationHistory />
-          <p className="rail-note">The Agent can save a proposal, but only a separate approval and deterministic worker can create one internal Task.</p>
+          <p className="rail-note">Follow-up proposals require a server-granted role. Creating an internal Task also requires separate approval and the deterministic worker.</p>
         </aside>
         <section className="chat-workspace" aria-label="Controlled business assistant">
           <header className="workspace-header">

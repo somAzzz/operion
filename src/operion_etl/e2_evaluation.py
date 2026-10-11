@@ -16,6 +16,8 @@ from .read_tools import AccessScope, CanonicalRepository, SourceUnavailableError
 
 
 class UnavailableRepository:
+    data_mode = "snapshot"
+
     def customer_overview(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         raise SourceUnavailableError("canonical source is unavailable")
 

@@ -32,7 +32,7 @@ project currently includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer, supplier, contact-search, sales-order, purchase-order,
-  portfolio, and fulfilment services exposed as fifteen read-only MCP tools;
+  portfolio, and fulfilment services exposed as fifteen snapshot-mode read-only MCP tools (fourteen in live mode, where frozen fulfilment cases are unavailable);
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and

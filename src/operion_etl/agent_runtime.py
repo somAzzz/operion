@@ -539,7 +539,7 @@ def get_purchase_order(
 def check_fulfillment(
     ctx: RunContext[AgentDependencies], case_id: str
 ) -> dict[str, Any]:
-    """Evaluate a frozen fulfillment case using deterministic inventory rules.
+    """Evaluate a frozen snapshot demo case using deterministic inventory rules.
 
     Args:
         case_id: Allowlisted fulfillment scenario identifier, such as F01.
@@ -730,7 +730,13 @@ def create_operion_agent(
         ]
     )
     filtered_tools = toolset.filtered(
-        lambda ctx, tool: tool.name in ctx.deps.allowed_tools
+        lambda ctx, tool: (
+            tool.name in ctx.deps.allowed_tools
+            and not (
+                tool.name == "check_fulfillment"
+                and ctx.deps.repository.data_mode == "live"
+            )
+        )
     )
     return Agent(
         model or build_model(settings),

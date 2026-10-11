@@ -8,6 +8,7 @@ from operion_etl.read_tools import (
     AccessScope,
     AmbiguousCustomerError,
     CanonicalRepository,
+    InvalidBusinessInputError,
     ScopeDeniedError,
     SourceUnavailableError,
     evaluate_fulfillment,
@@ -126,6 +127,8 @@ class ReadToolAcceptanceTests(unittest.TestCase):
         result = repository.customer_overview(self.customer_id, self.scope)
         self.assertNotIn("email", result["contacts"][0])
         self.assertNotIn("phone", result["contacts"][0])
+        with self.assertRaises(InvalidBusinessInputError):
+            repository.fulfillment_case("F01")
 
     def test_unclassified_contact_details_are_not_exposed(self):
         contact = next(
