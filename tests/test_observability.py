@@ -20,6 +20,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.instrumented import InstrumentationSettings
+from structured_helpers import output_delta
 
 from operion_etl.agent_app import AgentApplication, create_app
 from operion_etl.agent_runtime import AgentSettings, create_operion_agent
@@ -170,7 +171,7 @@ class ObservabilityTests(unittest.TestCase):
                 settings = AgentSettings(run_timeout_seconds=5)
 
                 async def respond(messages, info):
-                    yield "Answer without raw prompt"
+                    yield output_delta(messages)
 
                 agent = create_operion_agent(
                     settings, model=FunctionModel(stream_function=respond)
@@ -213,7 +214,7 @@ class ObservabilityTests(unittest.TestCase):
                         },
                     )
                 self.assertEqual(200, response.status_code)
-                self.assertIn("Answer without raw prompt", response.text)
+                self.assertIn("Please specify", response.text)
                 spans = exporter.get_finished_spans()
                 run = next(span for span in spans if span.name == "operion.agent.run")
                 self.assertEqual("succeeded", run.attributes["operion.run.status"])

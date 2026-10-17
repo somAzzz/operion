@@ -4,8 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from structured_helpers import output_response
 
 from operion_etl.agent_runtime import (
     AGENT_INSTRUCTIONS,
@@ -54,7 +55,7 @@ class AgentRuntimeTests(unittest.TestCase):
                 return ModelResponse(
                     parts=[ToolCallPart(name, arguments, f"call-{count}")]
                 )
-            return ModelResponse(parts=[TextPart("Done.")])
+            return output_response(messages)
 
         settings = AgentSettings(max_model_requests=5, max_tool_calls=4)
         agent = create_operion_agent(settings, model=FunctionModel(model_function))
@@ -88,7 +89,7 @@ class AgentRuntimeTests(unittest.TestCase):
                         )
                     ]
                 )
-            return ModelResponse(parts=[TextPart("One authorized customer.")])
+            return output_response(messages)
 
         settings = AgentSettings()
         agent = create_operion_agent(settings, model=FunctionModel(model_function))
@@ -101,7 +102,8 @@ class AgentRuntimeTests(unittest.TestCase):
 
         result = agent.run_sync("how many customers do we have", deps=deps)
 
-        self.assertEqual("One authorized customer.", result.output)
+        self.assertIn("Customers (current authorized", result.output)
+        self.assertIn("**1**", result.output)
         self.assertEqual("get_customer_portfolio_summary", deps.tool_calls[0]["name"])
         self.assertEqual(1, deps.tool_calls[0]["result"]["data"]["customer_count"])
 
@@ -110,7 +112,7 @@ class AgentRuntimeTests(unittest.TestCase):
 
         def model_function(messages, info: AgentInfo):
             observed_tools.append(sorted(tool.name for tool in info.function_tools))
-            return ModelResponse(parts=[TextPart("done")])
+            return output_response(messages)
 
         settings = AgentSettings()
         agent = create_operion_agent(settings, model=FunctionModel(model_function))
@@ -122,7 +124,7 @@ class AgentRuntimeTests(unittest.TestCase):
             allowed_tools=frozenset({"get_customer_overview"}),
         )
         result = agent.run_sync("overview", deps=deps)
-        self.assertEqual("done", result.output)
+        self.assertIn("Please specify", result.output)
         self.assertEqual([["get_customer_overview"]], observed_tools)
 
     def test_settings_define_bounded_model_and_tool_usage(self):
@@ -202,7 +204,7 @@ class AgentRuntimeTests(unittest.TestCase):
                         )
                     ]
                 )
-            return ModelResponse(parts=[TextPart("Proposal saved for approval.")])
+            return output_response(messages)
 
         service = FakeProposalService()
         settings = AgentSettings()
@@ -217,7 +219,8 @@ class AgentRuntimeTests(unittest.TestCase):
             run_id="run-1",
         )
         result = agent.run_sync("propose", deps=deps)
-        self.assertEqual("Proposal saved for approval.", result.output)
+        self.assertIn("PENDING", result.output)
+        self.assertIn("action-1", result.output)
         self.assertEqual(1, len(service.calls))
         self.assertEqual(
             "agent:" + hashlib.sha256(b"conversation-1\0run-1").hexdigest(),

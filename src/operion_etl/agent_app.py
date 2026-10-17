@@ -9,6 +9,7 @@ import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +34,15 @@ from pydantic import ValidationError
 from pydantic_ai import Agent, CancellationToken
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.exceptions import RunCancelled
-from pydantic_ai.messages import ModelRequest, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    RetryPromptPart,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
 from .action_store import ActionStore
@@ -65,7 +74,7 @@ from .output_guardrails import (
     GuardrailDecision,
     GuardrailVerdict,
     record_guardrail,
-    verify_business_answer,
+    verify_answer_plan,
 )
 from .read_tools import AccessScope, CanonicalRepository
 from .session_store import (
@@ -102,6 +111,31 @@ def _public_run_error(event: RunErrorEvent) -> RunErrorEvent:
         ),
         usage=event.usage,
     )
+
+
+def _verified_messages(
+    messages: list[Any], answer: str, manifest: dict[str, Any]
+) -> list[Any]:
+    """Persist only server-rendered prose; output plans are internal protocol."""
+    clean = []
+    for message in messages:
+        parts = [
+            part
+            for part in message.parts
+            if not (
+                isinstance(part, TextPart)
+                or isinstance(part, (ToolCallPart, ToolReturnPart, RetryPromptPart))
+                and part.tool_name == "present_answer"
+            )
+        ]
+        if parts:
+            clean.append(replace(message, parts=parts))
+    clean.append(
+        ModelResponse(
+            parts=[TextPart(answer)], metadata={"operion.answer_evidence": manifest}
+        )
+    )
+    return clean
 
 
 async def _ordered_tool_events(source: AsyncIterator[Any]) -> AsyncIterator[Any]:
@@ -403,24 +437,14 @@ class AgentApplication:
         )
         completed = False
         run_status = "running"
-        held_text_events: list[Any] = []
-        held_text_parts: list[str] = []
-        held_text_size = 0
-        text_overflow = False
+        verified_text = ""
+        internal_output_calls: set[str] = set()
         output_decision: GuardrailDecision | None = None
 
         async def on_complete(result: AgentRunResult[Any]) -> None:
-            nonlocal completed, run_status, output_decision
+            nonlocal completed, run_status, output_decision, verified_text
             completed = True
-            output_decision = (
-                GuardrailDecision(
-                    "output_facts", GuardrailVerdict.UNKNOWN, "OUTPUT_TOO_LARGE"
-                )
-                if text_overflow
-                else verify_business_answer(
-                    deps.tool_calls, "".join(held_text_parts) or result.output
-                )
-            )
+            output_decision = verify_answer_plan(deps.evidence, deps.answer_plan)
             record_guardrail(output_decision)
             run_span.set_attribute(
                 "operion.guardrail.output.verdict", output_decision.verdict.value
@@ -437,15 +461,26 @@ class AgentApplication:
                     error_code=output_decision.reason_code,
                 )
                 return
+            verified_text = deps.evidence.render(deps.answer_plan)
+            manifest = deps.evidence.selection_manifest(deps.answer_plan)
+            run_span.set_attribute(
+                "langfuse.observation.metadata.answer_plan",
+                json.dumps(deps.answer_plan.model_dump(mode="json")),
+            )
             if content_capture_enabled():
-                run_span.set_attribute(
-                    "langfuse.observation.output", str(result.output)
-                )
+                run_span.set_attribute("langfuse.observation.output", verified_text)
             run_status = "succeeded"
             self.store.save_history(
                 conversation_id,
                 owner_id,
-                [*history[:history_start], *result.all_messages()],
+                [
+                    *history,
+                    *_verified_messages(
+                        result.all_messages()[len(history) - history_start :],
+                        verified_text,
+                        manifest,
+                    ),
+                ],
                 context_fingerprint=context_fingerprint,
                 context_start=history_start,
             )
@@ -472,7 +507,7 @@ class AgentApplication:
             )
 
         async def events() -> AsyncIterator[Any]:
-            nonlocal completed, run_status, held_text_size, text_overflow
+            nonlocal completed, run_status
             first_event = True
             with (
                 agent_run_labels(conversation_id, run_id),
@@ -502,6 +537,19 @@ class AgentApplication:
                                     "operion.run.first_sse_ms",
                                     round((time.monotonic() - run_started) * 1000, 3),
                                 )
+                            if (
+                                isinstance(event, ToolCallStartEvent)
+                                and event.tool_call_name == "present_answer"
+                            ):
+                                internal_output_calls.add(event.tool_call_id)
+                            if (
+                                getattr(event, "tool_call_id", None)
+                                in internal_output_calls
+                            ):
+                                continue
+                            # Discard all model prose, including pre-tool commentary and
+                            # intermediate retries. Only the final server renderer can
+                            # publish business statements.
                             if isinstance(
                                 event,
                                 (
@@ -510,42 +558,48 @@ class AgentApplication:
                                     TextMessageEndEvent,
                                 ),
                             ):
-                                if isinstance(event, TextMessageContentEvent):
-                                    held_text_size += len(event.delta)
-                                    if held_text_size > 256_000:
-                                        text_overflow = True
-                                    if not text_overflow:
-                                        held_text_parts.append(event.delta)
-                                if not text_overflow:
-                                    held_text_events.append(event)
                                 continue
-                            if (
-                                isinstance(event, RunFinishedEvent)
-                                and output_decision is not None
-                            ):
-                                if output_decision.verdict is GuardrailVerdict.ALLOW:
-                                    if held_text_parts:
-                                        run_span.set_attribute(
-                                            "operion.run.first_verified_text_ms",
-                                            round(
-                                                (time.monotonic() - run_started) * 1000,
-                                                3,
-                                            ),
-                                        )
-                                    for held_event in held_text_events:
-                                        yield held_event
+                            if isinstance(event, RunFinishedEvent):
+                                if (
+                                    output_decision is not None
+                                    and output_decision.verdict
+                                    is GuardrailVerdict.ALLOW
+                                ):
+                                    run_span.set_attribute(
+                                        "operion.run.first_verified_text_ms",
+                                        round(
+                                            (time.monotonic() - run_started) * 1000, 3
+                                        ),
+                                    )
+                                    message_id = f"verified-{run_id}"
+                                    yield TextMessageStartEvent(
+                                        message_id=message_id, role="assistant"
+                                    )
+                                    yield TextMessageContentEvent(
+                                        message_id=message_id, delta=verified_text
+                                    )
+                                    yield TextMessageEndEvent(message_id=message_id)
                                 else:
                                     yield RunErrorEvent(
-                                        type=EventType.RUN_ERROR,
                                         code="OUTPUT_UNVERIFIED",
-                                        message=(
-                                            "The answer could not be verified against business evidence. "
-                                            "No business data was changed. Please retry with a narrower question."
-                                        ),
+                                        message="The answer could not be verified against business evidence. No business data was changed. Please retry.",
                                     )
                                     continue
                             if isinstance(event, RunErrorEvent):
-                                held_text_events.clear()
+                                rejected = (
+                                    deps.output_decision is not None
+                                    and deps.output_decision.verdict
+                                    is not GuardrailVerdict.ALLOW
+                                )
+                                if rejected:
+                                    run_span.set_attribute(
+                                        "operion.guardrail.output.reason_code",
+                                        deps.output_decision.reason_code,
+                                    )
+                                    event = RunErrorEvent(
+                                        code="OUTPUT_UNVERIFIED",
+                                        message="The structured answer references could not be verified.",
+                                    )
                                 event = _public_run_error(event)
                                 if not completed:
                                     completed = True
@@ -554,7 +608,9 @@ class AgentApplication:
                                         run_id,
                                         status="failed",
                                         tool_calls=deps.tool_calls,
-                                        error_code=event.code or "AGENT_ERROR",
+                                        error_code=deps.output_decision.reason_code
+                                        if rejected
+                                        else event.code or "AGENT_ERROR",
                                     )
                             yield event
                 except TimeoutError:

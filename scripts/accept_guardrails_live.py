@@ -21,7 +21,6 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from operion_etl.agent_app import AgentApplication, create_app
 from operion_etl.agent_runtime import READ_TOOLS, AgentSettings, create_operion_agent
-from operion_etl.answer_claims import AMOUNT_PATTERN, asserted_order_counts
 from operion_etl.evaluation_observability import publish_langfuse_scores
 from operion_etl.identity_readback import ERPNextReadClient, TwentyReadClient
 from operion_etl.observability import configure_observability
@@ -165,7 +164,13 @@ def main() -> None:
                         )
                     }
                 else:
-                    yield "There are 100 sales orders in the current authorized live records."
+                    yield {
+                        0: DeltaToolCall(
+                            name="present_answer",
+                            json_args='{"plan":{"language":"en","facts":["forged-total-100"]}}',
+                            tool_call_id=f"false-output-{model_round}",
+                        )
+                    }
 
             application.agent = create_operion_agent(
                 settings, model=FunctionModel(stream_function=false_count)
@@ -181,22 +186,29 @@ def main() -> None:
         count["http_status"] == 200
         and count["run_status"] == "succeeded"
         and count["event_types"][-1:] == ["RUN_FINISHED"]
-        and expected_count in asserted_order_counts(count["answer"])
-        and "live" in count["answer"].casefold()
+        and any(
+            f["field"] == "sales_order_count" and f["value"] == expected_count
+            for f in count["verified_evidence"].get("facts", [])
+        )
+        and any(
+            f["context"]["data_mode"] == "live"
+            for f in count["verified_evidence"].get("facts", [])
+        )
         and bool(count["tool_names"])
         and all(count["tool_results_ok"])
     )
-    mentioned_amounts = {
-        Decimal((match.group(1) or match.group(2) or match.group(3)).replace(",", ""))
-        for match in AMOUNT_PATTERN.finditer(detail["answer"])
-    }
     detail["passed"] = (
         detail["http_status"] == 200
         and detail["run_status"] == "succeeded"
-        and selected_order_id in detail["answer"]
-        and expected_amount in mentioned_amounts
-        and expected_currency.casefold() in detail["answer"].casefold()
-        and expected_status.casefold() in detail["answer"].casefold()
+        and any(
+            row.get("canonical_id") == selected_order_id
+            and row.get("net_total_ex_tax") is not None
+            and Decimal(row["net_total_ex_tax"]) == expected_amount
+            and row.get("currency") == expected_currency
+            and row.get("business_status") == expected_status
+            for table in detail["verified_evidence"].get("tables", [])
+            for row in table["rows"]
+        )
         and bool(detail["tool_names"])
         and all(detail["tool_results_ok"])
     )
@@ -210,7 +222,7 @@ def main() -> None:
     injected_false_count["passed"] = (
         injected_false_count["http_status"] == 200
         and injected_false_count["run_status"] == "failed"
-        and injected_false_count["error_code"] == "ORDER_COUNT_MISMATCH"
+        and injected_false_count["error_code"] == "FACT_REFERENCE_UNKNOWN"
         and injected_false_count["answer"] == ""
         and injected_false_count["event_types"][-1:] == ["RUN_ERROR"]
         and injected_false_count["tool_names"] == ["get_customer_portfolio_summary"]
@@ -222,7 +234,7 @@ def main() -> None:
         "injected_false_count": injected_false_count,
     }
     report = {
-        "report_version": "operion-guardrail-live-acceptance-v1",
+        "report_version": "operion-guardrail-live-acceptance-v2",
         "recorded_at": datetime.now(UTC).isoformat(),
         "status": "passed"
         if all(case["passed"] for case in cases.values())

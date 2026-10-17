@@ -24,6 +24,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from structured_helpers import output_delta
 
 from operion_etl.agent_app import (
     AgentApplication,
@@ -135,7 +136,8 @@ class AgentAppTests(unittest.TestCase):
         settings = AgentSettings(run_timeout_seconds=5)
 
         async def stream_function(messages, info: AgentInfo):
-            yield f"trusted:{last_user_text(messages)}"
+            self.assertNotIn("forged", str(messages))
+            yield output_delta(messages)
 
         agent = create_operion_agent(
             settings, model=FunctionModel(stream_function=stream_function)
@@ -168,19 +170,18 @@ class AgentAppTests(unittest.TestCase):
                 part for part in messages[-1].parts if isinstance(part, ToolReturnPart)
             ]
             if returns:
-                count = returns[-1].content["data"]["customer_count"]
-                yield f"You have {count} customers in the authorized scope."
+                yield output_delta(messages, field="customer_count")
             else:
                 seen_current_answer.append(
                     any(
-                        isinstance(part, TextPart) and "2 customers" in part.content
+                        isinstance(part, TextPart) and "**2**" in part.content
                         for message in messages
                         for part in message.parts
                     )
                 )
                 seen_old_answer.append(
                     any(
-                        isinstance(part, TextPart) and "1 customers" in part.content
+                        isinstance(part, TextPart) and "**1**" in part.content
                         for message in messages
                         for part in message.parts
                     )
@@ -224,7 +225,7 @@ class AgentAppTests(unittest.TestCase):
                     ],
                 },
             )
-            self.assertIn(f"You have {len(ids)} customers", response.text)
+            self.assertIn(f"**{len(ids)}**", response.text)
             self.assertEqual(
                 "succeeded",
                 self.application.store.run(f"scope-run-{index}", "user-1")["status"],
@@ -233,7 +234,7 @@ class AgentAppTests(unittest.TestCase):
         self.assertEqual([False, False, True, False], seen_current_answer)
         public = self.application.store.public_history("scope-change", "user-1")
         self.assertEqual(4, sum(m["role"] == "user" for m in public))
-        self.assertTrue(any("2 customers" in m["content"] for m in public))
+        self.assertTrue(any("**2**" in m["content"] for m in public))
 
     def test_agent_requires_server_credential(self):
         response = self.client.post("/api/agent", json={})
@@ -338,7 +339,7 @@ class AgentAppTests(unittest.TestCase):
         }
         response = self.client.post("/api/agent", json=payload, headers=self.headers)
         self.assertEqual(200, response.status_code)
-        self.assertIn("trusted:real request", response.text)
+        self.assertIn("Please specify", response.text)
 
         history = self.client.get(
             "/api/conversations/conversation-1", headers=self.headers
@@ -374,7 +375,7 @@ class AgentAppTests(unittest.TestCase):
         response = self.client.post("/api/agent", json=payload, headers=self.headers)
 
         self.assertEqual(200, response.status_code)
-        self.assertIn("trusted:real request", response.text)
+        self.assertIn("Please specify", response.text)
         self.assertNotIn("conflicts with existing tool", response.text)
 
     def test_conversation_list_exposes_owned_history(self):
@@ -469,6 +470,14 @@ class AgentAppTests(unittest.TestCase):
                         tool_call_id="count-call",
                     )
                 }
+            if model_calls > 1:
+                yield {
+                    0: DeltaToolCall(
+                        name="present_answer",
+                        json_args='{"plan":{"facts":["forged-reference"]}}',
+                        tool_call_id=f"bad-{model_calls}",
+                    )
+                }
             yield "客户共有一百张订单。"
 
         self.application.agent = create_operion_agent(
@@ -491,16 +500,60 @@ class AgentAppTests(unittest.TestCase):
             headers=self.headers,
         )
         self.assertEqual(200, response.status_code)
-        self.assertIn("OUTPUT_UNVERIFIED", response.text)
+        self.assertIn("RUN_ERROR", response.text)
         self.assertNotIn("一百张订单", response.text)
-        self.assertEqual(2, model_calls)
+        self.assertEqual(3, model_calls)
         run = self.application.store.run("blocked-count-run", "user-1")
         self.assertEqual("failed", run["status"])
-        self.assertEqual("ORDER_COUNT_MISMATCH", run["error_code"])
+        self.assertIsNotNone(run["error_code"])
         history = self.client.get(
             "/api/conversations/blocked-count-thread", headers=self.headers
         )
         self.assertNotIn("一百张订单", json.dumps(history.json(), ensure_ascii=False))
+
+    def test_model_prose_cannot_bypass_valid_structured_answer(self):
+        calls = 0
+
+        async def stream(messages, info):
+            nonlocal calls
+            calls += 1
+            yield "Untrusted assertion: 999 orders and EUR 999999."
+            if calls == 1:
+                yield {
+                    0: DeltaToolCall(
+                        name="get_customer_portfolio_summary",
+                        json_args="{}",
+                        tool_call_id="source",
+                    )
+                }
+            else:
+                yield output_delta(messages, field="sales_order_count")
+
+        self.application.agent = create_operion_agent(
+            self.application.settings, model=FunctionModel(stream_function=stream)
+        )
+        response = self.client.post(
+            "/api/agent",
+            headers=self.headers,
+            json={
+                "threadId": "prose-bypass",
+                "runId": "prose-run",
+                "state": {},
+                "context": [],
+                "forwardedProps": {},
+                "tools": [],
+                "messages": [{"id": "q", "role": "user", "content": "orders?"}],
+            },
+        )
+        self.assertIn("RUN_FINISHED", response.text)
+        self.assertNotIn("Untrusted assertion", response.text)
+        self.assertNotIn("present_answer", response.text)
+        public = self.application.store.public_history("prose-bypass", "user-1")
+        self.assertNotIn("Untrusted assertion", json.dumps(public))
+        messages = self.application.store.history("prose-bypass", "user-1")
+        manifest = messages[-1].metadata["operion.answer_evidence"]
+        self.assertEqual("sales_order_count", manifest["facts"][0]["field"])
+        self.assertEqual(1, manifest["facts"][0]["value"])
 
     def test_cancelled_partial_answer_is_never_saved_or_streamed(self):
         from ag_ui.core import TextMessageContentEvent
@@ -558,7 +611,8 @@ class AgentAppTests(unittest.TestCase):
                         tool_call_id="count-call",
                     )
                 }
-            yield f"当前授权范围有 {expected} 张订单。"
+                return
+            yield output_delta(messages, field="sales_order_count", language="zh")
 
         self.application.agent = create_operion_agent(
             self.application.settings,
@@ -580,7 +634,17 @@ class AgentAppTests(unittest.TestCase):
             headers=self.headers,
         )
         self.assertEqual(200, response.status_code)
-        self.assertIn(f"{expected} 张订单", response.text)
+        self.assertIn(f"**{expected}**", response.text)
+        self.assertIn("销售订单数", response.text)
+        self.assertNotIn('"toolCallName":"present_answer"', response.text)
+        history = self.application.store.public_history(
+            "verified-count-thread", "user-1"
+        )
+        final = [
+            m["content"] for m in history if m["role"] == "assistant" and m["content"]
+        ][-1]
+        self.assertIn(f"**{expected}**", final)
+        self.assertNotIn("present_answer", json.dumps(history))
         self.assertIn("RUN_FINISHED", response.text)
         run = self.application.store.run("verified-count-run", "user-1")
         self.assertEqual("succeeded", run["status"])

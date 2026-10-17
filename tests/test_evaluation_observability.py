@@ -14,6 +14,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from operion_etl.agent_runtime import AgentSettings
+from operion_etl.answer_evidence import AnswerPlan
 from operion_etl.e2_evaluation import EvaluationInputs, evaluate
 from operion_etl.evaluation_observability import publish_langfuse_scores
 
@@ -27,8 +28,10 @@ class EvaluationObservabilityTests(unittest.TestCase):
 
         class FakeAgent:
             async def run(self, question, **kwargs):
+                deps = kwargs["deps"]
+                deps.answer_plan = AnswerPlan(language="en", notice="needs_details")
                 return SimpleNamespace(
-                    output="synthetic answer",
+                    output=deps.evidence.render(deps.answer_plan),
                     usage=SimpleNamespace(
                         input_tokens=2, output_tokens=3, requests=1, tool_calls=0
                     ),

@@ -15,21 +15,10 @@ from uuid import uuid4
 from pydantic_ai import Agent
 
 from .agent_runtime import AgentDependencies, AgentSettings, create_operion_agent
-from .answer_claims import (
-    AMOUNT_PATTERN as _AMOUNT_PATTERN,
-)
-from .answer_claims import (
-    CANONICAL_ID_PATTERN as _CANONICAL_ID_PATTERN,
-)
-from .answer_claims import (
-    asserted_fulfillment_results,
-    asserted_statuses,
-)
-from .answer_claims import (
-    asserted_order_counts as _asserted_order_counts,
-)
+from .answer_evidence import AnswerPlan, EvidenceRegistry
 from .evaluation_observability import publish_langfuse_scores, synthetic_case_span
 from .observability import configure_observability, run_span_ids
+from .output_guardrails import GuardrailVerdict, verify_answer_plan
 from .read_tools import AccessScope, CanonicalRepository, SourceUnavailableError
 
 
@@ -62,105 +51,13 @@ def _walk_keys(value: Any) -> set[str]:
     return set()
 
 
-def _answer_facts(
-    case: dict[str, Any], payload: dict[str, Any], answer: str
-) -> list[str]:
-    failures: list[str] = []
-    data = payload.get("data", {})
-    expected = case.get("expected", {})
-    actual_count = next(
-        (
-            int(data[key])
-            for key in ("order_count", "sales_order_count")
-            if isinstance(data.get(key), int)
-        ),
-        None,
-    )
-    if actual_count is None and isinstance(data.get("completeness"), dict):
-        total = data["completeness"].get("total_count")
-        if isinstance(total, int):
-            actual_count = total
-    if actual_count is None and isinstance(data.get("orders"), list):
-        actual_count = len(data["orders"])
-    counts = [] if case.get("expected_result") else _asserted_order_counts(answer)
-    if counts:
-        if actual_count is None:
-            failures.append("unsupported_order_count_claim")
-        elif any(count != actual_count for count in counts):
-            failures.append("answer_order_count_mismatch")
-    elif expected and "order_count" in expected and actual_count is not None:
-        failures.append("answer_missing_order_count")
-
-    claimed_ids = set(_CANONICAL_ID_PATTERN.findall(answer))
-    if (
-        claimed_ids
-        and payload.get("ok")
-        and case.get("tool") != "check_operation_capability"
-    ):
-        evidence_ids = set(
-            _CANONICAL_ID_PATTERN.findall(json.dumps(data, ensure_ascii=False))
-        )
-        if claimed_ids - evidence_ids:
-            failures.append("unsupported_object_claim")
-
-    claimed_amounts = {
-        match.group(1) or match.group(2) or match.group(3)
-        for match in _AMOUNT_PATTERN.finditer(answer)
-    }
-    if claimed_amounts:
-        from decimal import Decimal, InvalidOperation
-
-        evidence_amounts = set()
-
-        def collect(value: Any) -> None:
-            if isinstance(value, dict):
-                for key, child in value.items():
-                    if key in {"net_total_ex_tax", "net_amount", "unit_price_ex_tax"}:
-                        try:
-                            evidence_amounts.add(Decimal(str(child).replace(",", "")))
-                        except InvalidOperation:
-                            pass
-                    else:
-                        collect(child)
-            elif isinstance(value, list):
-                for child in value:
-                    collect(child)
-
-        collect(data)
-        if any(
-            Decimal(amount.replace(",", "")) not in evidence_amounts
-            for amount in claimed_amounts
-        ):
-            failures.append("unsupported_amount_claim")
-
-    orders = data.get("orders", [])
-    orders = orders if isinstance(orders, list) else []
-    if isinstance(data.get("order"), dict):
-        orders = [*orders, data["order"]]
-    order_statuses = {
-        str(order[key]).casefold().replace(" ", "_")
-        for order in orders
-        if isinstance(order, dict)
-        for key in ("business_status", "source_status")
-        if order.get(key)
-    }
-    if asserted_statuses(answer) - order_statuses:
-        failures.append("unsupported_status_claim")
-
-    result = data.get("result")
-    if case.get("expected_result"):
-        claims = asserted_fulfillment_results(answer)
-        if not result and claims:
-            failures.append("unsupported_result_claim")
-        elif result and not claims:
-            failures.append("answer_missing_result")
-        elif result and (result not in claims or len(claims) > 1):
-            failures.append("answer_result_mismatch")
-    return failures
-
-
 def grade_case(
-    case: dict[str, Any], calls: list[dict[str, Any]], answer: str
+    case: dict[str, Any],
+    calls: list[dict[str, Any]],
+    answer: str,
+    *,
+    registry: EvidenceRegistry | None = None,
+    plan: AnswerPlan | None = None,
 ) -> list[str]:
     failures: list[str] = []
     forbidden_tools = tuple(case.get("forbidden_tools", []))
@@ -183,7 +80,6 @@ def grade_case(
     if case.get("expected_tool_call", "not-set") is None:
         if calls:
             failures.append("unexpected_tool_call")
-        return list(dict.fromkeys(failures))
     tool_is_optional = bool(case.get("tool_optional", False))
     if expected_tool and not matching and not tool_is_optional:
         return ["expected_tool_not_called"]
@@ -230,21 +126,35 @@ def grade_case(
     forbidden_fields = set(case.get("forbidden_output_fields", []))
     if forbidden_fields & _walk_keys(payload):
         failures.append("forbidden_field_exposed")
-    forbidden_claim = case.get("forbidden_claim")
-    if forbidden_claim and forbidden_claim in answer:
-        claim_index = answer.index(forbidden_claim)
-        preceding = answer[max(0, claim_index - 8) : claim_index]
-        if "不是" not in preceding and "并非" not in preceding:
-            failures.append("forbidden_claim")
+    if registry is None or plan is None:
+        failures.append("structured_answer_missing")
+    else:
+        decision = verify_answer_plan(registry, plan)
+        if decision.verdict is not GuardrailVerdict.ALLOW:
+            failures.append("answer_bound_" + decision.reason_code.lower())
+        elif answer != registry.render(plan):
+            failures.append("answer_render_mismatch")
+        else:
+            selected = [registry.facts[ref] for ref in plan.facts]
+            if "order_count" in case.get("expected", {}):
+                expected_count = case["expected"]["order_count"]
+                if not any(
+                    f.field in {"sales_order_count", "purchase_order_count"}
+                    and f.value == expected_count
+                    and (
+                        not case["expected"].get("customer_id")
+                        or f.entity == case["expected"]["customer_id"]
+                    )
+                    for f in selected
+                ):
+                    failures.append("answer_missing_order_count")
+            if case.get("expected_result") and not any(
+                f.field == "result" and f.value == case["expected_result"]
+                for f in selected
+            ):
+                failures.append("answer_missing_result")
     if not answer.strip():
         failures.append("empty_answer")
-    elif matching and (len(matching) == 1 or case.get("expected_result")):
-        failures.extend(_answer_facts(case, payload, answer))
-    from .business_facts import bound_fact_errors
-
-    failures.extend(
-        "answer_bound_" + code.lower() for code in bound_fact_errors(calls, answer)
-    )
     return list(dict.fromkeys(failures))
 
 
@@ -322,7 +232,13 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
                 except Exception as exception:  # preserve local failed evidence
                     error = f"{type(exception).__name__}: {exception}"
                     usage = {}
-                failures = grade_case(case, deps.tool_calls, answer)
+                failures = grade_case(
+                    case,
+                    deps.tool_calls,
+                    answer,
+                    registry=deps.evidence,
+                    plan=deps.answer_plan,
+                )
                 if error:
                     failures.append("agent_run_error")
                 trace_id, span_id = (
@@ -356,6 +272,9 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
                         "failures": failures,
                         "duration_seconds": round(monotonic() - started, 3),
                         "answer": answer,
+                        "answer_plan": deps.answer_plan.model_dump(mode="json")
+                        if deps.answer_plan
+                        else None,
                         "tool_calls": deps.tool_calls,
                         "usage": usage,
                         **(
@@ -389,6 +308,8 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
             "unsupported_object_claim",
             "unsupported_status_claim",
             "unsupported_result_claim",
+            "answer_render_mismatch",
+            "structured_answer_missing",
         },
         "evidence": {
             "missing_required_source",
@@ -410,6 +331,12 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
             "answer_missing_result",
         },
     }
+    failure_categories["evidence"].update(
+        failure
+        for run in runs
+        for failure in run["failures"]
+        if failure.startswith("answer_bound_")
+    )
     metrics = {
         category: {
             "passed_runs": sum(not (set(run["failures"]) & codes) for run in runs),
@@ -418,7 +345,7 @@ async def evaluate(inputs: EvaluationInputs, settings: AgentSettings) -> dict[st
         for category, codes in failure_categories.items()
     }
     report = {
-        "report_version": "operion-e2-agent-evaluation-v2",
+        "report_version": "operion-e2-agent-evaluation-v3",
         "metrics": metrics,
         "status": "passed" if all(run["passed"] for run in runs) else "failed",
         "started_at": started_at.isoformat(),
