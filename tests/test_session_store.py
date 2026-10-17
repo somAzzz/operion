@@ -41,6 +41,30 @@ class SessionStoreTests(unittest.TestCase):
         with self.assertRaises(RunReplayError):
             self.store.start_run("run-1", "conversation-1", "user-1", "model")
 
+    def test_legacy_and_changed_scope_history_is_not_reused(self):
+        self.store.get_or_create("scope-history", "user-1")
+        old = [ModelResponse(parts=[TextPart("old evidence")])]
+        self.store.save_history("scope-history", "user-1", old)
+        self.assertEqual(
+            1, self.store.history_start("scope-history", "user-1", "scope-a", 1)
+        )
+        self.store.save_history(
+            "scope-history",
+            "user-1",
+            [*old, ModelResponse(parts=[TextPart("new evidence")])],
+            context_fingerprint="scope-a",
+            context_start=1,
+        )
+        self.assertEqual(
+            1, self.store.history_start("scope-history", "user-1", "scope-a", 2)
+        )
+        self.assertEqual(
+            2, self.store.history_start("scope-history", "user-1", "scope-b", 2)
+        )
+        self.assertEqual(2, len(self.store.public_history("scope-history", "user-1")))
+        with self.assertRaises(SessionAccessDenied):
+            self.store.history_start("scope-history", "other-user", "scope-a", 2)
+
     def test_expired_raw_content_is_scrubbed_but_access_audit_is_immutable(self):
         self.store.get_or_create("conversation-retention", "user-1")
         self.store.save_history(

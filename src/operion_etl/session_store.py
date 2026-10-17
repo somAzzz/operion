@@ -176,7 +176,20 @@ class ConversationStore:
             }
             for column in ("trace_id", "span_id"):
                 if column not in columns:
-                    connection.execute(f"ALTER TABLE agent_runs ADD COLUMN {column} TEXT")
+                    connection.execute(
+                        f"ALTER TABLE agent_runs ADD COLUMN {column} TEXT"
+                    )
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(conversations)")
+            }
+            for column, definition in (
+                ("context_fingerprint", "TEXT NOT NULL DEFAULT ''"),
+                ("context_start", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if column not in columns:
+                    connection.execute(
+                        f"ALTER TABLE conversations ADD COLUMN {column} {definition}"
+                    )
 
     def record_access(
         self,
@@ -270,6 +283,24 @@ class ConversationStore:
             raise SessionAccessDenied("conversation belongs to another user")
         return json.loads(row["public_messages_json"])
 
+    def history_start(
+        self, conversation_id: str, owner_id: str, fingerprint: str, length: int
+    ) -> int:
+        """Keep old content visible without reusing evidence from another scope."""
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT owner_id, context_fingerprint, context_start "
+                "FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        if row is None:
+            return length
+        if row["owner_id"] != owner_id:
+            raise SessionAccessDenied("conversation belongs to another user")
+        if row["context_fingerprint"] != fingerprint:
+            return length
+        return max(0, min(length, row["context_start"]))
+
     def list_conversations(
         self, owner_id: str, limit: int = 50
     ) -> list[dict[str, Any]]:
@@ -356,6 +387,9 @@ class ConversationStore:
         conversation_id: str,
         owner_id: str,
         messages: Sequence[ModelMessage],
+        *,
+        context_fingerprint: str = "",
+        context_start: int = 0,
     ) -> None:
         serialized = ModelMessagesTypeAdapter.dump_json(messages)
         public = json.dumps(public_messages(messages), ensure_ascii=False)
@@ -363,10 +397,19 @@ class ConversationStore:
             cursor = connection.execute(
                 """
                 UPDATE conversations
-                SET messages_json = ?, public_messages_json = ?, updated_at = ?
+                SET messages_json = ?, public_messages_json = ?, updated_at = ?,
+                    context_fingerprint = ?, context_start = ?
                 WHERE conversation_id = ? AND owner_id = ?
                 """,
-                (serialized, public, _now(), conversation_id, owner_id),
+                (
+                    serialized,
+                    public,
+                    _now(),
+                    context_fingerprint,
+                    context_start,
+                    conversation_id,
+                    owner_id,
+                ),
             )
             if cursor.rowcount != 1:
                 raise SessionAccessDenied("conversation owner changed")
@@ -391,8 +434,13 @@ class ConversationStore:
                     ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?)
                     """,
                     (
-                        run_id, conversation_id, owner_id, model_name,
-                        trace_id, span_id, _now(),
+                        run_id,
+                        conversation_id,
+                        owner_id,
+                        model_name,
+                        trace_id,
+                        span_id,
+                        _now(),
                     ),
                 )
         except sqlite3.IntegrityError as error:

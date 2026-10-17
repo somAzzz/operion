@@ -18,7 +18,9 @@ from pydantic_ai import CancellationToken
 from pydantic_ai.messages import (
     ModelMessage,
     ModelResponse,
+    TextPart,
     ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
@@ -156,6 +158,82 @@ class AgentAppTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_scope_change_refreshes_evidence_without_erasing_visible_history(self):
+        seen_old_answer = []
+        seen_current_answer = []
+
+        async def stream(messages, info):
+            returns = [
+                part for part in messages[-1].parts if isinstance(part, ToolReturnPart)
+            ]
+            if returns:
+                count = returns[-1].content["data"]["customer_count"]
+                yield f"You have {count} customers in the authorized scope."
+            else:
+                seen_current_answer.append(
+                    any(
+                        isinstance(part, TextPart) and "2 customers" in part.content
+                        for message in messages
+                        for part in message.parts
+                    )
+                )
+                seen_old_answer.append(
+                    any(
+                        isinstance(part, TextPart) and "1 customers" in part.content
+                        for message in messages
+                        for part in message.parts
+                    )
+                )
+                yield {
+                    0: DeltaToolCall(
+                        name="get_customer_portfolio_summary",
+                        json_args="{}",
+                        tool_call_id=f"scope-count-{len(seen_old_answer)}",
+                    )
+                }
+
+        self.application.agent = create_operion_agent(
+            self.application.settings, model=FunctionModel(stream_function=stream)
+        )
+        for index, ids in enumerate(
+            [
+                {CUSTOMER_ID},
+                {CUSTOMER_ID, "wwi:organization:customer:150"},
+                {CUSTOMER_ID, "wwi:organization:customer:150"},
+                {CUSTOMER_ID},
+            ]
+        ):
+            self.application.scope = AccessScope("AI Demo GmbH", frozenset(ids))
+            response = self.client.post(
+                "/api/agent",
+                headers=self.headers,
+                json={
+                    "threadId": "scope-change",
+                    "runId": f"scope-run-{index}",
+                    "state": {},
+                    "context": [],
+                    "forwardedProps": {},
+                    "tools": [],
+                    "messages": [
+                        {
+                            "id": f"q-{index}",
+                            "role": "user",
+                            "content": "How many customers do we have?",
+                        }
+                    ],
+                },
+            )
+            self.assertIn(f"You have {len(ids)} customers", response.text)
+            self.assertEqual(
+                "succeeded",
+                self.application.store.run(f"scope-run-{index}", "user-1")["status"],
+            )
+        self.assertEqual([False, False, False, False], seen_old_answer)
+        self.assertEqual([False, False, True, False], seen_current_answer)
+        public = self.application.store.public_history("scope-change", "user-1")
+        self.assertEqual(4, sum(m["role"] == "user" for m in public))
+        self.assertTrue(any("2 customers" in m["content"] for m in public))
 
     def test_agent_requires_server_credential(self):
         response = self.client.post("/api/agent", json={})

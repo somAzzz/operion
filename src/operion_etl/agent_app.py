@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import re
 import secrets
@@ -225,6 +227,23 @@ class AgentApplication:
             return identity.user_id
         return f"{identity.tenant_id}:{identity.user_id}"
 
+    def _context_fingerprint(self, identity: EnterpriseIdentity) -> str:
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    "tenant": identity.tenant_id,
+                    "subject": identity.subject,
+                    "company": identity.operating_company,
+                    "customers": sorted(identity.customer_ids),
+                    "suppliers": sorted(identity.supplier_ids),
+                    "roles": sorted(identity.roles),
+                    "data_mode": self.repository.data_mode,
+                    "dataset": str(self.repository.directory),
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+
     def _trusted_prompt(self, adapter: AGUIAdapter[Any, Any]) -> str:
         for message in reversed(adapter.messages):
             if not isinstance(message, ModelRequest):
@@ -307,6 +326,10 @@ class AgentApplication:
                 owner_id, "conversation", conversation_id, "agent_run"
             )
             history = self.store.history(conversation_id, owner_id)
+            context_fingerprint = self._context_fingerprint(identity)
+            history_start = self.store.history_start(
+                conversation_id, owner_id, context_fingerprint, len(history)
+            )
             self.store.start_run(
                 run_id,
                 conversation_id,
@@ -415,9 +438,17 @@ class AgentApplication:
                 )
                 return
             if content_capture_enabled():
-                run_span.set_attribute("langfuse.observation.output", str(result.output))
+                run_span.set_attribute(
+                    "langfuse.observation.output", str(result.output)
+                )
             run_status = "succeeded"
-            self.store.save_history(conversation_id, owner_id, result.all_messages())
+            self.store.save_history(
+                conversation_id,
+                owner_id,
+                [*history[:history_start], *result.all_messages()],
+                context_fingerprint=context_fingerprint,
+                context_start=history_start,
+            )
             usage = result.usage
             self.store.finish_run(
                 run_id,
@@ -455,7 +486,7 @@ class AgentApplication:
                 try:
                     async with asyncio.timeout(self.settings.run_timeout_seconds):
                         source = adapter.run_stream(
-                            message_history=history,
+                            message_history=history[history_start:],
                             conversation_id=conversation_id,
                             run_id=run_id,
                             deps=deps,
@@ -496,7 +527,10 @@ class AgentApplication:
                                     if held_text_parts:
                                         run_span.set_attribute(
                                             "operion.run.first_verified_text_ms",
-                                            round((time.monotonic() - run_started) * 1000, 3),
+                                            round(
+                                                (time.monotonic() - run_started) * 1000,
+                                                3,
+                                            ),
                                         )
                                     for held_event in held_text_events:
                                         yield held_event
