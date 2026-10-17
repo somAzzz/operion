@@ -77,19 +77,22 @@ services:
       dockerfile: Dockerfile
     environment:
       OPERION_ENVIRONMENT: enterprise
+      OPERION_TELEMETRY_ENVIRONMENT: ${OPERION_TELEMETRY_ENVIRONMENT:-development}
+      OPERION_RELEASE_ID: ${OPERION_RELEASE_ID:-dev}
       OPERION_PUBLIC_ORIGIN: https://operion.localhost:8443
       OPERION_AGENT_URL: http://agent:8000/api/agent
       # No action service/worker in this read-only acceptance stack.
       OPERION_ACTION_URL: http://127.0.0.1:1/api
       NEXT_TELEMETRY_DISABLED: "1"
       OPERION_OTEL_ENABLED: ${OPERION_OTEL_ENABLED:-0}
+      OPERION_OTEL_INCLUDE_CONTENT: ${OPERION_OTEL_INCLUDE_CONTENT:-0}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
     networks: [frontend, backend]
     depends_on:
       agent:
         condition: service_healthy
     healthcheck:
-      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode===401?0:1)).on('error',()=>process.exit(1))"]
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -101,6 +104,8 @@ services:
       dockerfile: deploy/gateway/agent.Dockerfile
     environment:
       OPERION_ENVIRONMENT: enterprise
+      OPERION_TELEMETRY_ENVIRONMENT: ${OPERION_TELEMETRY_ENVIRONMENT:-development}
+      OPERION_RELEASE_ID: ${OPERION_RELEASE_ID:-dev}
       OPERION_OIDC_ISSUER: https://operion.localhost:8443/identity/realms/operion
       OPERION_OIDC_AUDIENCE: operion
       OPERION_OIDC_JWKS_URL: https://operion.localhost:8443/identity/realms/operion/protocol/openid-connect/certs
@@ -126,6 +131,7 @@ services:
       OPERION_RUN_TIMEOUT_SECONDS: "90"
       PYDANTIC_AI_NO_BANNER: "1"
       OPERION_OTEL_ENABLED: ${OPERION_OTEL_ENABLED:-0}
+      OPERION_OTEL_INCLUDE_CONTENT: ${OPERION_OTEL_INCLUDE_CONTENT:-0}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
     volumes:
       - ../../var/gateway/policy:/run/policy:ro

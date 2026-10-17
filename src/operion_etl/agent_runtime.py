@@ -19,6 +19,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from .action_models import ActionConflict, ActionDenied, ActionUnavailable
 from .identity_readback import ERPNextReadClient, TwentyReadClient
+from .observability import record_tool_result
 from .read_tools import (
     AccessScope,
     AmbiguousContactError,
@@ -256,18 +257,28 @@ def _record_tool(
     arguments: dict[str, Any],
     call: Any,
 ) -> dict[str, Any]:
+    tool_span = trace.get_current_span()
     with trace.get_tracer("operion.domain").start_as_current_span(
         "operion.domain.read",
-        attributes={"operion.tool.name": name},
+        attributes={
+            "operion.tool.name": name,
+            "langfuse.observation.metadata.tool_name": name,
+        },
         record_exception=False,
         set_status_on_exception=False,
     ) as span:
         try:
             payload = {"ok": True, "data": call()}
-            span.set_attribute("operion.result", "success")
+            record_tool_result(span, "success")
+            record_tool_result(tool_span, "success")
         except ReadToolError as error:
             payload = _tool_error(error)
-            span.set_attribute("operion.result", error.code)
+            record_tool_result(span, error.code)
+            record_tool_result(tool_span, error.code)
+        except Exception:
+            record_tool_result(span, "internal_error")
+            record_tool_result(tool_span, "internal_error")
+            raise
         ctx.deps.tool_calls.append(
             {"name": name, "arguments": arguments, "result": payload}
         )

@@ -15,6 +15,10 @@ function deny(request: NextRequest, status: number, message: string) {
 }
 
 export async function proxy(request: NextRequest) {
+  // A content-free liveness endpoint; no identity or business access.
+  if (request.nextUrl.pathname === "/health" && ["GET", "HEAD"].includes(request.method)) {
+    return NextResponse.next();
+  }
   if (process.env.OPERION_ENVIRONMENT !== "enterprise") {
     return NextResponse.next();
   }

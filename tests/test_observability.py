@@ -118,6 +118,12 @@ class ObservabilityTests(unittest.TestCase):
             span for span in exporter.get_finished_spans() if span.kind.name == "SERVER"
         )
         self.assertEqual(int(parent_span_id, 16), server_span.parent.span_id)
+        self.assertFalse(
+            any(
+                span.name.endswith(("http send", "http receive"))
+                for span in exporter.get_finished_spans()
+            )
+        )
         provider.shutdown()
 
     def test_existing_sqlite_run_table_migrates_without_losing_runs(self):
@@ -211,6 +217,7 @@ class ObservabilityTests(unittest.TestCase):
                 spans = exporter.get_finished_spans()
                 run = next(span for span in spans if span.name == "operion.agent.run")
                 self.assertEqual("succeeded", run.attributes["operion.run.status"])
+                self.assertEqual("OK", run.status.status_code.name)
                 self.assertGreaterEqual(run.attributes["operion.run.first_sse_ms"], 0)
                 self.assertTrue(
                     any(
@@ -288,6 +295,8 @@ class ObservabilityTests(unittest.TestCase):
                     if span.name == "operion.agent.run"
                 )
                 self.assertEqual("timeout", run.attributes["operion.run.status"])
+                self.assertEqual("ERROR", run.status.status_code.name)
+                self.assertEqual("ERROR", run.attributes["langfuse.observation.level"])
                 self.assertEqual("failed", store.run("timeout-run", "user-1")["status"])
                 self.assertNotIn(marker, repr(exporter.get_finished_spans()))
         finally:

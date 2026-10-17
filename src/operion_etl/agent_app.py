@@ -54,7 +54,9 @@ from .identity_readback import ERPNextReadClient
 from .observability import (
     agent_run_labels,
     configure_observability,
+    content_capture_enabled,
     instrument_fastapi,
+    record_run_status,
     run_span_ids,
 )
 from .output_guardrails import (
@@ -293,6 +295,11 @@ class AgentApplication:
                 "langfuse.observation.type": "agent",
             },
         )
+        if content_capture_enabled():
+            run_span.set_attribute(
+                "langfuse.observation.input",
+                adapter.run_input.model_dump_json(include={"messages"}),
+            )
         trace_id, span_id = run_span_ids(run_span)
         try:
             self.store.get_or_create(conversation_id, owner_id)
@@ -309,15 +316,15 @@ class AgentApplication:
                 span_id=span_id,
             )
         except SessionAccessDenied as error:
-            run_span.set_attribute("operion.run.status", "denied")
+            record_run_status(run_span, "denied")
             run_span.end()
             raise HTTPException(status_code=403, detail=str(error)) from error
         except RunReplayError as error:
-            run_span.set_attribute("operion.run.status", "rejected")
+            record_run_status(run_span, "rejected")
             run_span.end()
             raise HTTPException(status_code=409, detail=str(error)) from error
         except BaseException:
-            run_span.set_attribute("operion.run.status", "error")
+            record_run_status(run_span, "error")
             run_span.end()
             raise
 
@@ -329,7 +336,7 @@ class AgentApplication:
                 tool_calls=[],
                 error_code="CONVERSATION_BUSY",
             )
-            run_span.set_attribute("operion.run.status", "rejected")
+            record_run_status(run_span, "rejected")
             run_span.end()
             raise HTTPException(
                 status_code=409, detail="conversation already has a run"
@@ -345,7 +352,7 @@ class AgentApplication:
                 tool_calls=[],
                 error_code="ADMISSION_INTERRUPTED",
             )
-            run_span.set_attribute("operion.run.status", "cancelled")
+            record_run_status(run_span, "cancelled")
             run_span.end()
             raise
         run_span.set_attribute(
@@ -407,6 +414,8 @@ class AgentApplication:
                     error_code=output_decision.reason_code,
                 )
                 return
+            if content_capture_enabled():
+                run_span.set_attribute("langfuse.observation.output", str(result.output))
             run_status = "succeeded"
             self.store.save_history(conversation_id, owner_id, result.all_messages())
             usage = result.usage
@@ -484,6 +493,11 @@ class AgentApplication:
                                 and output_decision is not None
                             ):
                                 if output_decision.verdict is GuardrailVerdict.ALLOW:
+                                    if held_text_parts:
+                                        run_span.set_attribute(
+                                            "operion.run.first_verified_text_ms",
+                                            round((time.monotonic() - run_started) * 1000, 3),
+                                        )
                                     for held_event in held_text_events:
                                         yield held_event
                                 else:
@@ -555,7 +569,7 @@ class AgentApplication:
                             tool_calls=deps.tool_calls,
                             error_code="STREAM_CLOSED",
                         )
-                    run_span.set_attribute("operion.run.status", run_status)
+                    record_run_status(run_span, run_status)
                     run_span.end()
                     self.active_runs.pop(run_id, None)
                     self.semaphore.release()
