@@ -26,6 +26,73 @@ def order(identity, amount, currency, status):
 
 
 class FactBindingTests(unittest.TestCase):
+    def test_paged_order_total_is_separate_from_page_customer_counts(self):
+        calls = [
+            {
+                "name": "list_sales_orders",
+                "result": {
+                    "ok": True,
+                    "data": {
+                        "orders": [{"canonical_id": "wwi:sales_order:1"}],
+                        "completeness": {
+                            "status": "partial",
+                            "returned_count": 1,
+                            "total_count": 30,
+                        },
+                        "customer_order_counts": [
+                            {
+                                "customer_id": "wwi:organization:customer:65",
+                                "customer_name": "Tailspin Toys",
+                                "order_count": 1,
+                            }
+                        ],
+                        "customer_order_counts_scope": "returned_page",
+                    },
+                },
+            }
+        ]
+        for answer, allowed in [
+            ("We have 30 sales orders in the current authorized scope.", True),
+            ("We have 1 sales order in total.", False),
+            ("This page contains 1 sales order.", True),
+            ("This page contains 30 sales orders.", False),
+            ("Tailspin Toys has 1 sales order.", False),
+            ("Tailspin Toys has 30 sales orders.", False),
+            ("On this page, Tailspin Toys has 1 sales order.", True),
+        ]:
+            with self.subTest(answer=answer):
+                self.assertEqual(
+                    allowed,
+                    verify_business_answer(calls, answer).verdict
+                    == GuardrailVerdict.ALLOW,
+                )
+
+    def test_portfolio_total_and_customer_totals_do_not_compete(self):
+        calls = [
+            {
+                "name": "get_customer_order_distribution",
+                "result": {
+                    "ok": True,
+                    "data": {
+                        "sales_order_count": 30,
+                        "customers": [{"customer_name": "Alpha", "order_count": 10}],
+                    },
+                },
+            }
+        ]
+        for answer, allowed in [
+            ("We have 30 sales orders.", True),
+            ("We have 10 sales orders.", False),
+            ("Alpha has 10 sales orders.", True),
+            ("Alpha has 30 sales orders.", False),
+        ]:
+            with self.subTest(answer=answer):
+                self.assertEqual(
+                    allowed,
+                    verify_business_answer(calls, answer).verdict
+                    == GuardrailVerdict.ALLOW,
+                )
+
     def test_customer_count_requires_current_tool_evidence(self):
         calls = [
             {
@@ -74,7 +141,6 @@ class FactBindingTests(unittest.TestCase):
             GuardrailVerdict.ALLOW,
             verify_business_answer(search, "2 customers").verdict,
         )
-
 
     def test_currency_is_part_of_the_fact_and_scorer_rejects_it(self):
         calls = [order("wwi:sales_order:1", "177.60", "USD", "Draft")]

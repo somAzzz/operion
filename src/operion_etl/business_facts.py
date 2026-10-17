@@ -115,10 +115,24 @@ def evidence_facts(calls: list[dict[str, Any]]) -> list[Fact]:
                 count = len(data["orders"])
         if type(count) is int:
             add(owner, "order_count", count, pointer, f"query:{index}")
+        if isinstance(data.get("orders"), list):
+            add(
+                owner,
+                "page_order_count",
+                len(data["orders"]),
+                pointer,
+                f"query:{index}",
+            )
         for key in ("customers", "customer_order_counts"):
             for row in data.get(key, []) if isinstance(data.get(key), list) else []:
                 if isinstance(row, dict) and type(row.get("order_count")) is int:
-                    add(row, "order_count", row["order_count"], pointer + "/" + key)
+                    field = (
+                        "page_order_count"
+                        if key == "customer_order_counts"
+                        and data.get("customer_order_counts_scope") == "returned_page"
+                        else "order_count"
+                    )
+                    add(row, field, row["order_count"], pointer + "/" + key)
     return facts
 
 
@@ -130,9 +144,15 @@ def _matches(alias: str, text: str) -> bool:
 
 def _select(facts: list[Fact], context: str, field: str) -> list[Fact]:
     candidates = [fact for fact in facts if fact.field == field]
+    # A customer mentioned only in page metadata cannot inherit the query total.
+    subjects = (
+        [fact for fact in facts if fact.field in {"order_count", "page_order_count"}]
+        if field in {"order_count", "page_order_count"}
+        else candidates
+    )
     mentioned = {
         fact.entity
-        for fact in candidates
+        for fact in subjects
         if any(_matches(alias, context) for alias in fact.aliases)
     }
     claimed_ids = set(CANONICAL_ID_PATTERN.findall(context))
@@ -144,6 +164,10 @@ def _select(facts: list[Fact], context: str, field: str) -> list[Fact]:
         )
     if claimed_ids:
         return []
+    if field in {"order_count", "page_order_count"}:
+        totals = [fact for fact in candidates if fact.entity.startswith("query:")]
+        if totals:
+            return totals if len({fact.entity for fact in totals}) == 1 else []
     # Never borrow a value from another object when the subject is unresolved.
     return candidates if len({fact.entity for fact in candidates}) == 1 else []
 
@@ -176,11 +200,20 @@ def bound_fact_errors(calls: list[dict[str, Any]], answer: str) -> list[str]:
                 else "CUSTOMER_COUNT_UNVERIFIED"
             )
     for count, context in asserted_order_count_claims(answer):
-        selected = _select(facts, context, "order_count")
+        field = (
+            "page_order_count"
+            if re.search(
+                r"\b(?:this|current|returned) page\b|\b(?:shown|displayed)\b|本页|当前页",
+                context,
+                re.I,
+            )
+            else "order_count"
+        )
+        selected = _select(facts, context, field)
         if not selected or any(fact.value != str(count) for fact in selected):
             errors.append(
                 "ORDER_COUNT_MISMATCH"
-                if any(f.field == "order_count" for f in facts)
+                if any(f.field == field for f in facts)
                 else "ORDER_COUNT_UNVERIFIED"
             )
     for match in AMOUNT_PATTERN.finditer(answer):

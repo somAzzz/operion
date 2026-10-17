@@ -62,6 +62,7 @@ You are Operion, a business assistant for customer and order questions.
   get_customer_order_distribution for per-customer order counts.
   Query portfolio totals again in the current turn; previous answers and tool
   results may reflect an earlier authorization scope or dataset state.
+  State whether an order count covers sales or purchases.
 - Choose get_organization_orders for an organization's orders when its customer
   or supplier relationship is unspecified. Pass the relationship explicitly when
   the user supplies it. Choose the corresponding overview for contact lists.
@@ -420,6 +421,9 @@ def list_sales_orders(
     """List authorized sales orders using validated business filters.
 
     The response includes explicit page completeness and filtered total count.
+    completeness.total_count covers all matching authorized sales orders;
+    returned_count and customer_order_counts_scope=returned_page cover only
+    the returned page, not each customer's total order history.
     """
     args = {
         "customer_id": customer_id,
@@ -518,6 +522,8 @@ def list_purchase_orders(
     """List authorized purchase orders using validated business filters.
 
     The response includes explicit page completeness and filtered total count.
+    completeness.total_count covers all matching authorized purchase orders;
+    returned_count covers only the returned page.
     """
     args = {
         "supplier_id": supplier_id,
