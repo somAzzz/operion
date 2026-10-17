@@ -49,13 +49,14 @@ uv run operion-action-worker --recover --worker-id e3-recovery-1
 
 ## 验收
 
-准备隔离 PostgreSQL 后运行：
+单元/集成测试使用 runner 自建容器；下列 evaluate/probe 命令仍需单独准备的隔离评估数据库，不能指向业务库：
 
 ```bash
 export OPERION_TEST_ACTION_DATABASE_URL='postgresql://...'
 uv run ruff format --check src tests
 uv run ruff check .
-uv run python -m unittest discover -s tests -q
+scripts/verify.sh offline
+scripts/verify.sh postgres
 uv run operion-evaluate-e3 \
   --database-url "$OPERION_TEST_ACTION_DATABASE_URL" \
   --output reports/enterprise/e3/20260920T-action-control/w01-w15.json

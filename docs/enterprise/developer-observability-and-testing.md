@@ -1,6 +1,6 @@
 # Operion developer observability and testing
 
-Date: 2026-10-07; updated 2026-10-11. Status: the OpenTelemetry tracing bootstrap and Langfuse integration are implemented as an opt-in feature; see the [operating runbook](opentelemetry-langfuse-runbook.md). `scripts/verify.sh` provides locked offline, Web, and disposable PostgreSQL verification. The full layered runner and evidence schema below remain proposals.
+Date: 2026-10-07; updated 2026-10-17. OTel/Langfuse, bound explicit-fact checks and the minimal developer case runner are implemented. `scripts/verify.sh case` writes JSON, JUnit and HTML evidence for domain, scripted Agent/API and real stdio MCP checks. `offline` removes inherited test DSNs; `postgres` creates and removes an isolated Docker container. See [implementation and validation](fixes-2026-10-17.md). The full content/event timeline, real-model and browser layers below remain proposals.
 
 The target developer experience is **run one case, see every boundary it crossed, compare expected and actual results, and reproduce the failure at the smallest relevant layer**. Use one case definition across domain services, MCP, the Agent, and the browser. Preserve which dependencies were simulated and which were real.
 
@@ -11,12 +11,12 @@ This guide complements the [system assessment](system-assessment-and-roadmap.md)
 | Existing implementation | Reuse it | Add or correct |
 |---|---|---|
 | `AgentDependencies.tool_calls` and `_record_tool` | Arguments and returned results | Invocation IDs, start/end events, duration, exceptions, guard decisions; consolidate manually recorded tools too |
-| SQLite `agent_runs` | Run ID, status, token totals, timestamps | Trace ID, version manifest, references to evidence, incomplete/crashed execution classification |
+| SQLite `agent_runs` | Run ID, status, token totals, timestamps | Trace correlation is implemented; add version manifest, evidence references and incomplete/crashed execution classification |
 | Trusted message history | Model requests/responses from completed or cancelled runs | Per-request evidence for interrupted/error paths; content handling policy |
-| E2 JSON evaluations | Cases, repeated runs, tool payloads, final answers | Independent final-fact assertions, scorer counterexamples, holdout cases and per-layer results |
+| E2 JSON evaluations | Cases, repeated runs, tool payloads, final answers | Decomposed final-fact scoring is implemented; strengthen entity/field/currency binding, independent counterexamples, holdouts and per-layer reports |
 | MCP tests | Tool names, schemas, annotations, in-process calls | Real stdio client/server handshake and calls; malformed requests, lifecycle and correlation |
 | Complex interview script | Web → Agent → SGLang → tools, SSE ordering | Persist events, full authorized answer, assertion differences and links to spans |
-| Action ledger and W01–W15 | Approval, revision, leases, UNKNOWN and reconciliation | Correlate ledger evidence with the same test run; isolate database lifecycle |
+| Action ledger and W01–W15 | Approval, revision, leases, UNKNOWN, reconciliation and trace links | Correlate ledger evidence with the same test run; isolate database lifecycle |
 
 The current Web Agent uses local `FunctionToolset` wrappers. The MCP server is a separate stdio entry point sharing domain services. A passing Agent test does not prove MCP transport works. An in-process `server.call_tool()` test does not prove client/server protocol compatibility.
 
@@ -62,7 +62,7 @@ This is a proposed example, not an observed trace. In an MCP transport case, add
 
 ## 3 Tracing setup
 
-Use OpenTelemetry for spans and an ordinary local evidence directory for reproducible test results. Choose one viewer: a local OTel viewer for development, or Logfire when hosted storage is appropriate. The viewer is replaceable; it should not own the only copy of test evidence. Pydantic AI supports OTel without Logfire. [Pydantic AI instrumentation](https://pydantic.dev/docs/ai/integrations/logfire/) · [OTel trace concepts](https://opentelemetry.io/docs/concepts/signals/traces/)
+Use OpenTelemetry for spans and an ordinary local evidence directory for reproducible test results. The implemented viewer path is Collector → Langfuse; a local OTel viewer is an optional development alternative. The viewer is replaceable; it should not own the only copy of test evidence. Pydantic AI supports OTel without Logfire. [Pydantic AI instrumentation](https://pydantic.dev/docs/ai/integrations/logfire/) · [OTel trace concepts](https://opentelemetry.io/docs/concepts/signals/traces/)
 
 The dependency setup is implemented; install the extra with:
 
@@ -259,7 +259,7 @@ Write evidence during execution, finalize reports on success/error/cancel, and p
 
 ## 8 Commands available today
 
-Run from the repository root. These commands use existing entry points; they do not provide the proposed unified report yet.
+Run from the repository root. Start with `scripts/verify.sh case` for the implemented minimal report, or `scripts/verify.sh case mcp --layer mcp` for actual stdio transport. The individual entry points below remain available; the full proposed content timeline is not yet implemented.
 
 ### 8.1 Domain and in process MCP tests
 
@@ -274,7 +274,7 @@ PYDANTIC_AI_NO_BANNER=1 PYTHONPATH=src \
   .venv/bin/python -m unittest discover -s tests -p 'test_agent_runtime.py' -v
 ```
 
-The current tests require local legacy fixtures that are not all tracked in Git. Fix self-contained fixtures before describing these commands as clean-checkout ready. The Agent runtime tests use scripted `FunctionModel`; they do not call the real LLM.
+The tests now use tracked, self-contained fixtures. On 2026-10-11 the full suite also passed from a copy containing only tracked files, using the existing virtual environment (180 passed, 24 database tests skipped). The Agent runtime tests use scripted `FunctionModel`; they do not call the real LLM.
 
 ### 8.2 Interactive MCP protocol debugging
 
@@ -326,7 +326,7 @@ This executes five real Web/API/Agent/tool cases and checks SSE order and answer
 
 ### 8.4 Action tests
 
-The current action-control tests execute `DROP SCHEMA public CASCADE` in the configured test database during setup. Use a newly created disposable database dedicated to the run. The future runner must verify that lifecycle itself instead of trusting a user-entered connection string. Do not point these tests at the demo action database or an ordinary business database.
+The action-control tests execute `DROP SCHEMA public CASCADE` only after the Docker runner issues an in-process ownership capability. Run `scripts/verify.sh postgres`; a supplied DSN is ignored, and direct destructive-test execution without ownership is rejected before connecting. Docker must be available.
 
 After that isolated setup, `operion-evaluate-e3` provides structured W01–W15 evidence. Keep its database URL in environment configuration and the report free of credentials. The current evaluation is an action-control test with a persistent stub; real Twenty effect testing remains a separate isolated stage.
 

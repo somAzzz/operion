@@ -214,10 +214,7 @@ Supplier → purchase order → line, actual Web/Agent run:
 - Reproduce:
 
 ```bash
-./scripts/setup-interview-action-db.sh
-export OPERION_TEST_ACTION_DATABASE_URL='postgresql://operion_test:operion_test_local_only@127.0.0.1:55432/operion_action_test'
-PYDANTIC_AI_NO_BANNER=1 PYTHONPATH=src \
-  .venv/bin/python -m unittest -v tests.test_action_app tests.test_action_control
+scripts/verify.sh postgres
 ```
 
 ### Real upstream read-only — PASS

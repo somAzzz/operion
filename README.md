@@ -118,7 +118,7 @@ Run the reproducible verification entry point with the checked-in uv and npm loc
 - scripts/verify.sh offline: Python lint and offline tests.
 - scripts/verify.sh web: Web type check and production build.
 
-Offline tests use public sample inputs in tests/fixtures and need no restored WWI database. PostgreSQL action tests are a separate destructive group: create a disposable database whose name ends in _test, set OPERION_TEST_ACTION_DATABASE_URL to that database, then run scripts/verify.sh postgres. The runner fails when the variable is absent or tests are skipped. CI runs both groups and the Web build. The Web check uses Next.js webpack mode.
+Offline tests use public sample inputs in tests/fixtures and need no restored WWI database. PostgreSQL action tests are a separate destructive group: run `scripts/verify.sh postgres` with Docker available. The runner creates and cleans up its own isolated container and ignores inherited database URLs. Direct destructive tests without runner ownership are rejected; skipped integration tests fail the runner. Use `scripts/verify.sh case` for JSON/JUnit/HTML developer evidence and per-case reruns. CI runs both groups and the Web build. The Web check uses Next.js webpack mode.
 
 Run the deterministic test suite with:
 

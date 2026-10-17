@@ -1,5 +1,7 @@
 # Guardrails 与 Langfuse：实施及验收
 
+> 后续更新：相关显式事实、测试隔离及依赖问题已于 2026-10-17 修复；见 [实施和验证记录](fixes-2026-10-17.md)。下文保留当时证据与限制。
+
 日期：2026-10-11。范围：Agent 只读回答的运行时事实校验，以及现有安全门禁的回归证据。原有身份、对象权限、Action Store/Worker 与审批状态机仍是执行门禁。本工作不扩大写权限，也不把 Langfuse 当作放行条件。
 
 ## 实施顺序与阶段门槛
@@ -27,7 +29,7 @@
 
 | 阶段 | 实际执行与证据 | 结果 |
 |---|---|---|
-| 基线及回归 | `scripts/verify.sh offline`：204 项通过，24 项隔离 PostgreSQL 用例在离线组跳过；隔离 `postgres:16` 中 24/24 通过 | 通过 |
+| 基线及回归 | `scripts/verify.sh offline`：共 204 项，其中 180 项通过、24 项隔离 PostgreSQL 用例在离线组跳过；隔离 `postgres:16` 中 24/24 通过 | 通过 |
 | 输出发送门禁 | `tests/test_output_guardrails.py` 与 `tests/test_agent_app.py`：错误计数、金额、对象、状态、履约和来源故障被拦截；错误文本未进入 SSE 或成功会话历史 | 通过 |
 | Web | `scripts/verify.sh web`：TypeScript 和 Next.js 生产构建通过；本地浏览器分别完成 snapshot 和 live 页面交互 | 通过 |
 | 真实模型快照 | SGLang `qwen3.8-27b`、WWI `interview-wwi-v1` 公开来源快照：客户 65 为 10 单、订单 66823 净额 USD 177.60、写权限拒绝及注入错误计数，共 4/4 | 通过；结果见 `reports/enterprise/guardrails/20261011/acceptance-snapshot-final.json` |
