@@ -1,0 +1,40 @@
+{
+  "version": "developer-regression-v1",
+  "cases": {
+    "read": {
+      "expected": "Authorized fixture customer resolves; verified count reaches SSE and history",
+      "layers": {
+        "domain": "test_read_tools.ReadToolAcceptanceTests.test_c01_customer_overview_links_customer_contacts_and_orders",
+        "agent": "test_agent_app.AgentAppTests.test_verified_business_count_is_emitted_and_saved"
+      }
+    },
+    "scope": {
+      "expected": "Out-of-scope customer is denied before returning business facts",
+      "layers": {"domain": "test_read_tools.ReadToolAcceptanceTests.test_p01_customer_outside_scope_is_denied"}
+    },
+    "outage": {
+      "expected": "Source outage becomes a tool error, never an empty result",
+      "layers": {"agent": "test_e2_evaluation.E2EvaluationTests.test_unavailable_repository_returns_tool_error_to_agent"}
+    },
+    "wrong-answer": {
+      "expected": "Correct tool result plus wrong answer is blocked and absent from history",
+      "layers": {"agent": "test_agent_app.AgentAppTests.test_wrong_business_count_is_withheld_and_run_fails"}
+    },
+    "cancel": {
+      "expected": "Cancelled partial output is neither streamed nor saved",
+      "layers": {"agent": "test_agent_app.AgentAppTests.test_cancelled_partial_answer_is_never_saved_or_streamed"}
+    },
+    "fact-binding": {
+      "expected": "Independent hand-authored counterexamples fail and paired valid answers pass",
+      "layers": {"domain": "test_business_fact_binding.FactBindingTests"}
+    },
+    "mcp": {
+      "expected": "Real stdio initialize, tools/list, successful call, scope denial and invalid arguments",
+      "layers": {"mcp": "test_mcp_transport.MCPTransportTests"}
+    },
+    "database-safety": {
+      "expected": "Destructive tests reject external DSNs; owned capability expires",
+      "layers": {"domain": "test_database_guard.DatabaseIsolationTests"}
+    }
+  }
+}

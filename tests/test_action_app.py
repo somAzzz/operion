@@ -4,6 +4,7 @@ import os
 import unittest
 from datetime import UTC, datetime, timedelta
 
+from database_guard import require_owned_database
 from fastapi.testclient import TestClient
 
 from operion_etl.action_app import (
@@ -39,6 +40,7 @@ class FakeEnterpriseAuthenticator:
 @unittest.skipUnless(TEST_DSN, "requires OPERION_TEST_ACTION_DATABASE_URL")
 class ActionAppTests(unittest.TestCase):
     def setUp(self):
+        require_owned_database(TEST_DSN)
         migration_store = ActionStore(TEST_DSN)
         with migration_store._connect(privileged=True) as connection:
             connection.execute("DROP SCHEMA public CASCADE")

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import psycopg
+from database_guard import require_owned_database
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -63,6 +64,7 @@ class FakeTwentyGateway:
 @unittest.skipUnless(TEST_DSN, "requires OPERION_TEST_ACTION_DATABASE_URL")
 class ActionControlTests(unittest.TestCase):
     def setUp(self):
+        require_owned_database(TEST_DSN)
         migration_store = ActionStore(TEST_DSN)
         with migration_store._connect(privileged=True) as connection:
             connection.execute("DROP SCHEMA public CASCADE")
