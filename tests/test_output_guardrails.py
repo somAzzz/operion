@@ -51,6 +51,7 @@ class OutputGuardrailTests(unittest.TestCase):
                             "canonical_id": "wwi:order:1",
                             "business_status": "To Deliver",
                             "net_total_ex_tax": "321.00",
+                            "currency": "EUR",
                         }
                     },
                 },

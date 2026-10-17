@@ -238,9 +238,14 @@ def grade_case(
             failures.append("forbidden_claim")
     if not answer.strip():
         failures.append("empty_answer")
-    elif matching:
+    elif matching and (len(matching) == 1 or case.get("expected_result")):
         failures.extend(_answer_facts(case, payload, answer))
-    return failures
+    from .business_facts import bound_fact_errors
+
+    failures.extend(
+        "answer_bound_" + code.lower() for code in bound_fact_errors(calls, answer)
+    )
+    return list(dict.fromkeys(failures))
 
 
 def _repository(inputs: EvaluationInputs, case: dict[str, Any]) -> Any:

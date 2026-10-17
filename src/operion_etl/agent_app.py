@@ -422,7 +422,8 @@ class AgentApplication:
             nonlocal completed, run_status
             completed = True
             run_status = "cancelled"
-            self.store.save_history(conversation_id, owner_id, cancelled.all_messages())
+            # Cancelled output has not passed the final-fact gate. Keep only
+            # the previously committed history, never the partial model response.
             self.store.finish_run(
                 run_id,
                 status="cancelled",

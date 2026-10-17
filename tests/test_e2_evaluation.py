@@ -95,6 +95,8 @@ class E2EvaluationTests(unittest.TestCase):
                             {
                                 "business_status": "To Deliver",
                                 "net_total_ex_tax": "321.00",
+                                "canonical_id": "order-a",
+                                "currency": "EUR",
                             }
                         ],
                     },

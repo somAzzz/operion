@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any
 
@@ -47,43 +46,14 @@ def record_guardrail(decision: GuardrailDecision) -> None:
             "langfuse.observation.metadata.guardrail": decision.name,
             "langfuse.observation.metadata.verdict": decision.verdict.value,
             "langfuse.observation.metadata.reason_code": decision.reason_code,
-            "operion.guardrail.policy_version": "business-facts-v1",
+            "langfuse.observation.level": (
+                "DEFAULT" if decision.verdict is GuardrailVerdict.ALLOW else "WARNING"
+            ),
+            "langfuse.observation.status_message": decision.reason_code,
+            "operion.guardrail.policy_version": "business-facts-v2",
         },
     ):
         pass
-
-
-def _numbers(data: dict[str, Any]) -> set[int]:
-    numbers: set[int] = set()
-    for key in ("order_count", "sales_order_count"):
-        value = data.get(key)
-        if type(value) is int and value >= 0:
-            numbers.add(value)
-    completeness = data.get("completeness")
-    if isinstance(completeness, dict):
-        total = completeness.get("total_count")
-        # A paged list can be partial while its filtered total is still exact.
-        if type(total) is int and total >= 0:
-            numbers.add(total)
-    if not numbers and isinstance(data.get("orders"), list):
-        # An overview without a separate count contains the current result set.
-        # Never confuse a paginated list's page length with its total count.
-        if (
-            not isinstance(completeness, dict)
-            or completeness.get("status") == "complete"
-        ):
-            numbers.add(len(data["orders"]))
-    return numbers
-
-
-def _walk(value: Any):
-    if isinstance(value, dict):
-        yield value
-        for child in value.values():
-            yield from _walk(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _walk(child)
 
 
 def verify_business_answer(
@@ -107,85 +77,29 @@ def verify_business_answer(
         and isinstance(call["result"].get("data"), dict)
     ]
     data_items = [call["result"]["data"] for call in successful]
-    counts = set().union(*(_numbers(data) for data in data_items))
-    named_counts = [
-        (
-            row.get("customer_name") or row.get("name") or row.get("customer_id"),
-            row.get("order_count"),
-        )
-        for data in data_items
-        for key in ("customer_order_counts", "customers")
-        for row in (data.get(key) if isinstance(data.get(key), list) else [])
-        if isinstance(row, dict) and type(row.get("order_count")) is int
-    ]
-    for claimed, context in asserted_order_count_claims(answer):
-        mentioned_counts = [
-            count
-            for name, count in named_counts
-            if isinstance(name, str) and name.casefold() in context.casefold()
-        ]
-        if (
-            claimed not in mentioned_counts
-            if mentioned_counts
-            else claimed not in counts
-        ):
-            return GuardrailDecision(
-                "output_facts",
-                GuardrailVerdict.DENY
-                if counts or named_counts
-                else GuardrailVerdict.UNKNOWN,
-                "ORDER_COUNT_MISMATCH"
-                if counts or named_counts
-                else "ORDER_COUNT_UNVERIFIED",
-            )
+    from .business_facts import bound_fact_errors
 
-    if not any(call.get("name") == "check_operation_capability" for call in successful):
-        claimed_ids = set(CANONICAL_ID_PATTERN.findall(answer))
-        evidence_ids = set().union(
-            *(
-                set(CANONICAL_ID_PATTERN.findall(json.dumps(data, ensure_ascii=False)))
-                for data in data_items
-            )
-        )
-        if claimed_ids - evidence_ids:
-            return GuardrailDecision(
-                "output_facts", GuardrailVerdict.UNKNOWN, "OBJECT_ID_UNVERIFIED"
-            )
-
-    claimed_amounts = {
-        match.group(1) or match.group(2) or match.group(3)
-        for match in AMOUNT_PATTERN.finditer(answer)
-    }
-    if claimed_amounts:
-        amounts: set[Decimal] = set()
-        for data in data_items:
-            for row in _walk(data):
-                for key in ("net_total_ex_tax", "net_amount", "unit_price_ex_tax"):
-                    if key in row:
-                        try:
-                            amounts.add(Decimal(str(row[key]).replace(",", "")))
-                        except InvalidOperation:
-                            pass
-        if any(
-            Decimal(value.replace(",", "")) not in amounts for value in claimed_amounts
-        ):
-            return GuardrailDecision(
-                "output_facts", GuardrailVerdict.UNKNOWN, "AMOUNT_UNVERIFIED"
-            )
-
-    claimed_statuses = asserted_statuses(answer)
-    if claimed_statuses:
-        statuses = {
-            str(row[key]).casefold().replace(" ", "_")
+    claimed_ids = set(CANONICAL_ID_PATTERN.findall(answer))
+    evidence_ids = set().union(
+        *(
+            set(CANONICAL_ID_PATTERN.findall(json.dumps(data, ensure_ascii=False)))
             for data in data_items
-            for row in _walk(data)
-            for key in ("business_status", "source_status")
-            if row.get(key)
-        }
-        if claimed_statuses - statuses:
-            return GuardrailDecision(
-                "output_facts", GuardrailVerdict.UNKNOWN, "STATUS_UNVERIFIED"
-            )
+        )
+    )
+    if claimed_ids - evidence_ids:
+        return GuardrailDecision(
+            "output_facts", GuardrailVerdict.UNKNOWN, "OBJECT_ID_UNVERIFIED"
+        )
+
+    errors = bound_fact_errors(successful, answer)
+    if errors:
+        return GuardrailDecision(
+            "output_facts",
+            GuardrailVerdict.DENY
+            if errors[0].endswith("MISMATCH")
+            else GuardrailVerdict.UNKNOWN,
+            errors[0],
+        )
 
     claimed_results = asserted_fulfillment_results(answer)
     if claimed_results - {"insufficient_information"}:
@@ -220,4 +134,14 @@ def verify_business_answer(
             return GuardrailDecision(
                 "output_facts", GuardrailVerdict.UNKNOWN, "HISTORY_SCOPE_UNVERIFIED"
             )
+    if not (
+        claimed_ids
+        or claimed_results
+        or asserted_order_count_claims(answer)
+        or AMOUNT_PATTERN.search(answer)
+        or asserted_statuses(answer)
+    ):
+        return GuardrailDecision(
+            "output_facts", GuardrailVerdict.ALLOW, "NO_PROTECTED_CLAIMS"
+        )
     return allow

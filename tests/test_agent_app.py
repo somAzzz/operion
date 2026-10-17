@@ -5,6 +5,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from ag_ui.core import (
     RunErrorEvent,
@@ -422,6 +423,45 @@ class AgentAppTests(unittest.TestCase):
             "/api/conversations/blocked-count-thread", headers=self.headers
         )
         self.assertNotIn("一百张订单", json.dumps(history.json(), ensure_ascii=False))
+
+    def test_cancelled_partial_answer_is_never_saved_or_streamed(self):
+        from ag_ui.core import TextMessageContentEvent
+
+        async def cancelled_stream(adapter, **kwargs):
+            yield TextMessageContentEvent(
+                type="TEXT_MESSAGE_CONTENT",
+                message_id="partial",
+                delta="Unverified partial EUR 999",
+            )
+            await kwargs["on_cancel"](
+                SimpleNamespace(
+                    all_messages=lambda: self.fail(
+                        "cancelled unverified history must not be read"
+                    )
+                )
+            )
+
+        with patch("operion_etl.agent_app.AGUIAdapter.run_stream", cancelled_stream):
+            response = self.client.post(
+                "/api/agent",
+                headers=self.headers,
+                json={
+                    "threadId": "cancelled-thread",
+                    "runId": "cancelled-run",
+                    "state": {},
+                    "context": [],
+                    "forwardedProps": {},
+                    "tools": [],
+                    "messages": [{"id": "q", "role": "user", "content": "orders?"}],
+                },
+            )
+        self.assertNotIn("Unverified partial", response.text)
+        run = self.application.store.run("cancelled-run", "user-1")
+        self.assertEqual("cancelled", run["status"])
+        history = self.client.get(
+            "/api/conversations/cancelled-thread", headers=self.headers
+        )
+        self.assertNotIn("Unverified partial", json.dumps(history.json()))
 
     def test_verified_business_count_is_emitted_and_saved(self):
         expected = self.application.repository.customer_portfolio_summary(
