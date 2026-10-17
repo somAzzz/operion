@@ -17,9 +17,9 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Architecture
 
-![Operion architecture: read-only Agent and MCP services, independently approved actions, data preparation, and optional telemetry](docs/imgs/architecture-2026-10-17.png)
+![Operion architecture: read-only Agent and MCP services, independently approved actions, data preparation, and optional telemetry](docs/imgs/architecture.png)
 
-Architecture reviewed against the implementation on **2026-10-17**. This is a
+Architecture reviewed against the current implementation. This is a
 component map; optional services are enabled separately, and the diagram does
 not imply E5 production or real-data pilot approval.
 
@@ -48,7 +48,7 @@ not imply E5 production or real-data pilot approval.
   a Collector to Langfuse; telemetry does not authorize actions.
 
 The image was generated with GPT Image using the built-in image-generation tool;
-the [generation prompt](docs/imgs/architecture-2026-10-17.prompt.txt) is retained
+the [generation prompt](docs/imgs/architecture.prompt.txt) is retained
 for future updates. Operational details: [Agent](ops/e2-agent.md),
 [actions](ops/e3-action-control.md), [gateway](ops/auth-gateway.md), and
 [telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md).

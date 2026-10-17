@@ -1,0 +1,37 @@
+Generated with the built-in GPT Image tool.
+Style reference: pipeline.png (original architecture diagram).
+
+Use case: infographic-diagram.
+Create the current Operion architecture diagram using the attached OLD diagram as a STYLE AND COMPOSITION REFERENCE ONLY. Match its visual language closely: white background, dark navy headings, pastel blue/green/lavender/yellow/pink cards, thin colored borders, subtly rounded rectangular cards, navy outline icons, compact bullet lists, thin navy orthogonal arrows, dashed pale-blue boundary around the main agent layer. Match its approximately 3:2 landscape aspect ratio, title aligned top left, interfaces along top, large agent area left and center, model and observability sidebar on right, enterprise systems at bottom. This is a revision of that diagram, not a new visual theme. High resolution and crisp legible English typography.
+Title exactly "Operion System Architecture". Subtitle "A safe, controllable agent layer for Twenty CRM + ERPNext". Top right banner "Understand · Propose · Approve · Execute · Audit" and "Human-in-the-loop. Business in control."
+NO date, timestamp, version number, or time annotation anywhere in image.
+Replace obsolete conceptual content from reference with these implemented components and accurate relationships. Do NOT preserve hypothetical integrations or old false connections.
+Top interface band:
+"Operion UI" (Next.js + assistant-ui): Chat & evidence; Approvals & action status.
+"MCP Clients" (optional): stdio MCP access; Read-only business tools.
+"Identity Gateway" (optional local deployment): Nginx · OAuth2 Proxy · Keycloak; Redis login sessions.
+"Human Approver": Review exact proposal; Independent approval.
+Large dashed main region "Operion Agent Layer":
+"FastAPI / AG-UI": Server-side authorization; Tool permissions & run budgets; SQLite trusted conversation history.
+"Pydantic AI Agent": Understand intent; Call shared read tools; Propose follow-up tasks; NO WRITE CREDENTIALS badge.
+"Shared Read Services": Deterministic business queries; Server-defined access scope; Snapshot: canonical CSV + identity map; Live: Twenty + ERPNext read APIs.
+"MCP Server / stdio": Same shared read services.
+"Output Evidence Checks": Check explicit claims against tool evidence; Gate final answer delivery.
+Controlled action cards in lower part of main region:
+"Action API": Exact revision approval; Trusted independent approver.
+"Action Ledger / PostgreSQL": Immutable revisions & decisions; Action state & audit history.
+"Action Worker": Restricted write credentials; Leases & execution gates; Idempotency; Exact readback & reconciliation.
+Use arrows: Operion UI -> FastAPI -> Agent -> Shared Read Services. MCP Clients -> MCP Server -> Shared Read Services. Agent -> Action Ledger labeled "propose only". Human Approver -> Action API -> Action Ledger -> Action Worker. Output Evidence Checks is associated with FastAPI, not a separate business datasource. Do not draw Agent-to-MCP connection.
+Right sidebar cards:
+"Model Layer": Pydantic AI model client <-> "SGLang / qwen3.8-27b"; OpenAI-compatible API. Optional gateway model relay. No LLM proxy product or invented capabilities.
+"Observability (optional)": Web / Agent / Action traces -> OpenTelemetry Collector -> Langfuse; Observes execution, does not authorize.
+"Deployment Boundaries": Read-only gateway omits Action API and Worker; Controlled writes enabled separately; E5 real-data pilot approval remains separate.
+Bottom enterprise system band:
+"Twenty CRM": Companies & People read APIs; One approved internal Task write.
+"ERPNext": Customers, suppliers, contacts & orders; Read-only runtime access.
+Shared Read Services has read connections to both enterprise systems; Action Worker write arrow goes ONLY to Twenty.
+Bottom or lower sidebar compact "Data Preparation" card: WWI / SQL Server -> ETL & validation -> Canonical CSV + target exports -> Controlled import & identity readback.
+No future email/calendar/files integrations, no separate invented policy service, no arbitrary ERPNext writes. Prioritize the look of reference and accurate readable relationships; keep text concise enough for the dense card layout.
+
+
+Refinement instructions: Correct MCP Clients -> MCP Server and Human Approver -> Action API connectors. Remove the dangling Worker-to-read-services connector; retain read API connections from the enterprise systems. Preserve the reference styling and omit dates and version numbers.

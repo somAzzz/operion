@@ -14,9 +14,9 @@
 
 ## 当前架构
 
-![Operion 架构：只读 Agent 与 MCP、独立审批的动作链、数据准备和可选遥测](docs/imgs/architecture-2026-10-17.png)
+![Operion 架构：只读 Agent 与 MCP、独立审批的动作链、数据准备和可选遥测](docs/imgs/architecture.png)
 
-按 **2026-10-17** 的实现核对。此图展示代码中的组件关系；可选服务需要单独启用，不代表已经通过 E5 生产或真实数据试运行验收。
+按当前实现核对。此图展示代码中的组件关系；可选服务需要单独启用，不代表已经通过 E5 生产或真实数据试运行验收。
 
 - **Web 与身份**：Next.js / assistant-ui 提供对话、证据、审批与动作状态界面，服务端路由代理 AG-UI/SSE 和动作请求。可选本地 HTTPS 网关包含 Nginx、OAuth2 Proxy、Keycloak 与 Redis 登录会话；企业模式服务执行 OIDC 身份验证和服务端权限范围检查。
 - **Agent 与证据**：FastAPI 承载 Pydantic AI，通过 OpenAI 兼容接口调用本地 SGLang。SQLite 保存可信对话历史；工具权限、运行预算和基于工具证据的输出检查约束执行与最终回答。输出检查覆盖明确支持的声明，并不证明任意自然语言推断。
@@ -24,7 +24,7 @@
 - **受控动作**：单独启用后，Agent 将跟进任务提案写入 PostgreSQL 动作账本；人工通过 Web 和 Action API 审批不可变修订。Worker 检查执行门禁，管理租约、幂等、精确回读和未知结果对账，写入范围限于 Twenty 内部 Task 路径。只读网关部署不包含 Action API 或 Worker。
 - **数据与运维**：WWI / SQL Server 经 ETL 与校验产出统一记录和目标导入文件，通过受控导入与身份回读关联业务系统。可选遥测经 OpenTelemetry Collector 发送至 Langfuse；遥测不授予执行权限。
 
-架构图使用内置 GPT Image 工具生成，保留了[生成提示词](docs/imgs/architecture-2026-10-17.prompt.txt)，便于后续更新。运行细节见下方文档入口。
+架构图使用内置 GPT Image 工具生成，保留了[生成提示词](docs/imgs/architecture.prompt.txt)，便于后续更新。运行细节见下方文档入口。
 
 ## 当前状态
 
