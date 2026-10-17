@@ -17,6 +17,7 @@ from .answer_claims import (
     STATUS_ALIASES,
     STATUS_PATTERN,
     _claim_context,
+    asserted_customer_counts,
     asserted_order_count_claims,
 )
 
@@ -150,6 +151,30 @@ def _select(facts: list[Fact], context: str, field: str) -> list[Fact]:
 def bound_fact_errors(calls: list[dict[str, Any]], answer: str) -> list[str]:
     facts = evidence_facts(calls)
     errors: list[str] = []
+    customer_counts = set()
+    for call in calls:
+        result = call.get("result", {})
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            continue
+        data = result.get("data")
+        if not isinstance(data, dict):
+            continue
+        if type(data.get("customer_count")) is int:
+            customer_counts.add(data["customer_count"])
+        elif (
+            call.get("name") == "search_customers"
+            and not data.get("query")
+            and data.get("completeness", {}).get("status") == "complete"
+            and isinstance(data.get("results"), list)
+        ):
+            customer_counts.add(len(data["results"]))
+    for count in asserted_customer_counts(answer):
+        if count not in customer_counts:
+            errors.append(
+                "CUSTOMER_COUNT_MISMATCH"
+                if customer_counts
+                else "CUSTOMER_COUNT_UNVERIFIED"
+            )
     for count, context in asserted_order_count_claims(answer):
         selected = _select(facts, context, "order_count")
         if not selected or any(fact.value != str(count) for fact in selected):

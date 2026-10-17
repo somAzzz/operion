@@ -26,6 +26,56 @@ def order(identity, amount, currency, status):
 
 
 class FactBindingTests(unittest.TestCase):
+    def test_customer_count_requires_current_tool_evidence(self):
+        calls = [
+            {
+                "name": "get_customer_portfolio_summary",
+                "result": {
+                    "ok": True,
+                    "data": {"customer_count": 10},
+                },
+            }
+        ]
+        for answer in ["You have **1 customer**.", "客户数量：1", "共有一位客户"]:
+            with self.subTest(answer=answer):
+                self.assertEqual(
+                    "CUSTOMER_COUNT_MISMATCH",
+                    verify_business_answer(calls, answer).reason_code,
+                )
+                self.assertEqual(
+                    "CUSTOMER_COUNT_UNVERIFIED",
+                    verify_business_answer([], answer).reason_code,
+                )
+        self.assertEqual(
+            GuardrailVerdict.ALLOW,
+            verify_business_answer(
+                calls, "You have **10 customers** in the current authorized scope."
+            ).verdict,
+        )
+        search = [
+            {
+                "name": "search_customers",
+                "result": {
+                    "ok": True,
+                    "data": {
+                        "query": "",
+                        "results": [{}, {}],
+                        "completeness": {"status": "partial"},
+                    },
+                },
+            }
+        ]
+        self.assertNotEqual(
+            GuardrailVerdict.ALLOW,
+            verify_business_answer(search, "2 customers").verdict,
+        )
+        search[0]["result"]["data"]["completeness"]["status"] = "complete"
+        self.assertEqual(
+            GuardrailVerdict.ALLOW,
+            verify_business_answer(search, "2 customers").verdict,
+        )
+
+
     def test_currency_is_part_of_the_fact_and_scorer_rejects_it(self):
         calls = [order("wwi:sales_order:1", "177.60", "USD", "Draft")]
         for answer, allowed in [

@@ -128,6 +128,20 @@ def asserted_order_counts(answer: str) -> list[int]:
     return [count for count, _ in asserted_order_count_claims(answer)]
 
 
+def asserted_customer_counts(answer: str) -> list[int]:
+    """Extract explicit customer totals, including Markdown-formatted answers."""
+    text = re.sub(r"[*`_]", "", answer)
+    values = []
+    for pattern in (
+        r"\b(\d[\d,]*)\s+customers?\b",
+        r"\bcustomer (?:count|total)\s*[:=]?\s*(\d[\d,]*)\b",
+        r"([零〇一二两三四五六七八九十百千\d,]+)\s*(?:个|位|家)客户",
+        r"客户(?:总数|数量|数)\s*(?:为|是|[:：=])?\s*([零〇一二两三四五六七八九十百千\d,]+)",
+    ):
+        values.extend(_integer(m.group(1)) for m in re.finditer(pattern, text, re.I))
+    return values
+
+
 def asserted_statuses(answer: str) -> set[str]:
     return {
         STATUS_ALIASES.get(match.group(1), match.group(1)).casefold()

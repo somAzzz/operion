@@ -18,6 +18,7 @@ from opentelemetry import trace
 from .answer_claims import (
     AMOUNT_PATTERN,
     CANONICAL_ID_PATTERN,
+    asserted_customer_counts,
     asserted_fulfillment_results,
     asserted_order_count_claims,
     asserted_statuses,
@@ -138,6 +139,7 @@ def verify_business_answer(
         claimed_ids
         or claimed_results
         or asserted_order_count_claims(answer)
+        or asserted_customer_counts(answer)
         or AMOUNT_PATTERN.search(answer)
         or asserted_statuses(answer)
     ):
