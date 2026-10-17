@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:session": "node --experimental-strip-types tests/session-fetch.test.mjs"
   },
   "dependencies": {
     "@ag-ui/client": "0.0.59",

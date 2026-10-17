@@ -46,6 +46,24 @@ class LoginForm(HTMLParser):
             self.action = values["action"]
 
 
+class PublicLogin(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.assets = set()
+        self.action = None
+        self.return_to = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        path = values.get("src", values.get("href", ""))
+        if path.startswith("/_next/static/"):
+            self.assets.add(path)
+        if tag == "form":
+            self.action = values.get("action")
+        if tag == "input" and values.get("name") == "rd":
+            self.return_to = values.get("value")
+
+
 class Client:
     def __init__(self, ca: Path):
         self.jar = http.cookiejar.CookieJar()
@@ -156,6 +174,31 @@ def main():
             time.sleep(1)
         check("anonymous-page-redirect", ready)
         check("anonymous-api-401", anonymous.request("/api/conversations")[0] == 401)
+        login_status, _, login_body = anonymous.request("/login?reason=session_expired")
+        login_page = login_body.decode()
+        check(
+            "anonymous-timeout-login",
+            login_status == 200 and "会话已超时或已失效，请重新登录" in login_page,
+        )
+        check("login-excludes-chat-runtime", "Message input" not in login_page)
+        public_login = PublicLogin()
+        public_login.feed(login_page)
+        check(
+            "login-fixed-authentication-destination",
+            public_login.action == "/oauth2/start" and public_login.return_to == "/",
+        )
+        check("login-build-assets-exist", bool(public_login.assets))
+        for asset in public_login.assets:
+            asset_status, asset_headers, _ = anonymous.request(asset)
+            check(
+                "anonymous-login-asset",
+                asset_status == 200
+                and "text/html" not in asset_headers.get("Content-Type", ""),
+            )
+        check(
+            "login-write-method-denied",
+            anonymous.request("/login", method="POST", data=b"")[0] == 403,
+        )
         check(
             "forged-forwarding-headers-denied",
             anonymous.request(
@@ -227,8 +270,8 @@ def main():
 import json, urllib.request, urllib.error
 results = []
 for url, headers in [
-    ("http://web:3000/", {}),
-    ("http://web:3000/", {"X-Forwarded-Access-Token": "forged"}),
+    ("http://web:3000/api/conversations", {}),
+    ("http://web:3000/api/conversations", {"X-Forwarded-Access-Token": "forged"}),
     ("http://agent:8000/api/identity", {"X-Forwarded-Access-Token": "forged"}),
     ("http://agent:8000/api/identity", {"Authorization": "Bearer forged"}),
 ]:

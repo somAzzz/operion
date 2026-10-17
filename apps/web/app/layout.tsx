@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { MyRuntimeProvider } from "@/app/MyRuntimeProvider";
 
 import "./globals.css";
 
@@ -18,10 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-dvh">
       <body className="h-dvh font-sans">
-        {process.env.OPERION_ENVIRONMENT === "enterprise" ? (
-          <a href="/session" className="gateway-session-link">Session / sign out</a>
-        ) : null}
-        <MyRuntimeProvider>{children}</MyRuntimeProvider>
+        {children}
       </body>
     </html>
   );

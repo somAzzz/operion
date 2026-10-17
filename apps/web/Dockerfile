@@ -4,7 +4,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build -- --webpack
+RUN npm run test:session && npx tsc --noEmit && npm run build -- --webpack
 
 FROM node:22-bookworm-slim
 WORKDIR /app

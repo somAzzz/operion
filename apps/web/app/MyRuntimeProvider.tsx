@@ -12,6 +12,7 @@ import {
   ExportedMessageRepository,
 } from "@assistant-ui/react";
 import { HttpAgent } from "@ag-ui/client";
+import { fetchWithSession, redirectToLogin } from "@/lib/session-fetch";
 import {
   fromAgUiMessages,
   useAgUiRuntime,
@@ -45,9 +46,18 @@ export function MyRuntimeProvider({
   const [currentThreadId, setCurrentThreadId] = useState(initialThreadId);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+  const [redirectingToLogin, setRedirectingToLogin] = useState(false);
+  const sessionFetch = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      fetchWithSession(input, init, () => {
+        setRedirectingToLogin(true);
+        redirectToLogin();
+      }),
+    [],
+  );
 
   const fetchHistory = useCallback(async (threadId: string) => {
-    const response = await fetch(
+    const response = await sessionFetch(
       `/api/conversations/${encodeURIComponent(threadId)}`,
       { cache: "no-store" },
     );
@@ -61,22 +71,22 @@ export function MyRuntimeProvider({
     return ExportedMessageRepository.fromArray(
       fromAgUiMessages(data.messages, { showThinking: false }),
     );
-  }, []);
+  }, [sessionFetch]);
 
   const refreshConversations = useCallback(async () => {
     try {
-      const response = await fetch("/api/conversations", { cache: "no-store" });
+      const response = await sessionFetch("/api/conversations", { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to list conversations.");
       const data = (await response.json()) as {
         conversations: ConversationSummary[];
       };
       setConversations(data.conversations);
     } catch {
-      setConversations([]);
+      // Keep the loaded index while authentication or the network is unavailable.
     } finally {
       setIsLoadingConversations(false);
     }
-  }, []);
+  }, [sessionFetch]);
 
   useEffect(() => {
     void refreshConversations();
@@ -85,12 +95,13 @@ export function MyRuntimeProvider({
   const agent = useMemo(() => {
     return new HttpAgent({
       url: "/api/agent",
+      fetch: sessionFetch,
       threadId: currentThreadId,
       headers: {
         Accept: "text/event-stream",
       },
     });
-  }, [currentThreadId]);
+  }, [currentThreadId, sessionFetch]);
 
   const historyAdapter = useMemo(
     () => ({
@@ -131,7 +142,7 @@ export function MyRuntimeProvider({
         return { messages: history.messages.map((item) => item.message) };
       },
       onDelete: async (threadId: string) => {
-        const response = await fetch(
+        const response = await sessionFetch(
           `/api/conversations/${encodeURIComponent(threadId)}`,
           {
             method: "DELETE",
@@ -153,7 +164,7 @@ export function MyRuntimeProvider({
         }
       },
     }),
-    [conversations, currentThreadId, fetchHistory, isLoadingConversations],
+    [conversations, currentThreadId, fetchHistory, isLoadingConversations, sessionFetch],
   );
 
   const runtime = useAgUiRuntime({
@@ -168,6 +179,10 @@ export function MyRuntimeProvider({
       threadList: threadListAdapter,
     },
   });
+
+  if (redirectingToLogin) {
+    return <main className="login-page" role="status">正在跳转到登录页面…</main>;
+  }
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

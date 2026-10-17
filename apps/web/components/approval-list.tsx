@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { fetchWithSession } from "@/lib/session-fetch";
 import type { ActionRecord } from "@/lib/action-types";
 import { CheckIcon, ShieldAlertIcon, XIcon } from "lucide-react";
 
@@ -32,7 +33,7 @@ export function ApprovalList({
     setPendingDecision(decision);
     startTransition(async () => {
       try {
-        const response = await fetch(
+        const response = await fetchWithSession(
           `/api/actions/${action.action_id}/decisions`,
           {
             method: "POST",

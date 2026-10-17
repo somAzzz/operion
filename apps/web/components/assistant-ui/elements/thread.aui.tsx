@@ -26,6 +26,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/session-fetch";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -482,6 +483,8 @@ const ComposerRunStatus: FC = () => {
     );
   }
 
+  if (error === SESSION_EXPIRED_MESSAGE) return null;
+
   if (error) {
     return (
       <div
@@ -492,8 +495,7 @@ const ComposerRunStatus: FC = () => {
         <p className="font-medium">The last request stopped with an error.</p>
         <p className="mt-0.5 break-words">{error}</p>
         <p className="mt-1 text-xs opacity-80">
-          Your conversation is preserved. You can send a shorter question
-          below.
+          Your conversation is preserved. You can send a shorter question below.
         </p>
       </div>
     );

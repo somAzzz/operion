@@ -21,7 +21,7 @@ case "${1:-offline}" in
     PYDANTIC_AI_NO_BANNER=1 PYTHONPATH=src uv run --frozen --extra observability python scripts/test_postgres.py
     ;;
   web)
-    (cd apps/web && npm ci && npx tsc --noEmit && npm run build -- --webpack)
+    (cd apps/web && npm ci && npm run test:session && npx tsc --noEmit && npm run build -- --webpack)
     ;;
   *)
     echo "usage: scripts/verify.sh {setup|offline|case [id] [--layer domain|agent|mcp]|postgres|web}" >&2

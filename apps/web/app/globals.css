@@ -742,3 +742,26 @@
   background: var(--background, white);
   font-size: 0.75rem;
 }
+
+.login-page {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: min(100%, 29rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+  box-shadow: 0 16px 50px rgb(7 28 42 / 8%);
+}
+.login-brand { color: var(--muted-foreground); letter-spacing: 0.2em; font-size: 0.75rem; }
+.login-card h1 { margin-block: 0.75rem 1.5rem; font-size: 1.65rem; font-weight: 650; }
+.login-notice { padding: 1rem; border-inline-start: 3px solid #b7791f; background: #fffbeb; color: #713f12; }
+.login-notice p + p { margin-top: 0.5rem; font-size: 0.8rem; }
+.login-help { margin-block: 1.25rem; color: var(--muted-foreground); line-height: 1.7; font-size: 0.9rem; }
+.login-button { width: 100%; min-height: 2.8rem; padding: 0.7rem 1rem; border-radius: 0.5rem; background: #0c4a5b; color: white; font-weight: 600; cursor: pointer; }
+.login-button:hover { background: #083344; }
+.login-button:focus-visible { outline: 3px solid #0891b2; outline-offset: 3px; }

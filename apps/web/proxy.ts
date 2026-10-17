@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 function deny(request: NextRequest, status: number, message: string) {
   const page = !request.nextUrl.pathname.startsWith("/api/");
+  if (page && status === 401) {
+    const origin = process.env.OPERION_PUBLIC_ORIGIN ?? request.nextUrl.origin;
+    return NextResponse.redirect(new URL("/login?reason=session_expired", origin));
+  }
   // Messages are fixed application strings, never upstream error text or claims.
   return new NextResponse(page ? `<!doctype html><html lang="en"><title>Operion access</title>
     <h1>Operion access</h1><p>${message}</p>
@@ -15,8 +19,12 @@ function deny(request: NextRequest, status: number, message: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  // A content-free liveness endpoint; no identity or business access.
-  if (request.nextUrl.pathname === "/health" && ["GET", "HEAD"].includes(request.method)) {
+  // Anonymous pages/assets carry no identity or business data. In particular,
+  // the login page must not authenticate itself or mount the chat runtime.
+  const pathname = request.nextUrl.pathname;
+  const publicRead = pathname === "/health" || pathname === "/login" ||
+    pathname === "/favicon.ico" || pathname.startsWith("/_next/static/");
+  if (publicRead && ["GET", "HEAD"].includes(request.method)) {
     return NextResponse.next();
   }
   if (process.env.OPERION_ENVIRONMENT !== "enterprise") {
