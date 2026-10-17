@@ -18,6 +18,8 @@
 
 按当前实现核对。此图展示代码中的组件关系；可选服务需要单独启用，不代表已经通过 E5 生产或真实数据试运行验收。
 
+图中按浏览器入口、Agent/MCP 查询、受控动作、数据与遥测分区。重复出现的端点名称指同一组件；箭头表示请求或操作方向，不表示响应数据流向。Agent 服务边界内的模块属于该服务内部组件。
+
 - **Web 与身份**：Next.js / assistant-ui 提供对话、证据、审批与动作状态界面，服务端路由代理 AG-UI/SSE 和动作请求。可选本地 HTTPS 网关包含 Nginx、OAuth2 Proxy、Keycloak 与 Redis 登录会话；企业模式服务执行 OIDC 身份验证和服务端权限范围检查。
 - **Agent 与证据**：FastAPI 承载 Pydantic AI，通过 OpenAI 兼容接口调用本地 SGLang。SQLite 保存可信对话历史；工具权限、运行预算和基于工具证据的输出检查约束执行与最终回答。输出检查覆盖明确支持的声明，并不证明任意自然语言推断。
 - **共享只读服务**：Agent 直接调用 Python 业务工具；独立 stdio MCP 服务向 MCP 客户端暴露同一查询层。snapshot 模式读取 canonical CSV 与 identity map；live 模式使用只读凭据查询 Twenty、ERPNext。两种模式均受权限范围与来源信息约束，固定履约案例仅适用于快照。

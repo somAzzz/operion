@@ -23,6 +23,11 @@ Architecture reviewed against the current implementation. This is a
 component map; optional services are enabled separately, and the diagram does
 not imply E5 production or real-data pilot approval.
 
+The diagram separates browser access, Agent/MCP reads, controlled actions, and
+data/telemetry flows. Repeated endpoint names refer to the same component;
+arrows show requests or operations, rather than response data. Components inside
+the Agent service boundary run within that service.
+
 - **Web and identity:** Next.js / assistant-ui provides conversations, evidence,
   approvals, and action status. Server routes proxy AG-UI/SSE and action requests.
   The optional local HTTPS gateway uses Nginx, OAuth2 Proxy, Keycloak, and Redis
