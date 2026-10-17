@@ -1,0 +1,24 @@
+Generated with the built-in GPT Image tool on 2026-10-17.
+Reviewed against repository components; optional deployments are not production acceptance.
+
+Use case: infographic-diagram
+Asset type: repository README architecture diagram, wide high-resolution landscape.
+Create a polished technical architecture diagram titled "OPERION" with subtitle "Controlled business agent architecture • 2026-10-17". Light ivory background, dark navy typography, restrained teal read paths, amber approval/write paths, lilac observability. Crisp large English labels, generous spacing, flat rounded rectangles, orthogonal arrows, no decorative illustrations. Ensure every label is legible.
+Layout: main read flow across upper half, optional controlled-write lane across lower-middle, data preparation and observability as separate footer strips.
+Main boxes and exact relationships:
+"Browser" -> "Next.js + assistant-ui" -> "FastAPI / AG-UI" -> "Pydantic AI Agent" -> "Shared read services".
+Above the Browser-to-Web connection put an OPTIONAL enclosing gateway band labeled "Optional local gateway: Nginx • OAuth2 Proxy • Keycloak • Redis sessions". Redis stores login sessions only.
+Below FastAPI connect a small cylinder "SQLite • trusted conversation history".
+Below Pydantic AI connect "SGLang • qwen3.8-27b" with a bidirectional line labeled "OpenAI-compatible API".
+Inside the FastAPI/Agent group add a small note "Server-side authorization • tool limits • output evidence checks".
+Above shared read services put "MCP clients" -> "MCP server • stdio" -> "Shared read services". MCP and Agent both call the same services; the Agent does NOT call MCP.
+To the right shared read services splits into "Snapshot: canonical CSV + identity map" and "Live: Twenty + ERPNext read APIs". Label the split "Select data mode". Show both as read-only sources.
+Controlled write lane in a separate amber bordered area labeled "Optional controlled write • separately enabled":
+"Pydantic AI Agent" has a dashed amber line labeled "propose only" to "PostgreSQL action ledger".
+"Human approver via Web" -> "Action API" -> "PostgreSQL action ledger" -> "Action Worker" -> "Twenty internal Task".
+Small line below: "Immutable revisions • independent approval • leases • exact readback • reconciliation".
+Small explicit badge "Not deployed in the read-only gateway stack".
+Data preparation footer: "WWI / SQL Server" -> "ETL + validation" -> "Canonical CSV + target exports" -> "Controlled import + identity readback". Caption "Supplies snapshots and verified business-system identities".
+Separate observability footer: "Web / Agent / Action services" -> "OpenTelemetry Collector" -> "Langfuse (optional)". Caption "Telemetry observes execution; it does not grant write permission".
+Bottom small caption: "Architecture of implemented components; E5 real-data pilot approval remains separate."
+Do not imply all optional services are deployed together. Avoid crossed lines, tiny text, extra databases, direct model-to-business writes or invented technologies.

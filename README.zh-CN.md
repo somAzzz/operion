@@ -12,7 +12,21 @@
 
 [在 YouTube 观看 **Operion**](https://www.youtube.com/watch?v=TxG6GOX3BZE)。
 
-![Operion 系统架构](docs/imgs/pipeline.png)
+## 当前架构
+
+![Operion 架构：只读 Agent 与 MCP、独立审批的动作链、数据准备和可选遥测](docs/imgs/architecture-2026-10-17.png)
+
+按 **2026-10-17** 的实现核对。此图展示代码中的组件关系；可选服务需要单独启用，不代表已经通过 E5 生产或真实数据试运行验收。
+
+- **Web 与身份**：Next.js / assistant-ui 提供对话、证据、审批与动作状态界面，服务端路由代理 AG-UI/SSE 和动作请求。可选本地 HTTPS 网关包含 Nginx、OAuth2 Proxy、Keycloak 与 Redis 登录会话；企业模式服务执行 OIDC 身份验证和服务端权限范围检查。
+- **Agent 与证据**：FastAPI 承载 Pydantic AI，通过 OpenAI 兼容接口调用本地 SGLang。SQLite 保存可信对话历史；工具权限、运行预算和基于工具证据的输出检查约束执行与最终回答。输出检查覆盖明确支持的声明，并不证明任意自然语言推断。
+- **共享只读服务**：Agent 直接调用 Python 业务工具；独立 stdio MCP 服务向 MCP 客户端暴露同一查询层。snapshot 模式读取 canonical CSV 与 identity map；live 模式使用只读凭据查询 Twenty、ERPNext。两种模式均受权限范围与来源信息约束，固定履约案例仅适用于快照。
+- **受控动作**：单独启用后，Agent 将跟进任务提案写入 PostgreSQL 动作账本；人工通过 Web 和 Action API 审批不可变修订。Worker 检查执行门禁，管理租约、幂等、精确回读和未知结果对账，写入范围限于 Twenty 内部 Task 路径。只读网关部署不包含 Action API 或 Worker。
+- **数据与运维**：WWI / SQL Server 经 ETL 与校验产出统一记录和目标导入文件，通过受控导入与身份回读关联业务系统。可选遥测经 OpenTelemetry Collector 发送至 Langfuse；遥测不授予执行权限。
+
+架构图使用内置 GPT Image 工具生成，保留了[生成提示词](docs/imgs/architecture-2026-10-17.prompt.txt)，便于后续更新。运行细节见下方文档入口。
+
+## 当前状态
 
 当前阶段：**E0–E4 历史实验范围已通过；下一步先完善实时跨系统正确性与 Agent 评测，运营目标为 E5 单人只读试运行**。实施顺序见 [总体改进计划](docs/enterprise/improvement-plan.md)。真实写入仍须独立审批人与专项验收。
 WWI 下载与最小 ETL 已实现；Twenty 已回读 10 个 WWI Company 和 25 个 People，
@@ -57,6 +71,12 @@ Task/TaskTarget ID、独立审批、精确回读和断连/崩溃恢复。真实�
 
 ```text
 operion/
+├── apps/web/                 # Next.js 证据界面、API 代理、审批与动作状态
+├── src/operion_etl/          # Agent、MCP、只读业务服务、动作控制与 ETL
+│   └── migrations/          # PostgreSQL 动作账本 schema 与角色
+├── deploy/                  # 可选认证网关与 OTel Collector 配置
+├── scripts/                 # 环境准备、验证、演示和验收入口
+├── tests/                   # 离线、权限、Agent 与动作控制测试
 ├── docs/                     # 方案、功能对照、边界和路线
 ├── data/
 │   ├── raw/                  # 原始来源快照：wwi / adventureworks / ema / openfda
@@ -68,10 +88,11 @@ operion/
 ├── contracts/                # 数据与工具接口合同
 ├── evaluations/              # 业务问题、权限与异常验收案例
 ├── reports/                  # 数据质量、对账和 agent 评估结果
-└── ops/                      # 环境基线、运行与恢复说明
+├── ops/                      # 环境基线、运行与恢复说明
+└── .github/workflows/        # 自动化验证
 ```
 
-实际数据与运行输出默认不纳入版本管理。当前业务代码集中在独立的数据流水线；后续模块将按 integrations、业务工具/domain、MCP 和 agent 分层。
+实际数据与运行输出默认不纳入版本管理。当前 Python 实现集中在 `src/operion_etl` 包内：`agent_app.py` / `agent_runtime.py` 负责 Agent；`read_tools.py` / `mcp_server.py` 负责共享查询层；`output_guardrails.py` / `answer_claims.py` / `business_facts.py` 负责回答证据校验；`session_store.py` 负责对话存储。`action_app.py`、`action_store.py`、`action_worker.py` 和 `twenty_actions.py` 构成独立动作生命周期；`pipeline.py`、导入前校验与回读模块负责数据准备和对账。
 
 ## 数据流水线
 

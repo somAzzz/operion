@@ -15,7 +15,43 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 [Watch **Operion** on YouTube](https://www.youtube.com/watch?v=TxG6GOX3BZE).
 
-![Operion system architecture](docs/imgs/pipeline.png)
+## Architecture
+
+![Operion architecture: read-only Agent and MCP services, independently approved actions, data preparation, and optional telemetry](docs/imgs/architecture-2026-10-17.png)
+
+Architecture reviewed against the implementation on **2026-10-17**. This is a
+component map; optional services are enabled separately, and the diagram does
+not imply E5 production or real-data pilot approval.
+
+- **Web and identity:** Next.js / assistant-ui provides conversations, evidence,
+  approvals, and action status. Server routes proxy AG-UI/SSE and action requests.
+  The optional local HTTPS gateway uses Nginx, OAuth2 Proxy, Keycloak, and Redis
+  login sessions; enterprise services enforce OIDC identity and server-side scope.
+- **Agent and evidence:** FastAPI hosts the Pydantic AI runtime, calling local
+  SGLang through an OpenAI-compatible API. SQLite holds trusted conversation
+  history. Tool permissions, run budgets, and output checks against tool evidence
+  constrain execution and final answers; these checks do not prove arbitrary
+  natural-language claims.
+- **Shared read services:** the Agent calls Python business tools directly;
+  the separate stdio MCP server exposes the same repository services to MCP
+  clients. Snapshot mode reads canonical CSV and an identity map; live mode
+  queries Twenty and ERPNext with read-only credentials. Authorization scope and
+  source provenance apply to both modes; frozen fulfilment cases are snapshot-only.
+- **Controlled actions:** when separately enabled, the Agent records a follow-up
+  proposal in the PostgreSQL action ledger. A human uses the Web and Action API
+  to approve the immutable revision. The Worker enforces execution gates, leases,
+  idempotency, readback, and reconciliation for the limited Twenty internal Task
+  path. The read-only gateway stack deploys no Action API or Worker.
+- **Data and operations:** WWI / SQL Server extraction produces validated
+  canonical records and target exports; controlled imports and identity readback
+  connect them to business systems. Optional OpenTelemetry traces flow through
+  a Collector to Langfuse; telemetry does not authorize actions.
+
+The image was generated with GPT Image using the built-in image-generation tool;
+the [generation prompt](docs/imgs/architecture-2026-10-17.prompt.txt) is retained
+for future updates. Operational details: [Agent](ops/e2-agent.md),
+[actions](ops/e3-action-control.md), [gateway](ops/auth-gateway.md), and
+[telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md).
 
 ## Current status
 
@@ -86,18 +122,31 @@ use cases and expected answers
 
 ```text
 operion/
-├── src/operion_etl/          # Reproducible extraction, mapping, validation, and audits
-├── tests/                    # Deterministic ETL and validation tests
-├── contracts/                # Canonical data and future tool contracts
+├── apps/web/                 # Next.js evidence desk, API proxies, approvals, actions
+├── src/operion_etl/           # Agent, MCP, read services, action control, and ETL
+│   └── migrations/           # PostgreSQL action-ledger schema and roles
+├── deploy/                   # Optional auth gateway and OTel Collector configuration
+├── scripts/                  # Setup, verification, demo, and acceptance entry points
+├── tests/                    # Offline, authorization, Agent, and action-control tests
+├── contracts/                # Canonical data, tools, actions, and enterprise boundaries
 ├── mappings/                 # Source-to-target mappings and fixed assumptions
 ├── docs/                     # Product, safety, evaluation, and operating plans
 ├── ops/                      # Runbooks for data preparation and recovery
 ├── evaluations/              # Evaluation definitions and fixtures
 ├── data/                     # Local source snapshots and generated exports
-└── reports/                  # Local validation and reconciliation evidence
+├── reports/                  # Local validation and reconciliation evidence
+└── .github/workflows/        # Automated verification
 ```
 
 Business data and generated reports are excluded from version control by default.
+
+Within `src/operion_etl`, `agent_app.py` / `agent_runtime.py` implement the Agent,
+`read_tools.py` / `mcp_server.py` implement the shared query layer,
+`output_guardrails.py` / `answer_claims.py` / `business_facts.py` check answer
+evidence, and `session_store.py` stores conversations. `action_app.py`,
+`action_store.py`, `action_worker.py`, and `twenty_actions.py` implement the
+separate action lifecycle. `pipeline.py`, pre-import validators, and readback
+modules implement data preparation and reconciliation.
 
 ## ETL quick start
 
