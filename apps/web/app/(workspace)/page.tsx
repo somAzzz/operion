@@ -26,7 +26,7 @@ import {
   Trash2Icon,
   UserRoundSearchIcon,
 } from "lucide-react";
-import Link from "next/link";
+import { ActionLink, WorkspaceNavigation } from "@/components/workspace-navigation";
 
 type ToolRenderProps = {
   args: Record<string, unknown>;
@@ -313,7 +313,7 @@ function FollowupProposalCard({ result, status }: ToolRenderProps) {
       <h3>{String(parameters.title ?? "Internal follow-up")}</h3>
       <p>{String(target.order_id ?? "")}</p>
       <code>{String(data.action_id ?? "")}</code>
-      <Link className="proposal-link" href="/approvals">Review exact revision</Link>
+      <ActionLink className="proposal-link" destination="approvals">Review exact revision</ActionLink>
       <small>No Twenty Task exists until a different authorized user approves it.</small>
     </section>
   );
@@ -560,8 +560,7 @@ export default function Home() {
           <header className="workspace-header">
             <div><p>Operations / inquiry</p><h2>Ask against verified records</h2></div>
             <nav className="workspace-nav" aria-label="Workspace">
-              <Link href="/approvals">Approvals</Link>
-              <Link href="/actions">Actions</Link>
+              <WorkspaceNavigation />
               <NewThreadButton />
             </nav>
           </header>

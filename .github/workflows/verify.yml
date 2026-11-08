@@ -45,4 +45,6 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run test:session
+      - run: npm run test:navigation
       - run: npm run build -- --webpack
+      - run: npm run test:navigation:render

@@ -13,7 +13,7 @@ export default async function ActionsPage() {
       ) : (
         <div className="action-list">
           {data.actions.map((action) => (
-            <Link href={`/actions/${action.action_id}`} className="action-list__item" key={action.action_id}>
+            <Link prefetch={false} href={`/actions/${action.action_id}`} className="action-list__item" key={action.action_id}>
               <div><span>{action.payload_json.target.company}</span><h2>{action.payload_json.parameters.title}</h2><code>{action.action_id}</code></div>
               <div className="action-list__status"><ActionStateBadge state={action.state} /><span>rev {action.current_revision}</span></div>
               <StateGuidance state={action.state} />

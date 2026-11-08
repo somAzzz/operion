@@ -1,6 +1,5 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeftIcon, CheckCircle2Icon, ListChecksIcon } from "lucide-react";
+import { EvidenceDeskLink, WorkspaceNavigation } from "@/components/workspace-navigation";
 
 export function ActionShell({
   eyebrow,
@@ -14,12 +13,9 @@ export function ActionShell({
   return (
     <main className="action-page">
       <header className="action-page__header">
-        <Link href="/" className="back-link">
-          <ArrowLeftIcon aria-hidden="true" /> Evidence desk
-        </Link>
+        <EvidenceDeskLink />
         <nav aria-label="Action control">
-          <Link href="/approvals"><CheckCircle2Icon aria-hidden="true" />Approvals</Link>
-          <Link href="/actions"><ListChecksIcon aria-hidden="true" />Actions</Link>
+          <WorkspaceNavigation icons />
         </nav>
       </header>
       <section className="action-page__intro">
