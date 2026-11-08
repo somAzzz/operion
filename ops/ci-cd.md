@@ -53,7 +53,7 @@ language classifier, and it does not rewrite business data or historical convers
    Keep its existing identity policy, certificates, named volumes, and credentials.
    The model remains an existing SGLang service on host port 30000.
 2. Register a dedicated Linux x64 self-hosted runner on that same Docker host,
-   labeled `operion-gateway`. It needs Python 3.12, Git, Bash, ripgrep, Docker, and
+   labeled `operion-gateway`. It needs Python 3.12, Git, Bash, grep, Docker, and
    Docker Compose with access to the existing `operion-gateway` project. Use a
    dedicated runner account that can read the gateway state and telemetry env file.
    Do not use it for untrusted pull requests or grant it access to business systems.

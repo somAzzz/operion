@@ -65,7 +65,7 @@ fi
 
 for service in "${services[@]}"; do
   container_id=$("${compose[@]}" ps -q "$service")
-  if [[ -z "$container_id" ]] || ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" | rg -q '^OPERION_OTEL_ENABLED=1$'; then
+  if [[ -z "$container_id" ]] || ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" | grep -Fx 'OPERION_OTEL_ENABLED=1' >/dev/null; then
     echo "$service is not running with tracing enabled." >&2
     exit 1
   fi
