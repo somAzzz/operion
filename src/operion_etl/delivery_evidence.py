@@ -118,52 +118,24 @@ def investigate(directory: Path, detail: dict) -> dict:
     }
 
 
-def card_rows(data: dict, request: str) -> list[tuple[str, str]]:
+def card_rows(data: dict, request: str) -> list[tuple[str]]:
     rows = []
     if request:
-        rows.append(
-            (
-                f"User statement / request (unverified): {request}",
-                f"用户陈述或问题（未核实）：{request}",
-            )
-        )
+        rows.append((f"User statement / request (unverified): {request}",))
     order, expected = data["order_id"], data["expected_date"]
-    rows.append(
-        (
-            f"Order {order}; expected date {expected}.",
-            f"订单 {order}；预计日期 {expected}。",
-        )
-    )
+    rows.append((f"Order {order}; expected date {expected}.",))
     if not data["invoices"]:
-        rows.append(
-            ("No linked invoice in this WWI slice.", "本 WWI 切片中未找到关联发票。")
-        )
+        rows.append(("No linked invoice in this WWI slice.",))
     for i in data["invoices"]:
         ref, ts = i["source_record_id"], i["confirmed_at"]
-        kind = (
-            ("Credit note", "贷项通知单")
-            if i["credit_note"]
-            else ("Invoice", "普通发票")
-        )
-        rows.append(
-            (
-                f"{kind[0]} {ref}: recorded confirmation: {ts or 'not available'}.",
-                f"{kind[1]} {ref}：记录的确认时间：{ts or '无可用记录'}。",
-            )
-        )
+        kind = "Credit note" if i["credit_note"] else "Invoice"
+        rows.append((f"{kind} {ref}: recorded confirmation: {ts or 'not available'}.",))
         days = i["calendar_days_from_expected"]
         if days is not None:
-            relation = (
-                ("after", "晚于")
-                if days > 0
-                else ("before", "早于")
-                if days < 0
-                else ("on", "等于")
-            )
+            relation = "after" if days > 0 else "before" if days < 0 else "on"
             rows.append(
                 (
-                    f"{ref}: confirmation date {relation[0]} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
-                    f"{ref}：确认日期{relation[1]}预计日期（相差 {abs(days)} 个日历日）。",
+                    f"{ref}: confirmation date {relation} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
                 )
             )
     for line in data["lines"]:
@@ -172,24 +144,18 @@ def card_rows(data: dict, request: str) -> list[tuple[str, str]]:
             for k in ("canonical_id", "ordered_quantity", "picked_quantity", "uom")
         )
         rows.append(
-            (
-                f"{ident}: ordered {qty} {unit}; picked {picked or 'unknown'} {unit}.",
-                f"{ident}：订购 {qty} {unit}；已拣 {picked or '未知'} {unit}。",
-            )
+            (f"{ident}: ordered {qty} {unit}; picked {picked or 'unknown'} {unit}.",)
         )
     rows.extend(
         [
             (
                 "Not established: actual arrival, quantity received per line, or carrier responsibility. A later confirmation does not disprove a report of non-receipt on the expected date.",
-                "尚未证实：实际到货时刻、各行实收数量及承运商责任。较晚的确认记录不能否定客户关于预计日期未收到货的陈述。",
             ),
             (
                 "Next: verify the itemized receipt or warehouse discrepancy record before replying.",
-                "下一步：回复前核对逐行签收或仓库收货差异记录。",
             ),
             (
                 f"Historical WWI snapshot {data['snapshot_id']}; extracted {data['extracted_at']}.",
-                f"历史 WWI 切片 {data['snapshot_id']}；抽取时间 {data['extracted_at']}。",
             ),
         ]
     )

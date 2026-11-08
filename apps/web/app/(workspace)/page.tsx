@@ -506,22 +506,22 @@ function ThreadWithSuggestions() {
       {
         title: "Find customers",
         label: "search the Northstar demo accounts",
-        prompt: "查找名称包含 Northstar 的客户。",
+        prompt: "Find customers whose names contain Northstar.",
       },
       {
         title: "Purchase orders",
         label: "review confirmed orders to receive",
-        prompt: "列出所有已确认待收货的采购订单。",
+        prompt: "List all confirmed purchase orders awaiting receipt.",
       },
       {
         title: "Fulfillment check",
         label: "evaluate case F01",
-        prompt: "检查履约场景 F01。",
+        prompt: "Check fulfillment scenario F01.",
       },
       {
         title: "Follow-up capability",
         label: "check whether a proposal is allowed",
-        prompt: "检查本会话是否允许提出内部跟进任务；若不允许，请说明限制。",
+        prompt: "Check whether this session permits internal follow-up task proposals; if not, explain the restriction.",
       },
     ]),
   });

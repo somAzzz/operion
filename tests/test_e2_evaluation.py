@@ -147,7 +147,7 @@ class E2EvaluationTests(unittest.TestCase):
                         )
                     ]
                 )
-            return output_response(messages, language="zh")
+            return output_response(messages, language="en")
 
         agent = create_operion_agent(
             AgentSettings(), model=FunctionModel(model_function)
@@ -157,8 +157,8 @@ class E2EvaluationTests(unittest.TestCase):
             scope=AccessScope("Synthetic Co", frozenset({"customer-a"})),
             user_id="e2-evaluator",
         )
-        result = agent.run_sync("概览客户 A", deps=deps)
-        self.assertIn("结果未知", result.output)
+        result = agent.run_sync("Show an overview of customer A", deps=deps)
+        self.assertIn("the result is unknown", result.output)
         self.assertEqual(
             "source_unavailable", deps.tool_calls[0]["result"]["error"]["code"]
         )

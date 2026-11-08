@@ -80,7 +80,7 @@ async def run_compatibility(
             user_id="model-compatibility",
         )
         agent = create_operion_agent(replace(settings, max_output_tokens=500))
-        result = await agent.run("检查履约场景 F01。", deps=deps)
+        result = await agent.run("Check fulfillment scenario F01.", deps=deps)
         return {
             "tool_calls": [call["name"] for call in deps.tool_calls],
             "arguments": deps.tool_calls[0]["arguments"] if deps.tool_calls else {},

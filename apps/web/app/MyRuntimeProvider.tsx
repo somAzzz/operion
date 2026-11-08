@@ -181,7 +181,7 @@ export function MyRuntimeProvider({
   });
 
   if (redirectingToLogin) {
-    return <main className="login-page" role="status">正在跳转到登录页面…</main>;
+    return <main className="login-page" role="status">Redirecting to sign in…</main>;
   }
 
   return (

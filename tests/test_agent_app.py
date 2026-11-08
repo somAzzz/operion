@@ -648,7 +648,7 @@ class AgentAppTests(unittest.TestCase):
                         tool_call_id=f"bad-{model_calls}",
                     )
                 }
-            yield "客户共有一百张订单。"
+            yield "The customer has one hundred orders."
 
         self.application.agent = create_operion_agent(
             self.application.settings,
@@ -664,14 +664,14 @@ class AgentAppTests(unittest.TestCase):
                 "forwardedProps": {},
                 "tools": [],
                 "messages": [
-                    {"id": "question-1", "role": "user", "content": "多少订单？"}
+                    {"id": "question-1", "role": "user", "content": "How many orders?"}
                 ],
             },
             headers=self.headers,
         )
         self.assertEqual(200, response.status_code)
         self.assertIn("RUN_ERROR", response.text)
-        self.assertNotIn("一百张订单", response.text)
+        self.assertNotIn("one hundred orders", response.text)
         self.assertEqual(3, model_calls)
         run = self.application.store.run("blocked-count-run", "user-1")
         self.assertEqual("failed", run["status"])
@@ -679,7 +679,9 @@ class AgentAppTests(unittest.TestCase):
         history = self.client.get(
             "/api/conversations/blocked-count-thread", headers=self.headers
         )
-        self.assertNotIn("一百张订单", json.dumps(history.json(), ensure_ascii=False))
+        self.assertNotIn(
+            "one hundred orders", json.dumps(history.json(), ensure_ascii=False)
+        )
 
     def test_model_prose_cannot_bypass_valid_structured_answer(self):
         calls = 0
@@ -782,7 +784,7 @@ class AgentAppTests(unittest.TestCase):
                     )
                 }
                 return
-            yield output_delta(messages, field="sales_order_count", language="zh")
+            yield output_delta(messages, field="sales_order_count", language="en")
 
         self.application.agent = create_operion_agent(
             self.application.settings,
@@ -798,14 +800,14 @@ class AgentAppTests(unittest.TestCase):
                 "forwardedProps": {},
                 "tools": [],
                 "messages": [
-                    {"id": "question-2", "role": "user", "content": "多少订单？"}
+                    {"id": "question-2", "role": "user", "content": "How many orders?"}
                 ],
             },
             headers=self.headers,
         )
         self.assertEqual(200, response.status_code)
         self.assertIn(f"**{expected}**", response.text)
-        self.assertIn("销售订单数", response.text)
+        self.assertIn("Sales orders", response.text)
         self.assertNotIn('"toolCallName":"present_answer"', response.text)
         history = self.application.store.public_history(
             "verified-count-thread", "user-1"

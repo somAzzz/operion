@@ -89,7 +89,7 @@ class DeliveryInvestigationTests(unittest.TestCase):
         for question in (
             "Is 66823 late?",
             "Did it arrive?",
-            "订单号为 66823，签收了吗？",
+            "Order number 66823: was receipt confirmed?",
         ):
             deps = self.deps(question)
             foreign = self.query(deps, "31349")
@@ -104,7 +104,7 @@ class DeliveryInvestigationTests(unittest.TestCase):
             deps.evidence.render(self.plan(target))
 
     def test_T03_bare_target_and_labelled_alternative(self):
-        deps = self.deps("查 66823；可以用 order 31349 的发票作证吗？")
+        deps = self.deps("Look up 66823; can an invoice for order 31349 serve as evidence?")
         other = self.query(deps, "31349")
         with self.assertRaises(EvidenceError):
             deps.evidence.render(self.plan(other))

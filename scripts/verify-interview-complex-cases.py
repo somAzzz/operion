@@ -24,10 +24,11 @@ class Case:
 CASES = (
     Case(
         "customer_chain",
-        "查找名称包含 Tailspin Toys 的客户。我选择 "
-        "wwi:organization:customer:65，请显示客户、联系人和全部订单。打开销售"
-        "订单 wwi:sales_order:66823，逐行解释订购、已拣、未拣和交付数量，并说明"
-        "为什么已拣不能证明已交付。",
+        "Find customers whose names contain Tailspin Toys. I choose "
+        "wwi:organization:customer:65; show the customer, contacts, and all orders. "
+        "Open sales order wwi:sales_order:66823 and explain ordered, picked, "
+        "unpicked, and delivered quantities per line, including why picking "
+        "does not prove delivery.",
         Counter(
             {
                 "search_customers": 1,
@@ -35,13 +36,15 @@ CASES = (
                 "get_sales_order": 1,
             }
         ),
-        ("66823", "已拣", "交付", "未知"),
+        ("66823", "Picked", "Delivered", "unknown"),
     ),
     Case(
         "supplier_chain",
-        "查找名称包含 Litware 的供应商。我选择 wwi:organization:supplier:7，请显示"
-        "供应商和全部采购订单。打开采购订单 wwi:purchase_order:2044，逐行说明"
-        "外包装数量、每包装基础单位数、基础数量、基础单位价格和行金额，并核对总额。",
+        "Find suppliers whose names contain Litware. I choose "
+        "wwi:organization:supplier:7; show the supplier and all purchase orders. "
+        "Open purchase order wwi:purchase_order:2044 and explain outer-pack "
+        "quantity, base units per pack, base quantity, base-unit price, and "
+        "line amount per line, then reconcile the total.",
         Counter(
             {
                 "search_suppliers": 1,
@@ -49,30 +52,33 @@ CASES = (
                 "get_purchase_order": 1,
             }
         ),
-        ("2044", "基础", "75,620.00", "723,322.40"),
+        ("2044", "Base quantity", "75,620.00", "723,322.40"),
     ),
     Case(
         "two_order_compare",
-        "查看客户 wwi:organization:customer:65 的资料和全部订单，然后分别打开销售"
-        "订单 wwi:sales_order:66823 与 wwi:sales_order:57891，比较两张订单的日期、"
-        "源状态、所有明细数量和金额，并明确哪些交付信息未知。",
+        "Show customer wwi:organization:customer:65 and all its orders, then "
+        "open sales orders wwi:sales_order:66823 and wwi:sales_order:57891. "
+        "Compare their dates, source statuses, all line quantities and amounts, "
+        "and explicitly identify unknown delivery information.",
         Counter({"get_customer_overview": 1, "get_sales_order": 2}),
-        ("66823", "57891", "交付", "未知"),
+        ("66823", "57891", "Delivered", "unknown"),
     ),
     Case(
         "zero_order_scope",
-        "先汇总当前授权客户数量和订单数量，再分别查看客户 "
-        "wwi:organization:customer:60 与 wwi:organization:customer:88。解释两者为什么"
-        "没有订单，以及为什么不能据此声称它们在完整 WWI 数据库中没有订单。",
+        "First summarize authorized customer and order counts, then look up "
+        "customers wwi:organization:customer:60 and wwi:organization:customer:88. "
+        "Explain why neither has orders in the current dataset and why that "
+        "does not establish an absence of orders in the full WWI database.",
         Counter({"get_customer_portfolio_summary": 1, "get_customer_overview": 2}),
-        ("60", "88", "当前", "完整 WWI"),
+        ("60", "88", "current dataset", "full source history"),
     ),
     Case(
         "cross_domain",
-        "同时查看客户 wwi:organization:customer:65 和供应商 "
-        "wwi:organization:supplier:7 的资料及全部订单；再打开销售订单 "
-        "wwi:sales_order:66823 和采购订单 wwi:purchase_order:2044，比较销售拣货/"
-        "交付语义与采购外包装/基础单位语义、币种假设、源状态和原生状态。",
+        "Show customer wwi:organization:customer:65 and supplier "
+        "wwi:organization:supplier:7 with all their orders. Open sales order "
+        "wwi:sales_order:66823 and purchase order wwi:purchase_order:2044. "
+        "Compare sales picking/delivery and purchasing outer-pack/base-unit "
+        "semantics, currency assumptions, source statuses, and native statuses.",
         Counter(
             {
                 "get_customer_overview": 1,
@@ -81,7 +87,7 @@ CASES = (
                 "get_purchase_order": 1,
             }
         ),
-        ("66823", "2044", "交付", "基础", "原生状态"),
+        ("66823", "2044", "Delivered", "Base quantity", "Native document status"),
     ),
 )
 

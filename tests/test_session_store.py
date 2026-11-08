@@ -139,7 +139,9 @@ class SessionStoreTests(unittest.TestCase):
                     )
                 ]
             ),
-            ModelResponse(parts=[TextPart("可满足，但不是交付保证。")]),
+            ModelResponse(
+                parts=[TextPart("Satisfiable, but this is not a delivery guarantee.")]
+            ),
         ]
         self.store.get_or_create("conversation-1", "user-1")
         self.store.save_history("conversation-1", "user-1", messages)

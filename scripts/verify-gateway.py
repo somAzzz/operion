@@ -178,7 +178,9 @@ def main():
         login_page = login_body.decode()
         check(
             "anonymous-timeout-login",
-            login_status == 200 and "会话已超时或已失效，请重新登录" in login_page,
+            login_status == 200
+            and "Your session has expired or is no longer valid. Please sign in again"
+            in login_page,
         )
         check("login-excludes-chat-runtime", "Message input" not in login_page)
         public_login = PublicLogin()
@@ -465,7 +467,7 @@ def run_agent_cases(alice, passwords, client, check):
             {
                 "id": str(uuid.uuid4()),
                 "role": "user",
-                "content": "概览客户 wwi:organization:customer:65，说明数据来源和订单数量。",
+                "content": "Show an overview of customer wwi:organization:customer:65, including the data source and order count.",
             }
         ],
     }

@@ -147,8 +147,9 @@ use cases and expected answers
 
 ## Documentation
 
-The repository maintains one English documentation set. Supported application
-answer languages and multilingual evaluation fixtures are unchanged.
+Documentation, built-in UI text, prompts, and evaluation fixtures are maintained
+in English. Structured answers accept only `AnswerPlan.language = "en"`.
+Source values and quoted user statements remain escaped data without translation.
 
 - [Architecture decision and development boundaries](docs/architecture/adr-001-deterministic-agent.md)
 - [Agent / MCP capability boundaries](docs/agent-boundaries.md)

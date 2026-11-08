@@ -89,6 +89,20 @@ async function page(user, path = "/") {
   return { status: response.status, html, hrefs: [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]) };
 }
 
+test("anonymous login renders English and preserves the fixed return target", async () => {
+  for (const expired of [false, true]) {
+    const response = await fetch(`${origin}/login${expired ? "?reason=session_expired" : ""}`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.ok(html.includes('<main class="login-page" lang="en">'));
+    assert.ok(html.includes(expired ? "Sign in to Operion again" : "Sign in to Operion"));
+    assert.equal(html.includes("Your session has expired or is no longer valid."), expired);
+    assert.ok(html.includes('action="/oauth2/start"'));
+    assert.ok(html.includes('name="rd" value="/"'));
+    assert.ok(!html.includes("Message input"));
+  }
+});
+
 test("SSR and hydration input omit action anchors for agent and proposer roles", async () => {
   for (const role of ["agent", "proposer"]) {
     const result = await page(role);

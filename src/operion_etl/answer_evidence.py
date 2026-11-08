@@ -49,7 +49,7 @@ class AnswerPlan(ClosedModel):
     scope and pagination warnings render automatically.
     """
 
-    language: Literal["en", "zh"]
+    language: Literal["en"]
     facts: list[str] = Field(default_factory=list, max_length=40)
     tables: list[TableSelection] = Field(default_factory=list, max_length=8)
     notice: Literal["none", "needs_details", "unsupported"] = "none"
@@ -182,26 +182,11 @@ ERROR_CODES = {
     "proposal_unavailable": "unavailable",
 }
 STATUS_TEXT = {
-    "ambiguous": (
-        "Several records match. Choose a returned canonical ID.",
-        "匹配到多个记录，请选择返回的规范 ID。",
-    ),
-    "denied": (
-        "Access to the requested operation or record is denied.",
-        "没有访问所请求操作或记录的权限。",
-    ),
-    "unavailable": (
-        "The source is unavailable; the result is unknown, not zero.",
-        "来源不可用，结果未知，不能视为零。",
-    ),
-    "not_found": (
-        "No matching record was found in the authorized scope.",
-        "授权范围内没有找到匹配记录。",
-    ),
-    "invalid": (
-        "More precise input is required for this lookup.",
-        "查询需要更准确的输入。",
-    ),
+    "ambiguous": "Several records match. Choose a returned canonical ID.",
+    "denied": "Access to the requested operation or record is denied.",
+    "unavailable": "The source is unavailable; the result is unknown, not zero.",
+    "not_found": "No matching record was found in the authorized scope.",
+    "invalid": "More precise input is required for this lookup.",
 }
 
 
@@ -219,12 +204,12 @@ class EvidenceRegistry:
         self.user_request = user_request
         mentioned = set(
             re.findall(
-                r"(?:wwi:sales_order:|\border(?:\s+(?:number|no\.?)\b)?\s*[:#]?\s*|订单(?:号(?:为|是)?)?[：:#\s]*)([0-9]+)(?![0-9])",
+                r"(?:wwi:sales_order:|\border(?:\s+(?:number|no\.?)\b)?\s*[:#]?\s*)([0-9]+)(?![0-9])",
                 user_request,
                 re.I,
             )
         )
-        # A labelled secondary order must not override a bare primary order number.
+        # A labelled secondary order must not override a bare primary order number
         other_ids = (
             delivery_order_ids.intersection(re.findall(r"[0-9]+", user_request))
             - mentioned
@@ -392,7 +377,7 @@ class EvidenceRegistry:
                         value, row.get("currency"), f"{pointer}/{index}/{key}"
                     )
                 if value is None or value == "":
-                    value = "unknown / 未知"
+                    value = "unknown"
                 if not isinstance(value, (str, int)) or isinstance(value, bool):
                     raise EvidenceError("INVALID_SCALAR", f"{pointer}/{index}/{key}")
                 if key == "order_count" and (type(value) is not int or value < 0):
@@ -591,7 +576,7 @@ class EvidenceRegistry:
             self.tables[ref] = EvidenceTable(
                 ref,
                 "delivery investigation",
-                ("en", "zh"),
+                ("en",),
                 tuple(card_rows(data, self.user_request)),
                 path,
                 ctx,
@@ -948,35 +933,22 @@ class EvidenceRegistry:
 
     def render(self, plan: AnswerPlan) -> str:
         self.validate(plan)
-        zh = plan.language == "zh"
         parts: list[str] = []
         contexts: dict[int, EvidenceContext] = {}
         if plan.notice == "needs_details" and plan.tables:
             mode = self.clarifications[plan.tables[0].table_id]
             parts.append(
-                (
-                    "More matches exist. Narrow the name before choosing a record."
-                    if not zh
-                    else "还有更多匹配记录。请缩小名称范围后再选择。"
-                )
+                "More matches exist. Narrow the name before choosing a record."
                 if mode == "needs_refinement"
                 else (
                     "Please choose the intended record by replying with its canonical ID from these matches."
-                    if not zh
-                    else "请回复匹配记录中要查询的规范 ID。"
                 )
             )
         elif plan.notice != "none":
             return {
-                "needs_details": (
-                    "Please specify a customer, supplier, order, or scenario to look up.",
-                    "请提供要查询的客户、供应商、订单或场景。",
-                ),
-                "unsupported": (
-                    "This assistant supports authorized business lookups and follow-up proposals.",
-                    "此助手支持授权范围内的业务查询和跟进提案。",
-                ),
-            }[plan.notice][zh]
+                "needs_details": "Please specify a customer, supplier, order, or scenario to look up.",
+                "unsupported": "This assistant supports authorized business lookups and follow-up proposals.",
+            }[plan.notice]
         for ref in plan.facts:
             fact = self.facts[ref]
             contexts[fact.context.call_index] = fact.context
@@ -985,24 +957,24 @@ class EvidenceRegistry:
                 if fact.entity == "authorized scope"
                 else escape_cell(fact.entity) + " — "
             )
-            coverage = COVERAGE_LABELS[fact.coverage][zh]
+            coverage = COVERAGE_LABELS[fact.coverage]
             parts.append(
-                f"{entity}{label(fact.field, plan.language)} ({coverage}): **{escape_cell(fact.value)}{(' ' + escape_cell(fact.currency)) if fact.currency else ''}**. [E{fact.context.call_index}]"
+                f"{entity}{label(fact.field)} ({coverage}): **{escape_cell(fact.value)}{(' ' + escape_cell(fact.currency)) if fact.currency else ''}**. [E{fact.context.call_index}]"
             )
         for selection in plan.tables:
             table = self.tables[selection.table_id]
             contexts[table.context.call_index] = table.context
             if table.kind == "delivery investigation":
-                heading = "交付调查" if zh else "Delivery investigation"
+                heading = "Delivery investigation"
                 parts.append(
                     f"### {heading} [E{table.context.call_index}]\n\n"
-                    + "\n".join("- " + escape_cell(row[int(zh)]) for row in table.rows)
+                    + "\n".join("- " + escape_cell(row[0]) for row in table.rows)
                 )
                 continue
             columns = self.selected_columns(table, selection)
             parts.append(
-                f"{TABLE_LABELS[table.kind][zh]} [E{table.context.call_index}]\n\n| "
-                + " | ".join(label(key, plan.language) for key in columns)
+                f"{TABLE_LABELS[table.kind]} [E{table.context.call_index}]\n\n| "
+                + " | ".join(label(key) for key in columns)
                 + " |\n| "
                 + " | ".join("---" for _ in columns)
                 + " |\n"
@@ -1018,7 +990,7 @@ class EvidenceRegistry:
         for ctx, status in self.statuses:
             self._context(ctx)
             contexts[ctx.call_index] = ctx
-            parts.append(STATUS_TEXT[status][zh])
+            parts.append(STATUS_TEXT[status])
         for ctx in contexts.values():
-            parts.append(context_text(ctx, zh))
+            parts.append(context_text(ctx))
         return "\n\n".join(parts)

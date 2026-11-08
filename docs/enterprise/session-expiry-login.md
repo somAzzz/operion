@@ -1,6 +1,6 @@
 # Login navigation after session expiry
 
-Implemented 2026-10-17. A business-request HTTP 401 triggers one full-page replacement to `/login?reason=session_expired`. The landing asks the user to log in again because the session expired or became invalid; it mounts no chat runtime and fetches no history, preventing a 401 loop. HTTP 403 and ordinary network errors retain their meanings. This document translates the user-facing message; application text is unchanged.
+Implemented 2026-10-17. A business-request HTTP 401 triggers one full-page replacement to `/login?reason=session_expired`. The landing asks the user in English to log in again because the session expired or became invalid; it mounts no chat runtime and fetches no history, preventing a 401 loop. HTTP 403 and ordinary network errors retain their meanings.
 
 The `(workspace)` group contains conversation/action/approval/session pages without changing URLs. Login and build assets allow anonymous GET/HEAD; ingress still strips external identity headers, and business routes retain authentication/authorization. Login continues through OAuth2 Proxy → Keycloak with a fixed `/` return target, never an external supplied destination.
 

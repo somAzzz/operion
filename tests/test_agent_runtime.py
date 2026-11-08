@@ -49,7 +49,6 @@ class AgentRuntimeTests(unittest.TestCase):
             "customer_order_counts",
         ):
             self.assertNotIn(rule, AGENT_INSTRUCTIONS)
-        self.assertIn("latest user message", AGENT_INSTRUCTIONS)
 
     def test_new_typed_tools_return_server_decisions(self):
         calls = [
