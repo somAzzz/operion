@@ -57,3 +57,7 @@ PYTHONPATH=src .venv/bin/python scripts/accept_delivery_investigation.py
 T01: order 66823 / invoice 64067, confirmation one day after expected, line receipt unknown.
 T02: order 73279, no linked invoice. T03: invoice 33513 belongs to order 31349 (same customer 65); even repeated attempts to publish it for 66823 must fail before final text or successful history.
 T04: same-day and early confirmations. T05: unavailable source, including an unreachable SQL Server with the snapshot still present.
+
+Live investigation answers link each invoice and stock issue to a read-only WWI detail page. Opening a page repeats the order lookup with the current customer and supplier scopes. A record outside the linked order returns 404, including an invoice from another order of the same customer. An unavailable WWI source returns an unavailable result. The stock issue detail displays the authorized prior receipts as same-item history with an explicit unknown purchase source.
+
+For a standalone date comparison, the card shows the expected date, each linked invoice's confirmation and calendar-day offset when available, and the query or snapshot time. Any cited foreign invoice is still identified as unsupported. An attributed non-receipt report and a later confirmation can coexist when they refer to different dates. The renderer gives this explanation only for a recognized complaint statement about the expected day and a later non-credit invoice on that order.

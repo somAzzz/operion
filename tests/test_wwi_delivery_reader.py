@@ -20,7 +20,12 @@ from operion_etl.agent_runtime import (
 )
 from operion_etl.answer_evidence import AnswerPlan, EvidenceError
 from operion_etl.mcp_server import create_server
-from operion_etl.read_tools import AccessScope, CanonicalRepository, ScopeDeniedError
+from operion_etl.read_tools import (
+    AccessScope,
+    CanonicalRepository,
+    NotFoundError,
+    ScopeDeniedError,
+)
 from operion_etl.wwi_delivery import DeliveryOrder, WwiDeliveryReader
 
 
@@ -28,6 +33,36 @@ class DirectDeliveryTests(DeliveryTestHelpers, unittest.TestCase):
     def setUp(self):
         self.reader = Mock(spec=WwiDeliveryReader)
         self.repo = CanonicalRepository(DATA, delivery_reader=self.reader)
+
+    def test_detail_requires_invoice_to_belong_to_the_requested_order(self):
+        self.reader.read.return_value = DeliveryOrder(
+            order_id=66823,
+            customer_id=65,
+            order_date="2016-02-17",
+            expected_date="2016-02-18",
+            queried_at="2026-11-08T12:00:00Z",
+            invoices=[
+                dict(
+                    invoice_id=64067,
+                    invoice_order_id=66823,
+                    invoice_customer_id=65,
+                    credit_note=False,
+                    confirmed_at="2016-02-19T07:25:00",
+                    has_recipient=True,
+                )
+            ],
+            issues=[],
+            lines=[],
+        )
+        self.assertEqual(
+            64067,
+            self.repo.get_delivery_record("66823", "invoice", "64067", SCOPE)[
+                "invoice"
+            ]["invoice_id"],
+        )
+        with self.assertRaises(NotFoundError):
+            self.repo.get_delivery_record("66823", "invoice", "33513", SCOPE)
+        self.reader.read.assert_called_with(66823, [65, 935], [])
 
     def test_wwi_runtime_defaults_to_sql_and_snapshot_is_explicit(self):
         env = {

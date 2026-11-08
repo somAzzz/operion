@@ -45,7 +45,8 @@ class SnapshotDeliveryCases(DeliveryTestHelpers):
         self.assertEqual(1, data["invoices"][0]["calendar_days_from_expected"])
         answer = deps.evidence.render(self.plan(result))
         for text in (
-            "User statement / request",
+            "Reported customer statement",
+            "nothing on the 18th.",
             "2016-02-18",
             "2016-02-19T07:25:00",
             "ordered 48",
@@ -123,12 +124,30 @@ class SnapshotDeliveryCases(DeliveryTestHelpers):
         ):
             invoice["confirmed_at"] = ts
             path.write_text(json.dumps(snapshot))
-            deps = self.deps("Order 66823")
+            deps = self.deps(
+                "Order 66823: compare the confirmation and expected delivery dates."
+            )
             result = self.query(deps, "66823")
             self.assertEqual(
                 days, result["data"]["invoices"][0]["calendar_days_from_expected"]
             )
-            self.assertIn(phrase, deps.evidence.render(self.plan(result)))
+            text = deps.evidence.render(self.plan(result))
+            for expected in (
+                phrase,
+                ts,
+                f"{abs(days)} calendar",
+                "Actual arrival time is unknown",
+            ):
+                self.assertIn(expected, text)
+            for unexpected in (
+                "Customer statement",
+                "User statement",
+                "non-receipt",
+                "picked",
+                "before replying",
+                "reply draft",
+            ):
+                self.assertNotIn(unexpected, text)
 
     def test_T05_source_failure_cannot_mint_absence(self):
         path = self.fixture()

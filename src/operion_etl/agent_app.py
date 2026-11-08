@@ -911,6 +911,23 @@ def create_app(application: AgentApplication, telemetry_provider=None) -> FastAP
     async def agent_endpoint(request: Request) -> Response:
         return await application.run_agent(request)
 
+    @app.get("/api/orders/{order_id}/evidence/{kind}/{record_id}")
+    def delivery_record_endpoint(
+        order_id: str, kind: str, record_id: str, request: Request
+    ) -> JSONResponse:
+        identity = application.authenticate(request)
+        scope = AccessScope(
+            identity.operating_company, identity.customer_ids, identity.supplier_ids
+        )
+        try:
+            record = application.repository.get_delivery_record(
+                order_id, kind, record_id, scope
+            )
+        except ReadToolError as error:
+            status = {"not_found": 404, "scope_denied": 403}.get(error.code, 503)
+            raise HTTPException(status, detail=error.code) from error
+        return JSONResponse(record, headers={"Cache-Control": "no-store"})
+
     @app.get("/api/orders/{order_id}/records")
     def order_records_endpoint(
         order_id: str, request: Request, erp_only: bool = False

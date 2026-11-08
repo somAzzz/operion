@@ -141,14 +141,46 @@ def build_investigation(
     }
 
 
-def card_rows(data: dict, request: str) -> list[tuple[str]]:
+def date_comparison_requested(request: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:compar\w*|difference|how many days|on time|early|late)\b",
+            request,
+            re.I,
+        )
+        and re.search(r"\b(?:dates?|expected|scheduled)\b", request, re.I)
+        and not re.search(
+            r"\b(?:quantity|units?|items?|receiv\w*|stock|warehouse|supplier|purchase|draft|reply|complaint)\b",
+            request,
+            re.I,
+        )
+    )
+
+
+def _reported_nonreceipt_on(note: dict, expected: date) -> bool:
+    day = f"{expected:%B} {expected.day}"
+    return bool(
+        re.match(
+            rf"^(?:Our warehouse reported that nothing arrived|We received nothing) on {day}(?:,? {expected.year})?[.]",
+            note["claim"],
+            re.I,
+        )
+    )
+
+
+def card_rows(
+    data: dict, request: str, record_links: dict | None = None
+) -> list[tuple[str]]:
     rows = []
     note = data.get("complaint")
+    dates_only = not note and date_comparison_requested(request)
     if note:
         rows.extend(complaint.evidence_rows(note))
-    elif request:
-        rows.append((f"User statement / request (unverified): {request}",))
-    crm = data.get("crm", {})
+    else:
+        reported = re.search(r"\bcustomer reports? ([^.!?]+)", request, re.I)
+        if reported:
+            rows.append((f"Reported customer statement (unverified): {reported[1]}.",))
+    crm = {} if dates_only else data.get("crm", {})
     if crm.get("status") == "mapped" and not note:
         contact_status = crm.get("order_contact", {}).get("status")
         if contact_status == "verified":
@@ -185,10 +217,17 @@ def card_rows(data: dict, request: str) -> list[tuple[str]]:
     for i in data["invoices"]:
         ref, ts = i["source_record_id"], i["confirmed_at"]
         kind = "Credit note" if i["credit_note"] else "Invoice"
+        if record_links is not None and data["data_mode"] == "live":
+            record_links[len(rows)] = ("invoice", i["invoice_id"])
         rows.append((f"{kind} {ref}: recorded confirmation: {ts or 'not available'}.",))
         days = i["calendar_days_from_expected"]
         if days is not None:
             relation = "after" if days > 0 else "before" if days < 0 else "on"
+            if dates_only:
+                rows[-1] = (
+                    f"{kind} {ref}: confirmation recorded at {ts}, {relation} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
+                )
+                continue
             rows.append(
                 (
                     f"{ref}: confirmation date {relation} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
@@ -202,6 +241,13 @@ def card_rows(data: dict, request: str) -> list[tuple[str]]:
                 f"Invoice {invoice_id} is absent from the linked invoices for this order and cannot support this investigation.",
             )
         )
+    observed = (
+        f"WWI SQL Server query time (UTC): {data['queried_at']}."
+        if data["data_mode"] == "live"
+        else f"Historical WWI snapshot {data['snapshot_id']}; extracted {data['extracted_at']}."
+    )
+    if dates_only:
+        return [*rows, ("Actual arrival time is unknown.",), (observed,)]
     for line in data["lines"]:
         ident, qty, picked, unit = (
             line[k]
@@ -213,56 +259,52 @@ def card_rows(data: dict, request: str) -> list[tuple[str]]:
             )
         )
     for issue in data.get("issues", []):
+        if record_links is not None and data["data_mode"] == "live":
+            record_links[len(rows)] = ("issue", issue["issue_id"])
         rows.append(
             (
                 f"Stock issue {issue['issue_id']} · invoice {issue['invoice_id']} · item {issue['stock_item_id']}: warehouse posted {abs(Decimal(issue['quantity'])).normalize():f} units out at {issue['issued_at']}.",
             )
         )
-        for r in issue["prior_receipts"]:
-            rows.append(
-                (
-                    f"Prior receipt {r['receipt_id']} · PO {r['purchase_order_id']} · {r['supplier']}: {Decimal(r['quantity']).normalize():f} units of item {r['stock_item_id']} booked in at {r['received_at']}.",
-                )
-            )
     if data.get("issues"):
         rows.append(
             (
-                "Purchase source unverified. The authorized receipts shown are same-item history. A lot allocation or reservation linking receipt to issue is required to identify the source.",
+                "Purchase source unverified. See the stock issue for prior receipts of the same item. A lot allocation or reservation linking receipt to issue is required to identify the source.",
             )
         )
-    rows.extend(
-        [
-            (
-                "Not established: actual arrival, quantity received per line, or carrier responsibility. A later confirmation does not disprove a report of non-receipt on the expected date.",
-            ),
-            (
-                "Next: verify the itemized receipt or warehouse discrepancy record before replying.",
-            ),
-            (
-                f"WWI SQL Server query time (UTC): {data['queried_at']}."
-                if data["data_mode"] == "live"
-                else f"Historical WWI snapshot {data['snapshot_id']}; extracted {data['extracted_at']}.",
-            ),
-        ]
+    rows.append(
+        (
+            "Not established: actual arrival, quantity received per line, or carrier responsibility.",
+        )
     )
+    if note and _reported_nonreceipt_on(note, date.fromisoformat(expected)):
+        for invoice in data["invoices"]:
+            if (invoice["calendar_days_from_expected"] or 0) > 0:
+                confirmed = invoice["confirmed_at"][:10]
+                rows.append(
+                    (
+                        f"The customer reports non-receipt on {expected}. Invoice {invoice['invoice_id']} records confirmation on {confirmed}. These observations concern different dates and can both be true.",
+                    )
+                )
+    rows.append(("Next: verify the itemized receipt or warehouse discrepancy record.",))
+    rows.append((observed,))
     if note:
         confirmations = [
             i for i in data["invoices"] if i["confirmed_at"] and not i["credit_note"]
         ]
         draft = [
-            "Customer reply draft · pending human review",
-            "Thank you for reporting the discrepancy.",
+            "Thank you for letting us know. We checked the records for your order.",
         ]
         for issue in data["issues"]:
             draft.append(
-                f"Our warehouse recorded an issue of {abs(Decimal(issue['quantity'])).normalize():f} units of item {issue['stock_item_id']} on {issue['issued_at'][:10]}."
+                f"Our warehouse recorded {abs(Decimal(issue['quantity'])).normalize():f} units of item {issue['stock_item_id']} as issued on {issue['issued_at'][:10]}."
             )
         for invoice in confirmations:
             draft.append(
-                f"Our system records a delivery confirmation on {invoice['confirmed_at'][:10]}."
+                f"The delivery confirmation in our system is dated {invoice['confirmed_at'][:10]}."
             )
         draft.append(
-            "We still need the itemized receipt to verify the quantity your warehouse received."
+            "We cannot yet confirm how many units your warehouse received. We will check the itemized receipt with our warehouse team."
         )
         rows.append((" ".join(draft),))
     return rows

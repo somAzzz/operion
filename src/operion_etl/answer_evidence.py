@@ -27,7 +27,7 @@ from .answer_presentation import (
     escape_cell,
     label,
 )
-from .delivery_evidence import card_rows
+from .delivery_evidence import card_rows, date_comparison_requested
 from .read_tools import AccessScope
 
 
@@ -92,6 +92,8 @@ class EvidenceTable:
     context: EvidenceContext
 
     crm_links: tuple[tuple[str, str, str], ...] = ()
+    record_links: tuple[tuple[int, str, int], ...] = ()
+    has_reply_draft: bool = False
 
 
 class EvidenceError(ValueError):
@@ -673,14 +675,19 @@ class EvidenceRegistry:
                     "entity",
                 )
             ref = self._id("t")
+            record_links = {}
             self.tables[ref] = EvidenceTable(
                 ref,
                 "delivery investigation",
                 ("en",),
-                tuple(card_rows(data, self.user_request)),
+                tuple(card_rows(data, self.user_request, record_links)),
                 path,
                 ctx,
-                _crm_links(data),
+                ()
+                if not self.note and date_comparison_requested(self.user_request)
+                else _crm_links(data),
+                tuple((index, *link) for index, link in record_links.items()),
+                has_reply_draft=bool(data.get("complaint")),
             )
             return
         if tool == "get_customer_order_context":
@@ -967,8 +974,13 @@ class EvidenceRegistry:
                 self.tables[t.table_id].kind == "complaint context" for t in plan.tables
             ):
                 raise EvidenceError("COMPLAINT_CONTEXT_REQUIRED")
-            if any(t.columns for t in plan.tables):
-                raise EvidenceError("COMPLAINT_PROJECTION_DENIED")
+            for selection in plan.tables:
+                table = self.tables[selection.table_id]
+                if selection.columns and (
+                    table.kind != "complaint context"
+                    or tuple(selection.columns) != table.columns
+                ):
+                    raise EvidenceError("COMPLAINT_PROJECTION_DENIED")
         if self.delivery_calls:
             selected = [self.facts[ref] for ref in plan.facts] + [
                 self.tables[t.table_id] for t in plan.tables
@@ -1051,12 +1063,30 @@ class EvidenceRegistry:
                 )
                 else {}
             ),
+            "delivery_unavailable": self.only_wwi_delivery_query_failed(),
             "plan": plan.model_dump(mode="json"),
             "facts": [asdict(self.facts[ref]) for ref in plan.facts],
             "tables": [
                 {
                     "id": table.id,
                     "kind": table.kind,
+                    **(
+                        {
+                            "reply_review": {
+                                "draft": table.rows[-1][0],
+                                "records": [
+                                    {
+                                        "kind": kind,
+                                        "id": record_id,
+                                        "detail": table.rows[index][0],
+                                    }
+                                    for index, kind, record_id in table.record_links
+                                ],
+                            }
+                        }
+                        if table.has_reply_draft
+                        else {}
+                    ),
                     "pointer": table.pointer,
                     "context": asdict(table.context),
                     "rows": [
@@ -1072,8 +1102,15 @@ class EvidenceRegistry:
             ],
         }
 
-    def _card_markdown(self, rows) -> str:
+    def _card_markdown(self, rows, order=None, record_links=()) -> str:
         lines = [escape_cell(row[0]) for row in rows]
+        for index, kind, record_id in record_links:
+            label = (
+                f"Sales.Invoices:{record_id}" if kind == "invoice" else str(record_id)
+            )
+            lines[index] = lines[index].replace(
+                label, f"[{record_id}](/orders/{order}/evidence/{kind}/{record_id})", 1
+            )
         if self.note:
             note_id = str(UUID(self.note["note_id"]))
             base = f"/orders/{self.note['order_id']}"
@@ -1157,7 +1194,22 @@ class EvidenceRegistry:
                         for kind, label_text, record_id in table.crm_links
                     ]
                     heading += "\n\nTwenty CRM · " + " · ".join(crm_links)
-                parts.append(heading + "\n\n" + self._card_markdown(table.rows))
+                rows = table.rows
+                if table.has_reply_draft:
+                    rows = rows[:-1]
+                parts.append(
+                    heading
+                    + "\n\n"
+                    + self._card_markdown(
+                        rows, match[1] if match else None, table.record_links
+                    )
+                )
+                if table.has_reply_draft:
+                    parts.append(
+                        "### Customer Reply · Draft\n\n**Awaiting human review**\n\n"
+                        f"> {escape_cell(table.rows[-1][0])}\n\n"
+                        "No email sent · Human approval required"
+                    )
                 if match:
                     parts.append(f"[Open order {match[1]} records](/orders/{match[1]})")
                 continue

@@ -1591,6 +1591,54 @@ class CanonicalRepository:
                 records["note"] = {"status": "unavailable"}
         return records
 
+    def _read_live_delivery(
+        self, raw_id: str, customers: frozenset[str], scope: AccessScope
+    ):
+        if self.delivery_reader is None or not self.supports_delivery_investigation:
+            raise SourceUnavailableError("WWI direct reader unavailable")
+        allowed_customers = _wwi_ids(customers, "customer")
+        if not allowed_customers:
+            raise ScopeDeniedError("no authorized WWI customers")
+        try:
+            source = self.delivery_reader.read(
+                int(raw_id),
+                allowed_customers,
+                _wwi_ids(scope.supplier_ids, "supplier"),
+            )
+        except OSError as error:
+            raise WwiDeliveryQueryUnavailable(
+                "WWI delivery query unavailable"
+            ) from error
+        if source is None:
+            raise NotFoundError("no matching order in the authorized WWI scope")
+        result = source.investigation(
+            f"wwi:sales_order:{raw_id}", customers, scope.supplier_ids
+        )
+        return source, result
+
+    def get_delivery_record(
+        self, order_id: str, kind: str, record_id: str, scope: AccessScope
+    ) -> dict:
+        if kind not in ("invoice", "issue") or any(
+            not re.fullmatch(r"[1-9][0-9]{0,9}", value) or int(value) > 2147483647
+            for value in (order_id, record_id)
+        ):
+            raise NotFoundError("invalid WWI record reference")
+        try:
+            _, data = self._read_live_delivery(order_id, scope.customer_ids, scope)
+        except (KeyError, ValueError, TypeError) as error:
+            raise SourceUnavailableError("incomplete WWI evidence") from error
+        collection = data["invoices"] if kind == "invoice" else data["issues"]
+        for row in collection:
+            if row[f"{kind}_id"] == int(record_id):
+                return {
+                    "order_id": order_id,
+                    "expected_date": data["expected_date"],
+                    "queried_at": data["queried_at"],
+                    kind: row,
+                }
+        raise NotFoundError("no linked record for this order")
+
     def get_order_delivery_evidence(
         self,
         order_id: str,
@@ -1630,24 +1678,7 @@ class CanonicalRepository:
                 raise InvalidBusinessInputError("invalid WWI order ID")
             customers = frozenset({note["customer_id"]}) if note else scope.customer_ids
 
-            allowed_customers = _wwi_ids(customers, "customer")
-            if not allowed_customers:
-                raise ScopeDeniedError("no authorized WWI customers")
-            try:
-                source = self.delivery_reader.read(
-                    int(raw_id),
-                    allowed_customers,
-                    _wwi_ids(scope.supplier_ids, "supplier"),
-                )
-            except OSError as error:
-                raise WwiDeliveryQueryUnavailable(
-                    "WWI delivery query unavailable"
-                ) from error
-            if source is None:
-                raise NotFoundError("no matching order in the authorized WWI scope")
-            result = source.investigation(
-                f"wwi:sales_order:{raw_id}", customers, scope.supplier_ids
-            )
+            source, result = self._read_live_delivery(raw_id, customers, scope)
             if note:
                 result["complaint"] = note
                 result["crm"] = dict(note["crm"])

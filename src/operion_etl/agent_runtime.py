@@ -1009,15 +1009,20 @@ def build_model(settings: AgentSettings) -> Model:
     return OpenAIChatModel(settings.model_name, provider=provider)
 
 
-def _finish_unavailable_delivery(
+def _finish_delivery_investigation(
     ctx: RunContext[AgentDependencies], request: ModelRequestContext
 ) -> ModelRequestContext:
-    if ctx.deps.evidence.only_wwi_delivery_query_failed():
+    evidence = ctx.deps.evidence
+    if evidence.only_wwi_delivery_query_failed():
         plan = AnswerPlan(language="en")
-        call = ToolCallPart("present_answer", {"plan": plan.model_dump()})
-        ctx.deps.internal_output_calls.add(call.tool_call_id)
-        raise SkipModelRequest(ModelResponse(parts=[call]))
-    return request
+    else:
+        cards = [table for table in evidence.tables.values() if table.has_reply_draft]
+        if len(cards) != 1 or evidence.statuses or len(evidence.delivery_calls) != 1:
+            return request
+        plan = AnswerPlan(language="en", tables=[TableSelection(table_id=cards[0].id)])
+    call = ToolCallPart("present_answer", {"plan": plan.model_dump()})
+    ctx.deps.internal_output_calls.add(call.tool_call_id)
+    raise SkipModelRequest(ModelResponse(parts=[call]))
 
 
 def create_operion_agent(
@@ -1076,7 +1081,7 @@ def create_operion_agent(
         output_type=ToolOutput(present_answer, name="present_answer"),
         instructions=AGENT_INSTRUCTIONS,
         toolsets=[filtered_tools],
-        capabilities=[Hooks(before_model_request=_finish_unavailable_delivery)],
+        capabilities=[Hooks(before_model_request=_finish_delivery_investigation)],
         model_settings=settings.model_settings(),
         retries=1,
         tool_timeout=10,

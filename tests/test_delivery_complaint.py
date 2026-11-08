@@ -13,6 +13,7 @@ from operion_etl.agent_runtime import (
     get_purchase_order,
 )
 from operion_etl.answer_evidence import AnswerPlan, EvidenceError, EvidenceRegistry
+from operion_etl.delivery_evidence import card_rows
 from operion_etl.identity_readback import TwentyReadClient
 from operion_etl.read_tools import (
     AccessScope,
@@ -32,6 +33,39 @@ SCOPE = AccessScope(
 
 
 class ComplaintTests(unittest.TestCase):
+    def test_explicit_full_complaint_column_publishes_the_same_verified_card(self):
+        registry = EvidenceRegistry(
+            SCOPE, user_request=f"Read Twenty Note {complaint.NOTE_ID}"
+        )
+        note = {
+            "contract_version": "complaint-context-v1",
+            "order_id": "66823",
+            "customer_id": complaint.CUSTOMER,
+            "note_id": complaint.NOTE_ID,
+            "company_id": COMPANY,
+            "company": "Tailspin Toys",
+            "claim": "Nothing arrived.",
+            "channel": "note",
+            "sender": {"status": "unconfirmed"},
+            "source_observed_at": "2026-11-08T12:00:00Z",
+        }
+        evidence = registry.add(
+            "get_complaint_context",
+            {"note_id": complaint.NOTE_ID},
+            {"ok": True, "data": note},
+        )
+        table = evidence["tables"][0]["id"]
+
+        def plan(columns):
+            return AnswerPlan(
+                language="en", tables=[{"table_id": table, "columns": columns}]
+            )
+
+        self.assertEqual(registry.render(plan([])), registry.render(plan(["en"])))
+        for columns in (["claim"], ["en", "en"]):
+            with self.assertRaisesRegex(EvidenceError, "TABLE_COLUMN_UNVERIFIED"):
+                registry.render(plan(columns))
+
     def test_signed_card_survives_subsequent_purchase_lookup_attempt(self):
         repo = CanonicalRepository(DATA)
         deps = AgentDependencies(
@@ -205,7 +239,9 @@ class LiveComplaintTests(DeliveryTestHelpers, unittest.TestCase):
             ["get_complaint_context"], [call["name"] for call in deps.tool_calls]
         )
         self.assertIn("Hanuman Dubey", deps.evidence.render(self.plan(crm)))
-        prior = deps.evidence.selection_manifest(self.plan(crm))["complaint_context"]
+        crm_manifest = deps.evidence.selection_manifest(self.plan(crm))
+        self.assertNotIn("reply_review", crm_manifest["tables"][0])
+        prior = crm_manifest["complaint_context"]
         deps = AgentDependencies(
             self.repo,
             SCOPE,
@@ -245,6 +281,15 @@ class LiveComplaintTests(DeliveryTestHelpers, unittest.TestCase):
         with self.assertRaises(EvidenceError):
             deps.evidence.render(self.plan(result, "PO:1904:supplied:305669"))
         text = deps.evidence.render(self.plan(result))
+        for claim in (
+            "The boxes arrived damaged.",
+            "We received nothing on February 17.",
+        ):
+            other = dict(data, complaint=dict(data["complaint"], claim=claim))
+            self.assertFalse(
+                any("can both be true" in row[0] for row in card_rows(other, ""))
+            )
+        self.assertIn("can both be true", text)
         self.assertIn("Purchase source unverified", text)
         self.assertIn(
             f"CRM sender: [Hanuman Dubey](/orders/66823?open=sender&record=0e7b80f1-056a-5fab-9d58-bf8671141233&note={complaint.NOTE_ID})",
@@ -257,8 +302,20 @@ class LiveComplaintTests(DeliveryTestHelpers, unittest.TestCase):
         ):
             self.assertIn(f"/orders/66823?open={kind}&record={record_id}", text)
         self.assertIn("Order contact: Hanuman Dubey", text)
-        draft = text.split("Customer reply draft")[1]
-        self.assertIn("pending human review", draft)
+        review = deps.evidence.selection_manifest(self.plan(result))["tables"][0][
+            "reply_review"
+        ]
+        self.assertEqual(
+            {("invoice", 64067), ("issue", 305669)},
+            {(record["kind"], record["id"]) for record in review["records"]},
+        )
+        self.assertIn(review["draft"], text)
+        draft = text.split("### Customer Reply · Draft")[1]
+        self.assertIn("Awaiting human review", draft)
+        self.assertIn("48 units of item 193 as issued on 2016-02-18", draft)
+        self.assertIn("dated 2016-02-19", draft)
+        self.assertIn("cannot yet confirm how many units", draft)
+        self.assertIn("No email sent · Human approval required", draft)
         self.assertNotIn("1904", draft)
         self.assertNotIn("Litware", draft)
         self.assertNotIn("33513", text)

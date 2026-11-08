@@ -156,6 +156,9 @@ const defaultComponents = memoizeMarkdownComponents({
       )}
       {...props}
       href={href}
+      {...(/^\/orders\/[1-9][0-9]*\/evidence\/(invoice|issue)\/[1-9][0-9]*$/.test(href ?? "") && {
+        target: "_blank", rel: "noopener noreferrer", title: "Open WWI evidence",
+      })}
       {...(/^\/orders\/[1-9][0-9]*\?open=(?:(company|note|person)&record=[a-f0-9-]{36}|(?:company|sender)&record=[a-f0-9-]{36}&note=[a-f0-9-]{36})$/.test(href ?? "") && {
         target: "_blank", rel: "noopener noreferrer", title: "Open record in Twenty CRM",
       })}
