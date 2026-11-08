@@ -149,13 +149,30 @@ def create_server(
         """Return one authorized purchase order and its item lines."""
         return repository.get_purchase_order(order_id, scope)
 
+    if (
+        repository.supports_delivery_investigation
+        and repository.complaint_client is not None
+    ):
+
+        @server.tool(annotations=read_only, structured_output=True)
+        def get_complaint_context(note_id: str) -> dict[str, Any]:
+            """Read a scoped Twenty complaint, its reported order and CRM sender match."""
+            try:
+                return repository.get_complaint_context(note_id, scope)
+            except ReadToolError as exc:
+                raise ToolError(exc.code) from exc
+
     if repository.supports_delivery_investigation:
 
         @server.tool(annotations=read_only, structured_output=True)
-        def get_order_delivery_evidence(order_id: str) -> dict[str, Any]:
+        def get_order_delivery_evidence(
+            order_id: str, from_complaint: bool = False
+        ) -> dict[str, Any]:
             """Investigate one authorized WWI order's invoice confirmations, not physical receipt."""
             try:
-                return repository.get_order_delivery_evidence(order_id, scope)
+                return repository.get_order_delivery_evidence(
+                    order_id, scope, from_complaint=from_complaint
+                )
             except ReadToolError as exc:
                 raise ToolError(exc.code) from exc
 

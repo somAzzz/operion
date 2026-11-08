@@ -219,6 +219,11 @@ class AgentApplication:
         )
         if self.repository.supports_delivery_investigation:
             self.allowed_tools |= {"get_order_delivery_evidence"}
+        if (
+            self.repository.supports_delivery_investigation
+            and self.repository.complaint_client is not None
+        ):
+            self.allowed_tools |= {"get_complaint_context"}
         self.agent = agent or create_operion_agent(settings)
         self.semaphore = asyncio.Semaphore(settings.max_concurrent_runs)
         self.conversation_locks: dict[str, asyncio.Lock] = {}
@@ -503,13 +508,21 @@ class AgentApplication:
             run_id=run_id,
             tenant_id=identity.tenant_id,
             user_request=trusted_prompt,
+            prior_note=(
+                (history[-1].metadata or {})
+                .get("operion.answer_evidence", {})
+                .get("complaint_context")
+                if len(history) > history_start
+                and isinstance(history[-1], ModelResponse)
+                and "get_complaint_context" in allowed_tools
+                else None
+            ),
             pending_selection=pending_selection,
             selected_candidate_id=selected_candidate_id,
         )
         completed = False
         run_status = "running"
         verified_text = ""
-        internal_output_calls: set[str] = set()
         output_decision: GuardrailDecision | None = None
         limits = self.settings.usage_limits()
         budget_started = time.monotonic()
@@ -633,10 +646,10 @@ class AgentApplication:
                                 isinstance(event, ToolCallStartEvent)
                                 and event.tool_call_name == "present_answer"
                             ):
-                                internal_output_calls.add(event.tool_call_id)
+                                deps.internal_output_calls.add(event.tool_call_id)
                             if (
                                 getattr(event, "tool_call_id", None)
-                                in internal_output_calls
+                                in deps.internal_output_calls
                             ):
                                 continue
                             # Discard all model prose, including pre-tool commentary and
@@ -897,6 +910,56 @@ def create_app(application: AgentApplication, telemetry_provider=None) -> FastAP
     @app.post("/api/agent")
     async def agent_endpoint(request: Request) -> Response:
         return await application.run_agent(request)
+
+    @app.get("/api/orders/{order_id}/records")
+    def order_records_endpoint(
+        order_id: str, request: Request, erp_only: bool = False
+    ) -> JSONResponse:
+        identity = application.authenticate(request)
+        scope = AccessScope(
+            identity.operating_company, identity.customer_ids, identity.supplier_ids
+        )
+        try:
+            records = application.repository.get_order_records(
+                order_id, scope, erp_only=erp_only
+            )
+        except ReadToolError as error:
+            status = {
+                "invalid_business_input": 400,
+                "not_found": 404,
+                "scope_denied": 403,
+            }
+            raise HTTPException(
+                status.get(error.code, 503), detail=error.code
+            ) from error
+        return JSONResponse(records, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/delivery-complaint")
+    def complaint_endpoint(
+        request: Request, note_id: str | None = None
+    ) -> JSONResponse:
+        identity = application.authenticate(request)
+        scope = AccessScope(
+            identity.operating_company, identity.customer_ids, identity.supplier_ids
+        )
+        if application.repository.complaint_client is None:
+            raise HTTPException(status_code=404, detail="Complaint desk not configured")
+        try:
+            note = (
+                application.repository.get_delivery_complaint(scope)
+                if note_id is None
+                else application.repository.get_complaint_context(note_id, scope)
+            )
+        except ReadToolError as error:
+            raise HTTPException(
+                status_code={
+                    "scope_denied": 403,
+                    "not_found": 404,
+                    "invalid_business_input": 400,
+                }.get(error.code, 503),
+                detail=error.code,
+            ) from error
+        return JSONResponse(note, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/conversations")
     async def conversations_endpoint(request: Request) -> JSONResponse:

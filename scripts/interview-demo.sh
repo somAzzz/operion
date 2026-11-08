@@ -67,11 +67,15 @@ start_profile() {
   stop_services
   mkdir -p "$runtime"
   chmod 700 "$runtime"
+  cd "$repo"
   set -a
   # shellcheck disable=SC1090
   source "$config"
-  if [ "$profile" = e2-controlled-action ]; then
-    # Only the two read-only upstream credentials are inherited by the Agent.
+  if [ "${OPERION_DELIVERY_SOURCE:-}" = wwi_sqlserver ]; then
+    unset TWENTY_API_KEY ERPNEXT_API_KEY
+    export OPERION_WWI_PASSWORD_FILE="${OPERION_WWI_PASSWORD_FILE:-$runtime/wwi-delivery-password}"
+  fi
+  if [[ "$profile" == "wwi-direct" || "$profile" == "e2-controlled-action" ]]; then
     export TWENTY_API_KEY_READ_ONLY="$(
       "$repo/.venv/bin/python" -c \
         "from pathlib import Path; from operion_etl.twenty import read_env; print(read_env(Path('$repo/.env'))['TWENTY_API_KEY_READ_ONLY'])"
@@ -80,6 +84,8 @@ start_profile() {
       "$repo/.venv/bin/python" -c \
         "from pathlib import Path; from operion_etl.twenty import read_env; print(read_env(Path('$repo/.env'))['ERPNEXT_API_KEY_READ_ONLY'])"
     )"
+  fi
+  if [ "$profile" = e2-controlled-action ]; then
     export OPERION_ACTION_DATABASE_URL='postgresql://operion_demo:operion_demo_local_only@127.0.0.1:55432/operion_action_demo'
   fi
   export OPERION_OBSERVED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -110,11 +116,13 @@ start_profile() {
     action_pid=$!
     printf '%s action-api\n' "$action_pid" >>"$runtime/pids"
   fi
+  unset OPERION_WWI_PASSWORD_FILE TWENTY_API_KEY_READ_ONLY ERPNEXT_API_KEY_READ_ONLY
   cd "$repo/apps/web"
   export OPERION_AGENT_URL=http://127.0.0.1:8000/api/agent
   export OPERION_ACTION_URL=http://127.0.0.1:8001/api
-  export OPERION_TWENTY_WEB_URL=http://localhost:3000
-  nohup ./node_modules/.bin/next start -p "$OPERION_WEB_PORT" \
+  export OPERION_TWENTY_WEB_URL="${OPERION_TWENTY_WEB_URL:-http://localhost:3000}"
+  export OPERION_ERPNEXT_WEB_URL="${OPERION_ERPNEXT_WEB_URL:-http://localhost:8080}"
+  nohup ./node_modules/.bin/next start -H 127.0.0.1 -p "$OPERION_WEB_PORT" \
     >"$runtime/web.log" 2>&1 &
   web_pid=$!
   printf '%s web\n' "$web_pid" >>"$runtime/pids"
@@ -142,6 +150,7 @@ profile=$profile
 dataset=$OPERION_CANONICAL_DIR
 identity_map=$OPERION_IDENTITY_MAP
 data_mode=$OPERION_DATA_MODE
+delivery_source=${OPERION_DELIVERY_SOURCE:-disabled}
 observed_at=$OPERION_OBSERVED_AT
 customer_scope=$OPERION_CUSTOMER_IDS
 supplier_scope=$OPERION_SUPPLIER_IDS
@@ -154,9 +163,10 @@ EOF
 }
 
 case "${1:-status}" in
-  start-wwi) start_profile wwi-snapshot ;;
+  start-wwi) start_profile wwi-direct ;;
+  start-wwi-snapshot) start_profile wwi-snapshot ;;
   start-e2) start_profile e2-controlled-action ;;
   stop) stop_services ;;
   status) status_services ;;
-  *) echo "usage: $0 {start-wwi|start-e2|stop|status}" >&2; exit 2 ;;
+  *) echo "usage: $0 {start-wwi|start-wwi-snapshot|start-e2|stop|status}" >&2; exit 2 ;;
 esac

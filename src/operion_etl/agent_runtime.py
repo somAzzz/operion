@@ -19,7 +19,10 @@ from pydantic_ai import (
     RunContext,
     ToolOutput,
 )
-from pydantic_ai.models import Model
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipModelRequest
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models import Model, ModelRequestContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.toolsets import FunctionToolset
@@ -43,8 +46,10 @@ from .read_tools import (
     CanonicalRepository,
     LiveReadRepository,
     ReadToolError,
+    WwiDeliveryQueryUnavailable,
 )
 from .twenty_actions import FollowupProposalService, TwentyActionError
+from .wwi_delivery import WwiDeliveryReader
 
 READ_TOOLS = frozenset(
     {
@@ -97,6 +102,9 @@ You are Operion, a business assistant for customer and order questions.
 - For requests to list all matches, request the largest allowed page size and
   follow next_cursor while the tool budget permits. The server will show page
   completeness and totals separately if more records remain.
+- For a Twenty Note ID, read get_complaint_context. If asked only about the email,
+  sender or company, select its complaint table and finish. For a delivery follow-up,
+  call get_order_delivery_evidence for the order referenced by the verified note.
 - Finish with present_answer using only IDs from current-turn answer_evidence.
   The server renders selected facts and tables with their exact fields, units,
   filters, scope and provenance. Select tables for record lists; facts for totals.
@@ -245,6 +253,7 @@ class AgentDependencies:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     evidence: EvidenceRegistry = field(init=False)
     answer_plan: AnswerPlan | None = None
+    internal_output_calls: set[str] = field(default_factory=set)
     output_decision: GuardrailDecision | None = None
     candidate_selection: CandidateSelection | None = None
     optional_selection: CandidateSelection | None = None
@@ -253,6 +262,7 @@ class AgentDependencies:
     selected_lookup_complete: bool = False
 
     user_request: str = ""
+    prior_note: dict | None = None
 
     def __post_init__(self) -> None:
         self.evidence = EvidenceRegistry(
@@ -261,6 +271,7 @@ class AgentDependencies:
             tenant_id=self.tenant_id,
             user_id=self.user_id,
             user_request=self.user_request,
+            prior_note=self.prior_note,
             delivery_order_ids=(
                 {
                     row["source_id"]
@@ -397,6 +408,8 @@ def _tool_error(error: ReadToolError) -> dict[str, Any]:
         "ok": False,
         "error": {"code": error.code, "message": str(error)},
     }
+    if isinstance(error, WwiDeliveryQueryUnavailable):
+        payload["error"]["source"] = "wwi_sqlserver"
     if isinstance(
         error, (AmbiguousContactError, AmbiguousCustomerError, AmbiguousSupplierError)
     ):
@@ -454,9 +467,30 @@ def get_customer_portfolio_summary(
     )
 
 
+def _investigation_tool_allowed(evidence: EvidenceRegistry, name: str) -> bool:
+    if evidence.note or evidence.delivery_calls:
+        return name == "get_order_delivery_evidence"
+    if evidence.requested_notes:
+        return name == "get_complaint_context"
+    return name != "get_complaint_context"
+
+
 def _require_tool_execution_allowed(
     deps: AgentDependencies, name: str, arguments: dict[str, Any]
 ) -> None:
+    evidence = deps.evidence
+    if evidence.note and evidence.delivery_target is None:
+        raise ModelRetry(
+            "Conflicting order references. Start a new inquiry for a different order."
+        )
+    if not _investigation_tool_allowed(evidence, name):
+        raise ModelRetry(
+            "Use the tool for the current complaint or delivery investigation."
+        )
+    if name == "get_complaint_context" and evidence.requested_notes != {
+        arguments["note_id"].lower()
+    }:
+        raise ModelRetry("Use the requested Twenty Note ID.")
     selection = deps.candidate_selection
     pending = deps.pending_selection
     if selection is not None:
@@ -693,6 +727,18 @@ def get_customer_order_context(
     )
 
 
+def get_complaint_context(
+    ctx: RunContext[AgentDependencies], note_id: str
+) -> dict[str, Any]:
+    """Read a Twenty Note by UUID for the customer statement, CRM sender, company and reported order reference."""
+    return _record_tool(
+        ctx,
+        "get_complaint_context",
+        {"note_id": note_id},
+        lambda: ctx.deps.repository.get_complaint_context(note_id, ctx.deps.scope),
+    )
+
+
 def get_order_delivery_evidence(
     ctx: RunContext[AgentDependencies], order_id: str
 ) -> dict[str, Any]:
@@ -702,7 +748,9 @@ def get_order_delivery_evidence(
         "get_order_delivery_evidence",
         {"order_id": order_id},
         lambda: ctx.deps.repository.get_order_delivery_evidence(
-            order_id, ctx.deps.scope
+            order_id,
+            ctx.deps.scope,
+            verified_note=ctx.deps.evidence.note,
         ),
     )
 
@@ -961,6 +1009,17 @@ def build_model(settings: AgentSettings) -> Model:
     return OpenAIChatModel(settings.model_name, provider=provider)
 
 
+def _finish_unavailable_delivery(
+    ctx: RunContext[AgentDependencies], request: ModelRequestContext
+) -> ModelRequestContext:
+    if ctx.deps.evidence.only_wwi_delivery_query_failed():
+        plan = AnswerPlan(language="en")
+        call = ToolCallPart("present_answer", {"plan": plan.model_dump()})
+        ctx.deps.internal_output_calls.add(call.tool_call_id)
+        raise SkipModelRequest(ModelResponse(parts=[call]))
+    return request
+
+
 def create_operion_agent(
     settings: AgentSettings,
     *,
@@ -979,6 +1038,7 @@ def create_operion_agent(
             get_customer_order_context,
             list_sales_orders,
             get_sales_order,
+            get_complaint_context,
             get_order_delivery_evidence,
             search_suppliers,
             get_supplier_overview,
@@ -992,6 +1052,7 @@ def create_operion_agent(
     filtered_tools = toolset.filtered(
         lambda ctx, tool: (
             tool.name in ctx.deps.allowed_tools
+            and _investigation_tool_allowed(ctx.deps.evidence, tool.name)
             and ctx.deps.candidate_selection is None
             and not ctx.deps.selected_lookup_complete
             and (
@@ -1015,6 +1076,7 @@ def create_operion_agent(
         output_type=ToolOutput(present_answer, name="present_answer"),
         instructions=AGENT_INSTRUCTIONS,
         toolsets=[filtered_tools],
+        capabilities=[Hooks(before_model_request=_finish_unavailable_delivery)],
         model_settings=settings.model_settings(),
         retries=1,
         tool_timeout=10,
@@ -1045,6 +1107,11 @@ def repository_from_environment() -> CanonicalRepository:
             os.environ.get("OPERION_MAX_SNAPSHOT_SKEW_SECONDS", "300")
         ),
     }
+    delivery_source = os.environ.get("OPERION_DELIVERY_SOURCE")
+    if delivery_source not in {None, "snapshot", "wwi_sqlserver"}:
+        raise RuntimeError("unknown OPERION_DELIVERY_SOURCE")
+    if delivery_source == "wwi_sqlserver" and data_mode != "snapshot":
+        raise RuntimeError("WWI delivery requires the WWI order catalog")
     if data_mode == "live":
         twenty_key = os.environ.get("TWENTY_API_KEY_READ_ONLY", "")
         erpnext_key = os.environ.get("ERPNEXT_API_KEY_READ_ONLY", "")
@@ -1076,6 +1143,23 @@ def repository_from_environment() -> CanonicalRepository:
         twenty_observed_at=twenty_observed_at,
         erpnext_observed_at=erpnext_observed_at,
         data_mode="snapshot",
+        record_erp=ERPNextReadClient(
+            os.environ.get("ERPNEXT_API_BASE_URL", "http://localhost:8080"),
+            os.environ["ERPNEXT_API_KEY_READ_ONLY"],
+        )
+        if delivery_source == "wwi_sqlserver"
+        and os.environ.get("ERPNEXT_API_KEY_READ_ONLY")
+        else None,
+        complaint_client=TwentyReadClient(
+            os.environ.get("TWENTY_API_BASE_URL", "http://127.0.0.1:3000"),
+            os.environ["TWENTY_API_KEY_READ_ONLY"],
+        )
+        if os.environ.get("OPERION_DELIVERY_COMPLAINT") == "1"
+        and os.environ.get("TWENTY_API_KEY_READ_ONLY")
+        else None,
+        delivery_reader=WwiDeliveryReader.from_environment()
+        if delivery_source != "snapshot"
+        else None,
         **common,
     )
 

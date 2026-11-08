@@ -17,10 +17,7 @@ SCOPE = AccessScope(
 )
 
 
-class DeliveryInvestigationTests(unittest.TestCase):
-    def setUp(self):
-        self.repo = CanonicalRepository(DATA)
-
+class DeliveryTestHelpers:
     def deps(self, question):
         return AgentDependencies(self.repo, SCOPE, "operator", user_request=question)
 
@@ -36,6 +33,8 @@ class DeliveryInvestigationTests(unittest.TestCase):
             ],
         )
 
+
+class SnapshotDeliveryCases(DeliveryTestHelpers):
     def test_T01_confirmed_after_expected_not_line_receipt(self):
         deps = self.deps(
             "Order 66823: customer reports nothing on the 18th. Did all 48 arrive?"
@@ -72,19 +71,6 @@ class DeliveryInvestigationTests(unittest.TestCase):
             deps.evidence.render(self.plan(result)),
         )
 
-    def test_T03_current_authorized_same_customer_wrong_invoice(self):
-        deps = self.deps("Order 66823: investigate the delivery dispute.")
-        other = self.query(deps, "31349")
-        target = self.query(deps, "66823")
-        self.assertEqual(other["data"]["customer_id"], target["data"]["customer_id"])
-        valid = other["answer_evidence"]["facts"][0]
-        self.assertEqual(33513, valid["value"])
-        for bad in (self.plan(target, valid["id"]), self.plan(other)):
-            with self.assertRaisesRegex(EvidenceError, "DELIVERY_ORDER_MISMATCH"):
-                deps.evidence.render(bad)
-        self.assertIn("64067", deps.evidence.render(self.plan(target)))
-        self.assertNotIn("33513", deps.evidence.render(self.plan(target)))
-
     def test_T03_tool_must_not_choose_an_unbound_subject(self):
         for question in (
             "Is 66823 late?",
@@ -104,7 +90,9 @@ class DeliveryInvestigationTests(unittest.TestCase):
             deps.evidence.render(self.plan(target))
 
     def test_T03_bare_target_and_labelled_alternative(self):
-        deps = self.deps("Look up 66823; can an invoice for order 31349 serve as evidence?")
+        deps = self.deps(
+            "Look up 66823; can an invoice for order 31349 serve as evidence?"
+        )
         other = self.query(deps, "31349")
         with self.assertRaises(EvidenceError):
             deps.evidence.render(self.plan(other))
@@ -190,6 +178,8 @@ class DeliveryInvestigationTests(unittest.TestCase):
                 "66823", AccessScope("AI Demo GmbH", frozenset())
             )
 
+
+class DeliveryScopeCases(DeliveryTestHelpers):
     def test_T03_repeated_wrong_invoice_is_blocked_at_publication(self):
         from fastapi.testclient import TestClient
         from pydantic_ai.messages import ToolReturnPart
@@ -294,3 +284,23 @@ class DeliveryInvestigationTests(unittest.TestCase):
                 store.run("bad-invoice", "tester")["error_code"],
             )
             self.assertFalse(store.history("case", "tester"))
+
+    def test_T03_current_authorized_same_customer_wrong_invoice(self):
+        deps = self.deps("Order 66823: investigate the delivery dispute.")
+        other = self.query(deps, "31349")
+        target = self.query(deps, "66823")
+        self.assertEqual(other["data"]["customer_id"], target["data"]["customer_id"])
+        valid = other["answer_evidence"]["facts"][0]
+        self.assertEqual(33513, valid["value"])
+        for bad in (self.plan(target, valid["id"]), self.plan(other)):
+            with self.assertRaisesRegex(EvidenceError, "DELIVERY_ORDER_MISMATCH"):
+                deps.evidence.render(bad)
+        self.assertIn("64067", deps.evidence.render(self.plan(target)))
+        self.assertNotIn("33513", deps.evidence.render(self.plan(target)))
+
+
+class DeliveryInvestigationTests(
+    SnapshotDeliveryCases, DeliveryScopeCases, unittest.TestCase
+):
+    def setUp(self):
+        self.repo = CanonicalRepository(DATA)

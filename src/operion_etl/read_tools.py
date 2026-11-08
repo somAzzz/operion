@@ -4,6 +4,7 @@ import base64
 import binascii
 import csv
 import json
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -12,9 +13,15 @@ from functools import wraps
 from pathlib import Path
 from threading import RLock
 from typing import Any, ClassVar, Literal
+from uuid import UUID
 
-from . import delivery_evidence
-from .identity_readback import ERPNextReadClient, TwentyReadClient
+from . import complaint, delivery_evidence, order_records
+from .identity_readback import (
+    ERPNextReadClient,
+    IdentityReadbackError,
+    TwentyReadClient,
+)
+from .wwi_delivery import WwiDeliveryReader
 
 
 class ReadToolError(RuntimeError):
@@ -57,6 +64,10 @@ class SourceUnavailableError(ReadToolError):
     code = "source_unavailable"
 
 
+class WwiDeliveryQueryUnavailable(SourceUnavailableError):
+    pass
+
+
 class InvalidBusinessInputError(ReadToolError):
     code = "invalid_business_input"
 
@@ -72,6 +83,17 @@ class AccessScope:
 
     def allows_supplier(self, canonical_id: str) -> bool:
         return canonical_id in self.supplier_ids
+
+
+def _wwi_ids(ids: frozenset[str], role: str) -> list[int]:
+    prefix = f"wwi:organization:{role}:"
+    return sorted(
+        int(source)
+        for ref in ids
+        if ref.startswith(prefix)
+        and re.fullmatch(r"[1-9][0-9]{0,9}", source := ref[len(prefix) :])
+        and int(source) <= 2147483647
+    )
 
 
 def _cursor_encode(key: tuple[str, str]) -> str:
@@ -181,9 +203,16 @@ class CanonicalRepository:
         stale_after_seconds: int = 3600,
         max_snapshot_skew_seconds: int = 300,
         data_mode: str = "snapshot",
+        delivery_reader: WwiDeliveryReader | None = None,
+        complaint_client: TwentyReadClient | None = None,
+        record_erp: ERPNextReadClient | None = None,
     ) -> None:
         if data_mode not in {"snapshot", "live"}:
             raise InvalidBusinessInputError("data_mode must be snapshot or live")
+        self.record_erp = record_erp
+        self.record_crm = complaint_client
+        self.complaint_client = complaint_client
+        self.delivery_reader = delivery_reader
         self.directory = directory
         self.data_mode = data_mode
         self.stale_after_seconds = stale_after_seconds
@@ -1092,6 +1121,7 @@ class CanonicalRepository:
             "canonical_id": row["canonical_id"],
             "target_id": self.target_ids.get(("erpnext", row["canonical_id"]), ""),
             "customer_id": row["customer_canonical_id"],
+            "order_contact_id": row.get("contact_canonical_id") or None,
             "customer_name": customer.get("name", ""),
             "order_number": row.get("customer_po_number") or row["source_id"],
             "order_date": row["order_date"],
@@ -1471,19 +1501,197 @@ class CanonicalRepository:
             self.data_mode == "snapshot" and self.dataset_version == "interview-wwi-v1"
         )
 
+    def get_delivery_complaint(self, scope: AccessScope) -> dict:
+        if not scope.allows_customer(complaint.CUSTOMER):
+            raise ScopeDeniedError("complaint outside authorized scope")
+        return self.get_complaint_context(complaint.NOTE_ID, scope)
+
+    def get_complaint_context(self, note_id: str, scope: AccessScope) -> dict:
+        try:
+            note_id = str(UUID(note_id))
+        except ValueError as error:
+            raise InvalidBusinessInputError("invalid Twenty Note ID") from error
+        if not scope.customer_ids:
+            raise ScopeDeniedError("no authorized customers")
+        if self.complaint_client is None or not self.supports_delivery_investigation:
+            raise SourceUnavailableError("Twenty complaint source is unavailable")
+        try:
+            note = complaint.read_complaint(
+                self.complaint_client, note_id, scope.customer_ids
+            )
+            mapped = self.target_ids.get(("twenty", note["customer_id"]))
+            if mapped and note["company_id"] != mapped:
+                raise ValueError("complaint Company conflicts with identity map")
+            return note
+        except complaint.ComplaintOutsideScope as error:
+            raise NotFoundError(
+                "no matching complaint in the authorized scope"
+            ) from error
+        except (
+            IdentityReadbackError,
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+        ) as error:
+            raise SourceUnavailableError(
+                "Twenty complaint relationship could not be verified"
+            ) from error
+
+    def get_order_records(
+        self, raw_id: str, scope: AccessScope, *, erp_only: bool = False
+    ) -> dict:
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", raw_id) or int(raw_id) > 2147483647:
+            raise InvalidBusinessInputError("invalid WWI sales order ID")
+        order = f"wwi:sales_order:{raw_id}"
+        if self.delivery_reader:
+            customers = _wwi_ids(scope.customer_ids, "customer")
+            if not customers:
+                raise ScopeDeniedError("no authorized WWI customers")
+            try:
+                source = self.delivery_reader.read(int(raw_id), customers, [])
+            except (ValueError, OSError, KeyError, TypeError) as error:
+                raise SourceUnavailableError("WWI order unavailable") from error
+            if source is None:
+                raise NotFoundError("order unavailable in this scope")
+            owner = f"wwi:organization:customer:{source.customer_id}"
+            if source.order_id != int(raw_id) or not scope.allows_customer(owner):
+                raise ScopeDeniedError("order scope mismatch")
+            contact = (
+                f"wwi:contact:{source.contact_person_id}"
+                if source.contact_person_id
+                else None
+            )
+        else:
+            detail = self.get_sales_order(order, scope)["order"]
+            owner, contact = detail["customer_id"], detail["order_contact_id"]
+        records = order_records.resolve(
+            order=order,
+            owner=owner,
+            contact=contact,
+            company=scope.operating_company,
+            erp=self.record_erp,
+            crm=None if erp_only else self.record_crm,
+        )
+        if erp_only:
+            return {"sales_order": records["sales_order"]}
+        if (
+            raw_id == complaint.ORDER
+            and owner == complaint.CUSTOMER
+            and self.complaint_client
+            and self.delivery_reader
+        ):
+            try:
+                note = self.get_delivery_complaint(scope)
+                if note["company_id"] != records["company"].get("id"):
+                    raise SourceUnavailableError("complaint company mismatch")
+                records["note"] = {"status": "verified", "id": note["note_id"]}
+            except SourceUnavailableError:
+                records["note"] = {"status": "unavailable"}
+        return records
+
     def get_order_delivery_evidence(
-        self, order_id: str, scope: AccessScope
+        self,
+        order_id: str,
+        scope: AccessScope,
+        *,
+        from_complaint: bool = False,
+        verified_note: dict | None = None,
     ) -> dict[str, Any]:
         if not self.supports_delivery_investigation:
             raise SourceUnavailableError(
                 "WWI delivery evidence is unavailable for this dataset"
             )
-        detail = self.get_sales_order(order_id, scope)
+        note = self.get_delivery_complaint(scope) if from_complaint else verified_note
+        if note and not scope.allows_customer(note["customer_id"]):
+            raise ScopeDeniedError("complaint outside authorized scope")
+        if (
+            note
+            and order_id.strip().removeprefix("wwi:sales_order:") != note["order_id"]
+        ):
+            raise InvalidBusinessInputError("order does not match the linked complaint")
         try:
-            return delivery_evidence.investigate(self.directory, detail)
+            if self.delivery_reader is None:
+                if note:
+                    raise SourceUnavailableError(
+                        "complaint investigation requires a WWI reader"
+                    )
+                return delivery_evidence.investigate(
+                    self.directory, self.get_sales_order(order_id, scope)
+                )
+            raw_id = order_id.strip().removeprefix("wwi:sales_order:")
+            if not re.fullmatch(r"[1-9][0-9]{0,9}", raw_id):
+                detail = self.get_sales_order(order_id, scope)
+                raw_id = detail["order"]["canonical_id"].removeprefix(
+                    "wwi:sales_order:"
+                )
+            if int(raw_id) > 2147483647:
+                raise InvalidBusinessInputError("invalid WWI order ID")
+            customers = frozenset({note["customer_id"]}) if note else scope.customer_ids
+
+            allowed_customers = _wwi_ids(customers, "customer")
+            if not allowed_customers:
+                raise ScopeDeniedError("no authorized WWI customers")
+            try:
+                source = self.delivery_reader.read(
+                    int(raw_id),
+                    allowed_customers,
+                    _wwi_ids(scope.supplier_ids, "supplier"),
+                )
+            except OSError as error:
+                raise WwiDeliveryQueryUnavailable(
+                    "WWI delivery query unavailable"
+                ) from error
+            if source is None:
+                raise NotFoundError("no matching order in the authorized WWI scope")
+            result = source.investigation(
+                f"wwi:sales_order:{raw_id}", customers, scope.supplier_ids
+            )
+            if note:
+                result["complaint"] = note
+                result["crm"] = dict(note["crm"])
+                sender = note["sender"]
+                if (
+                    source.contact_person_id
+                    and sender.get("external_id")
+                    == f"wwi:contact:{source.contact_person_id}"
+                    and sender["status"] == "verified"
+                ):
+                    result["crm"]["order_contact"] = {
+                        "status": "verified",
+                        "id": sender["id"],
+                        "label": sender["name"],
+                    }
+            elif self.complaint_client is not None:
+                try:
+                    result["crm"] = complaint.customer_context(
+                        self.complaint_client, result["customer_id"]
+                    )
+                except (
+                    IdentityReadbackError,
+                    OSError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                ):
+                    result["crm"] = {"status": "source_unavailable"}
+            crm = result.get("crm", {})
+            if (
+                self.complaint_client
+                and crm.get("status") == "mapped"
+                and (not note or from_complaint)
+            ):
+                crm["order_contact"] = order_records.order_contact(
+                    self.complaint_client,
+                    crm,
+                    f"wwi:contact:{source.contact_person_id}"
+                    if source.contact_person_id
+                    else None,
+                )
+            return result
         except (OSError, KeyError, ValueError, TypeError) as error:
             raise SourceUnavailableError(
-                "delivery snapshot unavailable or incomplete"
+                "delivery source unavailable or incomplete"
             ) from error
 
     def get_sales_order(self, order_id: str, scope: AccessScope) -> dict[str, Any]:
@@ -1543,7 +1751,9 @@ class LiveReadRepository(CanonicalRepository):
             stale_after_seconds=stale_after_seconds,
             max_snapshot_skew_seconds=max_snapshot_skew_seconds,
             data_mode="live",
+            record_erp=erpnext,
         )
+        self.record_crm = twenty
         self.twenty = twenty
         self.erpnext = erpnext
         self._read_lock = RLock()
