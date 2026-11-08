@@ -8,6 +8,7 @@ import {
 import { File } from "@/components/assistant-ui/elements/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/elements/follow-up-suggestions.aui";
 import { Image } from "@/components/assistant-ui/elements/image";
+import { InlineOrderText } from "@/components/order-records-link";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
   Reasoning,
@@ -799,6 +800,10 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
   </div>
 );
 
+const UserText: TextMessagePartComponent = ({ text }) => (
+  <span className="whitespace-pre-wrap"><InlineOrderText text={text} /></span>
+);
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
@@ -811,7 +816,7 @@ const UserMessage: FC = () => {
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
-            components={{ File: UserFilePart, Image: UserImagePart }}
+            components={{ Text: UserText, File: UserFilePart, Image: UserImagePart }}
           />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">

@@ -13,6 +13,8 @@ import {
   unstable_useComposerInput,
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
+import { InlineOrderText, OrderRecordsLink } from "@/components/order-records-link";
+import { DeliveryComplaint } from "@/components/delivery-complaint";
 import {
   ArchiveIcon,
   Clock3Icon,
@@ -176,7 +178,8 @@ function CustomerOrderContextCard({ result, status }: ToolRenderProps) {
   return <section className="result-card" aria-label="Verified customer and sales order">
     <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />Order-backed customer resolution</div>
     <h3>{String(resolution.customer_name ?? "Customer")}</h3>
-    <p>Order {String(resolution.order_id ?? "")} identifies customer {String(resolution.customer_id ?? "")}</p>
+    <p>Order <InlineOrderText text={String(resolution.order_id ?? "")} /> identifies customer {String(resolution.customer_id ?? "")}</p>
+    <OrderRecordsLink order={resolution.order_id} />
     <p>{orders.length} sales orders returned in the authorized scope</p>
     <EvidenceRows data={data} />
   </section>;
@@ -198,7 +201,7 @@ function OrderListCard({ result, status, kind }: ToolRenderProps & { kind: "sale
           const row = item as Record<string, unknown>;
           const id = String(row.canonical_id ?? "");
           const nativeStatus = row.native_status as Record<string, unknown> | null;
-          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · source status: {String(row.source_status ?? "unknown")}</span>{nativeStatus ? <span>ERPNext docstatus: {String(nativeStatus.docstatus)}</span> : <span>No ERPNext native status in this snapshot</span>}<code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
+          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · source status: {String(row.source_status ?? "unknown")}</span>{nativeStatus ? <span>ERPNext docstatus: {String(nativeStatus.docstatus)}</span> : <span>No ERPNext native status in this snapshot</span>}<code><InlineOrderText text={id} /></code>{kind === "sales order" && <OrderRecordsLink order={id} />}</div><SelectStableId id={id} noun={kind} /></div>;
         })}
       </div>
       {pagination.has_more ? <small>Results are truncated; continue with next_cursor.</small> : null}
@@ -218,6 +221,7 @@ function OrderDetailCard({ result, status, kind }: ToolRenderProps & { kind: "sa
     <section className="result-card" aria-label={`${kind} detail`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind} detail</div>
       <h3>{String(order.order_number ?? order.canonical_id ?? kind)}</h3>
+      {kind === "sales order" && <p><InlineOrderText text={String(order.canonical_id ?? "")} /> · <OrderRecordsLink order={order.canonical_id} /></p>}
       <p>{String(order.customer_name ?? order.supplier_name ?? "")} · {String(order.order_date ?? "")} · source status: {String(order.source_status ?? "unknown")}</p>
       <div className="result-list">
         {lines.map((item) => {
@@ -551,8 +555,8 @@ export default function Home() {
           <dl>
             <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
             <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>Server-scoped reads</dd></div>
-            <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
           </dl>
+          <DeliveryComplaint />
           <ConversationHistory />
           <p className="rail-note">Follow-up proposals require a server-granted role. Creating an internal Task also requires separate approval and the deterministic worker.</p>
         </aside>

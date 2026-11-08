@@ -163,6 +163,7 @@
 }
 
 .evidence-rail::after {
+  pointer-events: none;
   content: "";
   position: absolute;
   inset: auto -3rem -4rem auto;
@@ -240,6 +241,16 @@
 
 .evidence-rail dt svg { width: 0.85rem; height: 0.85rem; }
 .evidence-rail dd { color: oklch(0.94 0.015 220); }
+
+.complaint-entry {
+  display: grid;
+  gap: 0.45rem;
+  flex: none;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+.complaint-entry .remote-link { color: oklch(0.85 0.09 205); }
+.complaint-entry .result-card__select { color: var(--foreground); }
 
 .conversation-history {
   position: relative;
@@ -676,6 +687,8 @@
 .event-timeline p, .event-timeline code { display: block; margin-top: 0.2rem; color: var(--muted-foreground); font-size: 0.68rem; }
 
 @media (min-width: 761px) {
+  .evidence-rail { overflow-y: auto; }
+  .conversation-history { min-height: 5rem; }
   .ops-shell {
     height: 100dvh;
     min-height: 0;

@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { navigationAccess } from "../lib/navigation-access.ts";
 
+import { orderMentions, remarkOrderMentions } from "../lib/order-mentions.ts";
+
+test("sales order numbers link inline without turning invoices, quantities or purchase orders into sales links", () => {
+  const text = "Order 66823: 48 units. Invoice 33513, purchase order 1904, order line 210128. WWI sales order #31349.";
+  const parts = orderMentions(text);
+  assert.equal(parts.map(p => p.type === "text" ? p.value : p.children[0].value).join(""), text);
+  assert.deepEqual(parts.filter(p => p.type === "link").map(p => p.url), ["/orders/66823?open=erpnext", "/orders/31349?open=erpnext"]);
+  const raw = "wwi:sales_order:66823";
+  const existing = { type: "link", url: "/orders/66823", children: [{ type: "text", value: raw }] };
+  const code = { type: "inlineCode", value: raw };
+  const tree = { type: "root", children: [{ type: "paragraph", children: [{ type: "text", value: raw }, existing, code] }] };
+  remarkOrderMentions()(tree);
+  const children = tree.children[0].children;
+  assert.equal(children[1].url, "/orders/66823?open=erpnext");
+  assert.deepEqual(children.slice(2), [existing, code]);
+  assert.equal(existing.children.length, 1);
+});
+
 const none = { evidence: false, actions: false, approvals: false };
 
 test("agent-only and proposer-only users have no action navigation", () => {
