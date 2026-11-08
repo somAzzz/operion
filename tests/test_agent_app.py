@@ -31,6 +31,7 @@ from operion_etl.agent_app import (
     AgentApplication,
     _ordered_tool_events,
     _public_run_error,
+    _suggestion_from_context,
     create_app,
 )
 from operion_etl.agent_runtime import AgentSettings, create_operion_agent
@@ -51,6 +52,14 @@ def last_user_text(messages: list[ModelMessage]) -> str:
 
 
 class AgentAppTests(unittest.TestCase):
+    def test_followup_hint_cannot_reassign_a_number_to_another_record(self):
+        context = "Order 66823 has 2 lines for item 193."
+        question = "What records support order 66823?"
+        self.assertEqual(_suggestion_from_context(question, context), question)
+        self.assertIsNone(
+            _suggestion_from_context("Did warehouse 2 receive item 193?", context)
+        )
+
     def test_identity_lookup_does_not_grant_agent_access_to_an_approver(self):
         identity = EnterpriseIdentity(
             user_id="approver",
@@ -161,6 +170,97 @@ class AgentAppTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_complaint_rounds_restore_only_the_selected_conversation(self):
+        repo = self.application.repository
+        note = dict(
+            note_id="demo-note",
+            customer_id=CUSTOMER_ID,
+            order_id="66823",
+            claim="Nothing arrived.",
+        )
+        url = "/api/delivery-complaint"
+        headers = {**self.headers, "X-Operion-Intent": "start-investigation"}
+        with (
+            patch.object(repo, "complaint_client", object()),
+            patch.object(repo, "get_delivery_complaint", return_value=note),
+        ):
+
+            def desk(**params):
+                return self.client.get(
+                    url, params={"desk": True, **params}, headers=self.headers
+                )
+
+            old = desk().json()["thread_id"]
+            store = self.application.store
+            store.get_or_create(old, "user-1")
+            review = {"draft": "Earlier draft", "records": []}
+            manifest = {
+                "complaint_context": note,
+                "tables": [{"kind": "delivery investigation", "reply_review": review}],
+            }
+            store.save_history(
+                old,
+                "user-1",
+                [
+                    ModelResponse(
+                        parts=[TextPart("Earlier answer")],
+                        metadata={"operion.answer_evidence": manifest},
+                    )
+                ],
+            )
+            self.assertEqual(review, desk().json()["review"])
+            self.assertEqual(
+                403,
+                self.client.post(
+                    url, params={"after": old}, headers=self.headers
+                ).status_code,
+            )
+            self.assertEqual(
+                409,
+                self.client.post(
+                    url, params={"after": "unrelated"}, headers=headers
+                ).status_code,
+            )
+            current = self.client.post(
+                url, params={"after": old}, headers=headers
+            ).json()
+            self.assertEqual(2, current["round_number"])
+            self.assertNotEqual(old, current["thread_id"])
+            self.assertFalse(current["email_read"])
+            self.assertIsNone(current["review"])
+            self.assertEqual([], store.history(current["thread_id"], "user-1"))
+            self.assertEqual(
+                current,
+                self.client.post(url, params={"after": old}, headers=headers).json(),
+            )
+            self.assertEqual(current, desk().json())
+            self.assertEqual(review, desk(round_number=1).json()["review"])
+            later_review = {"draft": "Second round draft", "records": []}
+            later_manifest = {
+                "complaint_context": note,
+                "tables": [{"kind": "delivery investigation", "reply_review": later_review}],
+            }
+            store.get_or_create(current["thread_id"], "user-1")
+            store.save_history(
+                current["thread_id"],
+                "user-1",
+                [ModelResponse(parts=[TextPart("Later answer")],
+                               metadata={"operion.answer_evidence": later_manifest})],
+            )
+            for number, expected in ((2, later_review), (1, review), (2, later_review)):
+                self.assertEqual(expected, desk(round_number=number).json()["review"])
+            self.assertEqual(404, desk(round_number=3).status_code)
+            self.application.scope = AccessScope(
+                "AI Demo GmbH", frozenset({CUSTOMER_ID, "other"})
+            )
+            self.assertEqual(404, desk(round_number=2).status_code)
+            self.assertEqual(
+                409,
+                self.client.post(
+                    url, params={"after": old}, headers=headers
+                ).status_code,
+            )
 
     def test_scope_change_refreshes_evidence_without_erasing_visible_history(self):
         seen_old_answer = []

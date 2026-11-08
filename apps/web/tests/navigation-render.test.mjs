@@ -122,6 +122,13 @@ test("SSR and hydration input omit action anchors for agent and proposer roles",
   }
 });
 
+test("the inquiry header links directly back to complaints", async () => {
+  const result = await page("agent");
+  assert.equal(result.status, 200);
+  const header = result.html.match(/<header\b[^>]*class="workspace-header"[^>]*>([\s\S]*?)<\/header>/);
+  assert.match(header?.[1] ?? "", /<a\b[^>]*href="\/complaints"[^>]*>[^<]*Complaints<\/a>/);
+});
+
 for (const role of ["reader", "approver", "operator"]) {
   test(`${role} receives authorized links on both workspace and action shell`, async () => {
     for (const path of ["/", "/actions", "/approvals"]) {

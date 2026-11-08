@@ -4,14 +4,12 @@
 
 ## Vor dem Gespräch
 
-- [Operion Evidence Desk](http://127.0.0.1:3100/) öffnen. In [Twenty](http://localhost:3000/) und [ERPNext](http://localhost:8080/) im selben Browser anmelden. Einmal prüfen, ob unter **Open order 66823 records** der ERPNext-Entwurf, die Firma, der Auftragskontakt und die Reklamation erreichbar sind.
-- Für T01 eine neue Anfrage über **New inquiry** beginnen. Links muss die simulierte Reklamation zu **WWI order 66823** sichtbar sein. Alte Antworten zeigen den Stand der damaligen Abfrage.
-- Für die Kurzfassung den Vergleichsauftrag **31349** mit der ersten Frage aus T03 in einem zweiten Operion-Tab vorbereiten. Den Tab bei der Zeile mit Rechnung **33513** stehen lassen.
-- Bei den Texteingaben unten ins Feld **Message input** klicken, die englische Frage einfügen und **Send message** anklicken. Bei einer direkten Auftragssuche die Auftragsnummer nennen. Bei der Rückfrage zur gerade gelesenen E-Mail genügt der Bezug auf diese E-Mail.
+- Im [Evidence Desk](http://127.0.0.1:3100/) auf **Complaints** klicken. Bei einem neuen Vorgang steht unter **Customer report** die Schaltfläche **Read customer email**. Eine frühere Untersuchung lässt sich mit **Resume investigation** öffnen.
+- In einem zweiten Tab die [WWI-Rechnung 33513 zu Auftrag 31349](http://127.0.0.1:3100/orders/31349/evidence/invoice/33513) öffnen. Diesen Tab für den Gegencheck in Schritt 6 bereithalten.
 
 | Fall | Auftrag und Beleg | Worauf ich zeige |
 |---|---|---|
-| T01 · Reklamation | 66823 · Rechnung 64067 | Kundenaussage zum 18. Februar, Bestätigung vom 19. Februar, offener Mengenbeleg |
+| T01 · Reklamation | 66823 · Rechnung 64067 | Kundenaussage, Bestätigung und englischer Antwortentwurf zur Freigabe |
 | T03 · Falscher Beleg | 31349 → Rechnung 33513; Untersuchungsauftrag 66823 | Derselbe Kunde, zwei verschiedene Aufträge |
 | T02 · Fehlender Beleg | 73279 | Vollständige Abfrage, keine zugeordnete Rechnung |
 | T04 · Datumsvergleich | 73485 · Rechnung 70414; optional 73302 · Rechnung 70244 | Bestätigung am erwarteten Tag beziehungsweise zwei Tage zuvor |
@@ -19,47 +17,39 @@
 
 ## Drei Minuten für den Hauptfall
 
-### T01 · Was können wir dem Kunden heute antworten? · 0:00–1:50
+**Vorführzeit: 2:40 Minuten plus 20 Sekunden Reserve.** Die deutschen Zitate sind der Sprechtext.
 
-**0:00–0:35 · Die E-Mail lesen.** Im Evidence Desk **New inquiry** und dann links **Read customer email** anklicken. Der Button übergibt die Note-ID mit dieser Frage:
+**1 · 0:00–0:30 · Die Reklamation lesen (T01).** Unter **Customer report** auf **Read customer email** klicken. Der Button sendet die erste Frage automatisch:
 
 > Read Twenty Note f98cc388-20d7-5609-8c2c-297ca58922ac. What did the customer report in the email, who sent it and which company do they represent?
 
-**1 tool call** aufklappen und auf `get_complaint_context` zeigen. Unter **Customer complaint in Twenty** stehen die Kundenaussage, die Firma und die CRM-Lesezeit.
+Unter **Customer email** auf den Absender Hanuman Dubey und die Aussage des Kunden zeigen. Rechts ist noch kein Entwurf vorhanden.
 
-> „Der Kundenservice erhält eine E-Mail. Hanuman Dubey schreibt, sein Lager habe am 18. Februar nichts erhalten. Die Absenderadresse stimmt mit der Adresse des in Twenty verknüpften Kontakts überein. Dieser Kontakt gehört zu Tailspin Toys in North Cowden. Damit kennen wir den Ansprechpartner. Ob die Ware angekommen ist, ist weiterhin offen.“
+> „Herr Dubey von Tailspin Toys schreibt, am 18. Februar sei in seinem Lager nichts angekommen. Er möchte wissen, ob alle 48 Stück eingegangen sind. Twenty bestätigt, wer die E-Mail geschickt hat. Zum Wareneingang haben wir bisher die Aussage des Kunden.“
 
-**0:35–1:15 · Im selben Gespräch die Lieferung prüfen.** Ins Feld **Message input** klicken, diese Rückfrage senden und den Werkzeugaufruf dieser zweiten Antwort öffnen:
+**2 · 0:30–0:50 · Im selben Chat nachfragen.** Auf **Investigate order 66823** klicken. Der Klick öffnet das Inquiry. Einen passenden Modellvorschlag mit **Tab** übernehmen und bei Bedarf bearbeiten, oder die folgende Frage eingeben. Erst **Enter** startet die Abfrage:
 
-> Now check delivery for the order in that email. Does the recorded confirmation contradict the customer’s account? Prepare a reply for review.
+> Now investigate delivery for order 66823. Check whether all units were received and prepare a reply for review.
 
-Auf `get_order_delivery_evidence`, Rechnung **64067** und **2016-02-19T07:25:00** zeigen. Die Auftragsnummer kommt aus der gelesenen Note. **WWI SQL Server query time (UTC)** bezeichnet den Zeitpunkt der aktuellen Abfrage.
+> „Ich muss die Auftragsnummer nicht wiederholen. Der Agent übernimmt die 66823 aus der Reklamation und fragt jetzt die Belege in WWI ab.“
 
-> „Erst mit dieser Rückfrage liest der Agent die ERP-Belege. Für den 18. Februar war die Lieferung geplant. Die Rechnung trägt eine Bestätigung vom 19. Februar um 7:25 Uhr. Der Kunde beschreibt den Tag davor. Beide Aussagen können also stimmen. Wie viele Stück sein Lager angenommen hat, geht aus der Bestätigung nicht hervor.“
+**3 · 0:50–1:20 · Die Bestätigung lesen.** Im Chat auf *These observations concern different dates and can both be true* zeigen. Dann auf die verlinkte Rechnungsnummer **64067** klicken. Im neuen Tab auf **Expected delivery date** und **Recorded delivery confirmation** zeigen. Den Rechnungstab für Schritt 6 offen lassen.
 
-**1:15–1:50 · Zur Kundenantwort kommen.** Auf **66823** klicken, den Auftrag in ERPNext zeigen und zu Operion zurückwechseln. In der Karte auf **Customer reply draft · pending human review** zeigen.
+> „Geplant war der 18. Februar. Die Rechnung enthält eine Lieferbestätigung vom 19. Februar um 7:25 Uhr. Die Aussage des Kunden betrifft den 18., die Bestätigung den Tag danach. Deshalb können beide Angaben stimmen. Wann die Ware tatsächlich ankam und wie viele Stück der Kunde annahm, lässt sich daraus allein nicht ablesen.“
 
-> „Für diesen Auftrag sind 48 Stück als Warenausgang gebucht. Im Entwurf bitten wir Herrn Dubey um einen Empfangsbeleg mit der Menge je Position. Den Entwurf prüft der Kundenservice vor dem Versand.“
+**4 · 1:20–1:45 · Die 48 Stück prüfen.** Zum Chat zurückwechseln und auf **305669** klicken. Im neuen Tab **Units posted out** und unter **Prior receipts** die Bestellungen **1904** und **1902** zeigen.
 
-**Falls nach dem Lieferanten gefragt wird:** In derselben Karte auf Warenausgang **305669** und Wareneingang **305626** zeigen. Letzterer verweist auf die Bestellung **1904** bei **Litware, Inc.**
+> „Unser Lager hat 48 Stück ausgebucht. Für denselben Artikel sehen wir zwei frühere Wareneingänge. Eine Chargenzuordnung fehlt. Wir können also weder die 48 Stück einer dieser Bestellungen zuordnen noch dem Kunden den vollständigen Empfang bestätigen. Dafür brauchen wir seinen Empfangsbeleg mit der Stückzahl.“
 
-> „Wir finden einen früheren Wareneingang für denselben Artikel. Um genau diese 48 Stück Litware zuordnen zu können, bräuchten wir eine Chargenzuordnung oder eine Reservierung zwischen Eingang und Ausgang.“
+**5 · 1:45–2:05 · Den Antwortentwurf zeigen (Abschluss T01).** Zum Chat zurückwechseln, **Review draft** anklicken und rechts unter **Customer reply · Draft** auf den englischen Text zeigen. Den Satz *We cannot yet confirm how many units your warehouse received* hervorheben. Anschließend auf **No email sent** und **Human approval required** zeigen.
 
-### T03 · Eine echte Rechnung am falschen Auftrag · 1:50–3:00
+> „Der Agent bereitet eine Antwort vor: Der Warenausgang ist belegt, die beim Kunden angekommene Menge ist noch offen. Ein Mitarbeiter prüft zuerst die Belege und gibt die Antwort frei. Bis dahin wird keine E-Mail verschickt.“
 
-**1:50–2:10 · Den Gegenbeleg zeigen.** In den vorbereiteten Vergleichs-Tab wechseln. Zum Vorbereiten dort **New inquiry** klicken und diese Frage senden:
+Optionaler englischer Sprechtext: “The agent drafts a reply using the warehouse and invoice records. A member of the service team reviews the evidence before sending it. No email has been sent.”
 
-> Investigate delivery for order 31349. Which invoice is linked to this order? Show the delivery investigation card.
+**6 · 2:05–2:40 · Eine echte Rechnung am falschen Auftrag prüfen (T03).** Im vorbereiteten Vergleichstab auf **Invoice 33513** und **Sales order 31349** zeigen. Dann zurück zum Rechnungstab **64067** aus Schritt 3 wechseln. In der Adresszeile nur die letzte Zahl von `64067` auf `33513` ändern, `/orders/66823/` stehen lassen und **Enter** drücken. Erwartet: **404** für `/orders/66823/evidence/invoice/33513`.
 
-Auf **33513** und den Kunden **Tailspin Toys (North Cowden, TX)** zeigen. Danach in den Tab mit der Reklamation zu **66823** zurückwechseln.
-
-> „Die Rechnung 33513 existiert. Sie gehört sogar demselben Kunden, Kunden-ID 65. Auf dem Beleg steht aber der Bezug zu Auftrag 31349. Genau so landet im Alltag eine glaubwürdige, aber unpassende Rechnung in der Vorgangsakte.“
-
-**2:10–3:00 · Die falsche Zuordnung ausdrücklich verlangen.** Im Gespräch zu **66823** die folgende Frage senden. In der Antwort auf die Zeile *Invoice 33513 is absent from the linked invoices for this order and cannot support this investigation* und auf die zugeordnete Rechnung **64067** zeigen.
-
-> Investigate delivery for order 66823. Can invoice 33513 prove that all 48 units arrived? Show the delivery investigation card.
-
-> „Der Agent darf beide Aufträge lesen. Er darf die Rechnung des einen aber nicht als Beleg für den anderen verwenden. Der Modellaufruf wählt das Recherchewerkzeug. Beim Veröffentlichen prüft der Server, ob der Beleg zum untersuchten Auftrag gehört. Damit bekommt der Kundenservice einen begründeten Antwortentwurf, ohne dem Kunden einen unbewiesenen Empfang zu bestätigen.“
+> „Diese Rechnung existiert und gehört sogar demselben Kunden. Unter Auftrag 31349 können wir sie öffnen. Setze ich dieselbe Rechnungsnummer bei Auftrag 66823 ein, erhalte ich 404. Der Server prüft bei jedem Klick die Zuordnung zum Auftrag. So kann der Kundenservice eine echte Rechnung aus einem anderen Vorgang nicht versehentlich als Empfangsnachweis für diese Reklamation anführen.“
 
 ## Drei weitere Fälle für die technische Vertiefung
 
@@ -71,21 +61,25 @@ Auf **33513** und den Kunden **Tailspin Toys (North Cowden, TX)** zeigen. Danach
 
 > „Die Abfrage ist vollständig durchgelaufen. Für Auftrag 73279 hat WWI keine zugeordnete Rechnung geliefert. Über diesen Weg kann ich den Empfang also nicht bestätigen. Ob tatsächlich geliefert wurde, bleibt offen.“
 
-### T04 · Erkennt das System auch eine termingerechte Bestätigung? · etwa 40 Sekunden
+### T04 · Wie liegt die Bestätigung zum erwarteten Liefertermin? · etwa 40 Sekunden
 
-**Klicken:** **New inquiry** → folgende Frage senden. Auf **70414**, **2016-05-31T12:30:00** und *on expected date (0 calendar days)* zeigen.
+**Auftrag 73485.** Im Evidence Desk **New inquiry** anklicken, die Frage in **Send a message...** einfügen und **Enter** drücken.
 
 > Investigate delivery for order 73485. Compare the recorded confirmation date with the expected delivery date.
 
-> „Bei diesem Auftrag war der 31. Mai der erwartete Termin. Die Bestätigung ist für denselben Tag um 12:30 Uhr erfasst. Die Regel vergleicht Kalendertage und berechnet null Tage Abweichung. Auch hier bleibt die Aussage auf das Datum der Bestätigung beschränkt.“
+Direkt in der Antwort auf **2016-05-31** und *on expected date (0 calendar days)* zeigen. Auf die Rechnungsnummer **70414** klicken. In der [Rechnungskarte](http://127.0.0.1:3100/orders/73485/evidence/invoice/70414) steht unter **Recorded delivery confirmation** der Zeitstempel **2016-05-31T12:30:00**.
 
-**Optionaler Gegencheck:** Noch einmal **New inquiry** klicken, die zweite Frage senden und auf Rechnung **70244** sowie **2016-05-28T08:50:00** zeigen.
+> „Geplant war der 31. Mai. Die Rechnung trägt die Bestätigung vom selben Tag um 12:30 Uhr. Der Abstand beträgt null Kalendertage. Wann die Ware beim Kunden eintraf, bleibt offen.“
+
+**Optionaler Gegencheck mit Auftrag 73302.** Zum Chat zurückwechseln. **New inquiry** anklicken und dieselbe Frage mit der zweiten Auftragsnummer senden.
 
 > Investigate delivery for order 73302. Compare the recorded confirmation date with the expected delivery date.
 
-> „Hier sehen Sie auch die andere Richtung: Geplant war der 30. Mai. Rechnung 70244 trägt eine Bestätigung vom 28. Mai um 8:50 Uhr. Das sind zwei Kalendertage früher.“
+Auf **2016-05-30** und *before expected date (2 calendar days)* zeigen. Über **70244** lässt sich der Zeitstempel **2016-05-28T08:50:00** in der [zweiten Rechnungskarte](http://127.0.0.1:3100/orders/73302/evidence/invoice/70244) prüfen.
 
-Beide Beispiele stammen aus der autorisierten SQL-Direktabfrage. Der automatisierte 30-Aufträge-Regressionstest prüft dieselben Datumsgrenzen mit kontrollierten Testzeitpunkten.
+> „Hier war der 30. Mai vorgesehen. Auf der Rechnung steht der 28. Mai um 8:50 Uhr, also zwei Kalendertage früher. Ob auch die Ware früher ankam, können wir aus diesem Beleg allein nicht sagen.“
+
+**Erwartetes Verhalten bei beiden Fragen.** Die erste Ansicht zeigt den erwarteten Termin, die verlinkte Rechnung, den Bestätigungszeitpunkt, die Differenz in Kalendertagen und *Actual arrival time is unknown*. Eine Kundenbeschwerde oder ein Antwortentwurf wäre hier sachfremd.
 
 ### T05 · Was passiert, wenn die Quelle ausfällt? · etwa 45 Sekunden mit vorbereiteter Probe
 
@@ -103,9 +97,9 @@ scripts/demo.sh stop
 OPERION_WWI_HOST=127.0.0.1 OPERION_WWI_PORT=1 scripts/demo.sh start-wwi
 ```
 
-Nach der Bereitschaftsmeldung den [Evidence Desk](http://127.0.0.1:3100/) neu laden. **New inquiry** → **Read customer email** klicken und die CRM-Antwort abwarten. Im selben Gespräch dieselbe Rückfrage wie in T01 senden:
+Nach der Bereitschaftsmeldung den [Evidence Desk](http://127.0.0.1:3100/) neu laden. **Complaints** öffnen. Bei einem bestehenden Entwurf **Resume investigation** klicken und im selben Inquiry die Rückfrage senden. Bei einem neuen Fall **Read customer email** und dann **Investigate order 66823** klicken:
 
-> Now check delivery for the order in that email. Does the recorded confirmation contradict the customer’s account? Prepare a reply for review.
+> Now investigate delivery for this order and check whether all 48 units were received.
 
 In der **zweiten Antwort** auf die bereits gelesene Kundenaussage samt CRM-Lesezeit zeigen, danach auf die Meldung zur fehlgeschlagenen Abfrage:
 
@@ -113,7 +107,7 @@ In der **zweiten Antwort** auf die bereits gelesene Kundenaussage samt CRM-Lesez
 
 > „Die E-Mail von Herrn Dubey können wir weiterhin zitieren. Was diesmal fehlt, ist eine Auskunft aus WWI. Bei Auftrag 73279 war die Abfrage erfolgreich und ergab keine zugeordnete Rechnung. Hier wissen wir noch nicht einmal, ob eine vorliegt. Eine ältere Rechnung aus dem Snapshot erscheint deshalb auch nicht in dieser Antwort.“
 
-**Nach der Web-Probe zurücksetzen:** Die zwei Befehle im Projektverzeichnis ausführen, die Bereitschaftsmeldung abwarten und die Seite neu laden. **New inquiry** → **Read customer email** und die Rückfrage aus T01 zeigen wieder die Live-Karte.
+**Nach der Web-Probe zurücksetzen:** Die zwei Befehle im Projektverzeichnis ausführen, die Bereitschaftsmeldung abwarten und die Seite neu laden. Unter **Complaints** erneut **Retry investigation** klicken und die Rückfrage im Inquiry absenden. Nach erfolgreicher Prüfung erscheint der Entwurf wieder.
 
 ```bash
 scripts/demo.sh stop

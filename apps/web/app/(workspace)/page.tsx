@@ -14,7 +14,8 @@ import {
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { InlineOrderText, OrderRecordsLink } from "@/components/order-records-link";
-import { DeliveryComplaint } from "@/components/delivery-complaint";
+import Link from "next/link";
+import { MyRuntimeProvider } from "@/app/MyRuntimeProvider";
 import {
   ArchiveIcon,
   Clock3Icon,
@@ -537,6 +538,10 @@ function ThreadWithSuggestions() {
 }
 
 export default function Home() {
+  return <MyRuntimeProvider><Inquiry /></MyRuntimeProvider>;
+}
+
+function Inquiry() {
   const aui = useAui();
   const config = AuiConfig({
     tools: Tools({ toolkit }),
@@ -556,13 +561,12 @@ export default function Home() {
             <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
             <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>Server-scoped reads</dd></div>
           </dl>
-          <DeliveryComplaint />
           <ConversationHistory />
           <p className="rail-note">Follow-up proposals require a server-granted role. Creating an internal Task also requires separate approval and the deterministic worker.</p>
         </aside>
         <section className="chat-workspace" aria-label="Controlled business assistant">
           <header className="workspace-header">
-            <div><p>Operations / inquiry</p><h2>Ask against verified records</h2></div>
+            <div><Link href="/complaints" className="inquiry-return">← Complaints</Link><h2>Ask against verified records</h2></div>
             <nav className="workspace-nav" aria-label="Workspace">
               <WorkspaceNavigation />
               <NewThreadButton />

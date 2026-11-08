@@ -8,6 +8,7 @@ import {
 import { File } from "@/components/assistant-ui/elements/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/elements/follow-up-suggestions.aui";
 import { Image } from "@/components/assistant-ui/elements/image";
+import { ActiveConversation } from "@/app/MyRuntimeProvider";
 import { InlineOrderText } from "@/components/order-records-link";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
@@ -33,6 +34,7 @@ import {
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
+  unstable_useComposerInput,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
@@ -68,6 +70,8 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  useEffect,
+  useState,
   useContext,
   type ComponentType,
   type FC,
@@ -422,6 +426,24 @@ const ThreadSuggestionItem: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+  const id = useContext(ActiveConversation);
+  const last = useAuiState(s => s.thread.messages.at(-1));
+  const running = useAuiState(s => s.thread.isRunning);
+  const composer = unstable_useComposerInput();
+  const text = useAuiState(s => s.composer.text);
+  const key = !running && id && last?.role === "assistant" && last.status?.type !== "incomplete" ? id + "/" + last.id : "";
+  const [hint, setHint] = useState({key: "", value: ""});
+  useEffect(() => {
+    if (!key) return;
+    const controller = new AbortController();
+    fetch("/api/conversations/" + encodeURIComponent(id) + "?suggest=1", {signal: controller.signal, cache: "no-store"})
+      .then(async response => response.ok ? (await response.json()).suggestion : null)
+      .then(value => {
+        if (!controller.signal.aborted && typeof value === "string") setHint({key, value});
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [id, key]);
+  const suggestion = !text && key && hint.key === key ? hint.value : "";
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerRunStatus />
@@ -433,13 +455,20 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           <ComposerQueue />
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="Send a message..."
+            placeholder={suggestion || "Send a message..."}
+            onKeyDown={event => {
+              if (suggestion && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                composer.setText(suggestion);
+              }
+            }}
             className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"
             aria-label="Message input"
           />
+          {suggestion && <button type="button" className="self-start px-2.5 text-xs text-muted-foreground" onClick={() => composer.setText(suggestion)}>Use suggestion · Tab</button>}
           <ComposerAction />
         </div>
       </ComposerPrimitive.AttachmentDropzone>
