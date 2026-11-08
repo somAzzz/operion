@@ -122,11 +122,17 @@ test("SSR and hydration input omit action anchors for agent and proposer roles",
   }
 });
 
-test("the inquiry header links directly back to complaints", async () => {
-  const result = await page("agent");
-  assert.equal(result.status, 200);
-  const header = result.html.match(/<header\b[^>]*class="workspace-header"[^>]*>([\s\S]*?)<\/header>/);
-  assert.match(header?.[1] ?? "", /<a\b[^>]*href="\/complaints"[^>]*>[^<]*Complaints<\/a>/);
+test("shared navigation links directly to complaints and identifies the active workspace", async () => {
+  for (const path of ["/", "/complaints", "/actions", "/approvals"]) {
+    const result = await page("reader", path);
+    assert.equal(result.status, 200);
+    const nav = result.html.match(/<nav aria-label="Workspace">([\s\S]*?)<\/nav>/)?.[1] ?? "";
+    const links = [...nav.matchAll(/<a\b[^>]*>/g)].map(([tag]) => tag);
+    assert.ok(links.some(tag => tag.includes('href="/complaints"')));
+    const active = links.filter(tag => tag.includes('aria-current="page"'));
+    assert.equal(active.length, 1);
+    assert.ok(active[0].includes(`href="${path}"`));
+  }
 });
 
 for (const role of ["reader", "approver", "operator"]) {
@@ -144,6 +150,7 @@ test("action-only users do not receive a forbidden Evidence desk link", async ()
   const result = await page("action-only", "/actions");
   assert.equal(result.status, 200);
   assert.ok(!result.hrefs.includes("/"));
+  assert.ok(!result.hrefs.includes("/complaints"));
   assert.ok(result.hrefs.includes("/actions"));
 });
 

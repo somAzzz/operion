@@ -51,6 +51,8 @@ import {
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
+  ArrowUpRightIcon,
+  ScanTextIcon,
   ArrowUpIcon,
   AudioLinesIcon,
   CheckIcon,
@@ -199,9 +201,8 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]:
-          "color-mix(in oklab, var(--color-muted) 30%, transparent)",
+        ["--thread-max-width" as string]: isEmpty ? "50rem" : "64rem",
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "1rem",
         ["--composer-padding" as string]: "8px",
       }}
@@ -383,17 +384,17 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col px-2">
-      <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        How can I help you today?
-      </p>
+    <div className="inquiry-welcome">
+      <span className="welcome-icon"><ScanTextIcon aria-hidden="true" /></span>
+      <h2>Explore your records</h2>
+      <p>Ask about customers, orders, or fulfillment in your authorized workspace.</p>
     </div>
   );
 };
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-col">
+    <div className="aui-thread-welcome-suggestions">
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -409,16 +410,11 @@ const ThreadSuggestionItem: FC = () => {
           type="button"
           className="aui-thread-welcome-suggestion group hover:bg-foreground/[0.03] focus-visible:ring-ring/50 flex w-full items-baseline gap-2.5 rounded-md px-2 py-2 text-start text-sm transition-colors outline-none focus-visible:ring-1 motion-reduce:transition-none"
         >
-          <span
-            aria-hidden
-            className="text-muted-foreground/60 group-hover:text-foreground font-mono text-xs transition-colors motion-reduce:transition-none"
-          >
-            {">"}
+          <span className="suggestion-copy">
+            <SuggestionPrimitive.Title className="suggestion-title" />
+            <SuggestionPrimitive.Description className="suggestion-description" />
           </span>
-          <span className="min-w-0 flex-1 truncate">
-            <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1 text-foreground" />{" "}
-            <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 text-muted-foreground empty:hidden" />
-          </span>
+          <ArrowUpRightIcon aria-hidden="true" />
         </button>
       </SuggestionPrimitive.Trigger>
     </div>
@@ -455,7 +451,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           <ComposerQueue />
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder={suggestion || "Send a message..."}
+            placeholder={suggestion || "Ask a question about your records…"}
             onKeyDown={event => {
               if (suggestion && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
