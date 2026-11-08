@@ -3,48 +3,200 @@ name: Verify
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_gateway:
+        description: Deploy the verified images to the existing gateway
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  python:
+  hygiene:
+    name: Repository policy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: English-only maintained files
+        run: scripts/verify.sh english
+      - name: Verify scanner rejection paths
+        run: python -m unittest discover -s tests -p test_english_policy.py -v
+      - name: Validate workflows
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.11 -color
+      - name: Validate shell entry points
+        run: bash -n scripts/*.sh
+      - name: Check whitespace
+        run: git show --format= --check HEAD
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install uv
-        run: python -m pip install uv
+        run: python -m pip install uv==0.10.11
       - name: Install locked dependencies
         run: uv sync --frozen --extra dev --extra observability
-      - name: Lint
-        run: uv run --frozen --extra observability ruff check src tests
-      - name: Offline suite
-        run: env -u OPERION_TEST_ACTION_DATABASE_URL PYDANTIC_AI_NO_BANNER=1 PYTHONPATH=src uv run --frozen --extra observability python -m unittest discover -s tests -q
+      - name: Offline suite and lint
+        run: scripts/verify.sh offline
       - name: Developer case evidence
-        run: PYTHONPATH=src uv run --frozen --extra observability python scripts/verify_cases.py
+        run: scripts/verify.sh case
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: developer-evidence
           path: reports/developer/
+          retention-days: 14
       - name: PostgreSQL integration suite
-        run: PYDANTIC_AI_NO_BANNER=1 PYTHONPATH=src uv run --frozen --extra observability python scripts/test_postgres.py
+        run: scripts/verify.sh postgres
 
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm run test:session
-      - run: npm run test:navigation
-      - run: npm run build -- --webpack
-      - run: npm run test:navigation:render
+      - run: scripts/verify.sh web
+
+  containers:
+    name: Gateway images (${{ matrix.service }})
+    needs: [hygiene, python, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: agent
+            context: .
+            dockerfile: deploy/gateway/agent.Dockerfile
+          - service: web
+            context: apps/web
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Resolve image name and publication policy
+        id: release
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SERVICE: ${{ matrix.service }}
+          PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        run: |
+          echo "image=ghcr.io/${REPOSITORY,,}-$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: steps.release.outputs.publish == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build verified gateway image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ steps.release.outputs.publish == 'true' }}
+          tags: ${{ steps.release.outputs.image }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=gateway-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=gateway-${{ matrix.service }}
+      - name: Record immutable image reference
+        if: steps.release.outputs.publish == 'true'
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE: ${{ steps.release.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          service = os.environ["SERVICE"]
+          record = {"revision": os.environ["GITHUB_SHA"], "service": service, "image": os.environ["IMAGE"]}
+          Path(f"image-{service}.json").write_text(json.dumps(record) + "\n")
+          PY
+          echo "$SERVICE: $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.release.outputs.publish == 'true'
+        with:
+          name: gateway-image-${{ matrix.service }}
+          path: image-${{ matrix.service }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy observed gateway
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_gateway && github.ref == 'refs/heads/main'
+    needs: [containers]
+    runs-on: [self-hosted, linux, x64, operion-gateway]
+    timeout-minutes: 15
+    environment: gateway
+    concurrency:
+      group: operion-gateway-deployment
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OPERION_GATEWAY_ENV_FILE: ${{ vars.OPERION_GATEWAY_ENV_FILE }}
+      OPERION_GATEWAY_RUNTIME_DIR: ${{ vars.OPERION_GATEWAY_RUNTIME_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gateway-image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/gateway-images
+      - name: Isolate registry credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/operion-deploy-docker"
+          chmod 700 "$RUNNER_TEMP/operion-deploy-docker"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/operion-deploy-docker" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy exact images with existing telemetry and identity state
+        run: |
+          python3 scripts/deploy_gateway_release.py \
+            --manifest-dir "$RUNNER_TEMP/gateway-images" \
+            --repository "$GITHUB_REPOSITORY" \
+            --revision "$GITHUB_SHA" \
+            --env-file "$OPERION_GATEWAY_ENV_FILE" \
+            --runtime-dir "$OPERION_GATEWAY_RUNTIME_DIR"

@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-env_file=.env.langfuse.local
+env_file=${OPERION_GATEWAY_ENV_FILE:-.env.langfuse.local}
 if [[ ! -f "$env_file" ]]; then
   echo "Missing $env_file; the observed gateway must not start without its telemetry configuration." >&2
   exit 1
@@ -28,6 +28,9 @@ for service in "${services[@]}"; do
 done
 
 compose=(docker compose --env-file "$env_file" -f deploy/gateway/compose.yaml)
+if [[ -n "${OPERION_GATEWAY_IMAGE_OVERRIDE:-}" ]]; then
+  compose+=(-f "$OPERION_GATEWAY_IMAGE_OVERRIDE")
+fi
 "${compose[@]}" config --format json | python3 -c '
 import json
 import sys
@@ -52,8 +55,13 @@ if (( check_only )); then
   exit 0
 fi
 
-"${compose[@]}" build "${services[@]}"
-"${compose[@]}" up -d --no-deps --wait "${services[@]}"
+if [[ -n "${OPERION_GATEWAY_IMAGE_OVERRIDE:-}" ]]; then
+  "${compose[@]}" pull "${services[@]}"
+  "${compose[@]}" up -d --no-deps --no-build --pull never --wait "${services[@]}"
+else
+  "${compose[@]}" build "${services[@]}"
+  "${compose[@]}" up -d --no-deps --wait "${services[@]}"
+fi
 
 for service in "${services[@]}"; do
   container_id=$("${compose[@]}" ps -q "$service")

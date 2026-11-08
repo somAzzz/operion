@@ -217,10 +217,14 @@ PYTHONPATH=src python3 -m operion_etl run \
 Run the reproducible verification entry point with the checked-in uv and npm lockfiles:
 
 - scripts/verify.sh setup: install locked Python and Web dependencies.
+- scripts/verify.sh english: reject Han characters in maintained text and file names.
 - scripts/verify.sh offline: Python lint and offline tests.
 - scripts/verify.sh web: Web type check and production build.
 
 Offline tests use public sample inputs in tests/fixtures and need no restored WWI database. PostgreSQL action tests are a separate destructive group: run `scripts/verify.sh postgres` with Docker available. The runner creates and cleans up its own isolated container and ignores inherited database URLs. Direct destructive tests without runner ownership are rejected; skipped integration tests fail the runner. Use `scripts/verify.sh case` for JSON/JUnit/HTML developer evidence and per-case reruns. CI runs both groups and the Web build. The Web check uses Next.js webpack mode.
+
+The [CI/CD runbook](ops/ci-cd.md) describes repository policy checks, verified GHCR
+images, and manually triggered deployment to the existing observed gateway.
 
 Run the deterministic test suite with:
 
