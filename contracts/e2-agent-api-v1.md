@@ -68,6 +68,65 @@ required-fact selection, omissions, and legitimate user-task success still requi
 independent evaluation. English-only repository documentation does not remove
 supported application answer languages or alter multilingual test fixtures.
 
+## Run budgets and internal diagnostics
+
+The default and gateway/interview profiles allow six business tool calls and
+eight model requests per run. Configuration must allow at least
+`max_tool_calls + 2` model requests: one final structured answer and one answer
+repair after a sequential chain of business calls. `present_answer` is an output
+tool and does not consume the business-tool allowance. Earlier schema retries
+or other extra model requests can still exhaust the request allowance; token and
+deadline limits remain independent. This is not a guarantee of task completion.
+
+Budget failures remain `RUN_ERROR` / `LIMIT_EXCEEDED` publicly. Internally, each
+admitted run records a versioned `budget` snapshot with numeric `usage`, configured
+`limits`, and an optional `exceeded` object. Its `kind` is `tool_calls`,
+`model_requests`, `input_tokens`, `output_tokens`, or `deadline`; `used` and `limit`
+record the observed boundary, and `attempted` records the blocked projected count
+for tool/model requests. A rejected batch can have zero executed tools and a
+nonzero attempted count. The SDK still enforces the limits.
+
+Success, failure and cancellation retain observed request/tool/token usage.
+Streaming token observations are retained even if the SDK has not committed the
+final response usage; tokens unreported by an interrupted provider are not
+estimated. Elapsed time covers execution after admission, excluding queue wait.
+Only expiration of the run's timeout scope is diagnosed as `deadline`; an upstream
+timeout is not mislabeled as exhaustion of the total run budget. A budget failure
+while repairing an answer takes precedence over the preceding guardrail rejection.
+
+Snapshots are stored in the nullable SQLite `agent_runs.budget_json` column and
+returned as `budget` by the internal store reader. Existing rows remain null
+(unknown historical diagnostics), with an idempotent additive migration. Numeric
+usage/limits and the exceeded dimension are also emitted under `operion.budget.*`
+trace attributes. Diagnostic payloads contain no prompts, tool arguments, evidence
+IDs, raw exceptions or credentials, and are not added to SSE or public history.
+Failed or cancelled runs still do not publish or save unverified answers.
+
+## Candidate selection state
+
+For an Agent search intended to resolve one customer or supplier, a complete
+multi-match result creates server-owned clarification state. An incomplete page
+asks for a narrower query; the current page does not prove that a record is
+unique. Explicit list requests can use the search list mode and present the
+result table without forcing a single-object choice. If a list-mode search
+instead leads to a `needs_details` answer, the server promotes its current
+complete candidate set to clarification state; the run must not fail merely
+because the model used list mode. Ambiguous overview resolution also creates a
+complete candidate set. The server selects the candidate evidence table and
+renders the clarification; the model cannot supply candidate rows or arbitrary
+clarification references.
+
+Once clarification is required, every later business tool in that run is
+blocked at execution, including calls in the same model response. On successful
+completion, the candidate IDs, query, relationship, and authorization context
+are saved with the conversation. A follow-up may choose exactly one of those
+canonical IDs. The server rechecks conversation ownership, current scope, data,
+and query before allowing a single overview lookup of that ID. Unknown IDs,
+multiple IDs, stale candidates, and changed scope return HTTP 409. A new
+question without a candidate ID clears the pending selection and starts a fresh
+model context. The lookup result remains subject to the normal evidence and
+authorization checks.
+
 The SGLang compatibility adapter changes only a non-stream response metadata
 field (`metadata.weight_versions`) from an array to its JSON-string form. It
 does not alter messages, tool calls, stream chunks, status codes, or retries;

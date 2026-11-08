@@ -1,19 +1,31 @@
+import asyncio
 import hashlib
 import os
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.usage import RunUsage
 from structured_helpers import output_response
 
 from operion_etl.agent_runtime import (
     AGENT_INSTRUCTIONS,
     AgentDependencies,
     AgentSettings,
+    PendingSelection,
+    check_fulfillment,
     create_operion_agent,
+    get_customer_overview,
+    present_answer,
+    propose_followup_task,
+    search_customers,
 )
+from operion_etl.answer_evidence import AnswerPlan, TableSelection
 from operion_etl.read_tools import AccessScope, CanonicalRepository
 
 CANONICAL = Path("tests/fixtures/wwi-small")
@@ -57,7 +69,7 @@ class AgentRuntimeTests(unittest.TestCase):
                 )
             return output_response(messages)
 
-        settings = AgentSettings(max_model_requests=5, max_tool_calls=4)
+        settings = AgentSettings(max_model_requests=6, max_tool_calls=4)
         agent = create_operion_agent(settings, model=FunctionModel(model_function))
         deps = AgentDependencies(
             repository=CanonicalRepository(CANONICAL),
@@ -107,6 +119,350 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual("get_customer_portfolio_summary", deps.tool_calls[0]["name"])
         self.assertEqual(1, deps.tool_calls[0]["result"]["data"]["customer_count"])
 
+    def test_ambiguous_customer_contact_question_returns_choices(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {
+                        "wwi:organization:customer:11",
+                        "wwi:organization:customer:150",
+                    }
+                ),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        result = search_customers(ctx, "Tailspin Toys", limit=10)
+        self.assertEqual(2, len(result["data"]["results"]))
+        self.assertEqual(
+            ("wwi:organization:customer:150", "wwi:organization:customer:11"),
+            deps.candidate_selection.candidate_ids,
+        )
+        answer = present_answer(ctx, AnswerPlan(language="en"))
+        self.assertIn("Please choose", answer)
+        self.assertIn("Tailspin Toys", answer)
+        self.assertIn("wwi:organization:customer:11", answer)
+        self.assertIn("wwi:organization:customer:150", answer)
+        self.assertEqual(
+            ["search_customers"], [call["name"] for call in deps.tool_calls]
+        )
+
+    def test_explicit_list_does_not_force_customer_selection(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+        )
+        result = search_customers(
+            SimpleNamespace(deps=deps), "Tailspin Toys", resolve_one=False
+        )
+        self.assertIsNone(deps.candidate_selection)
+        table_id = result["answer_evidence"]["tables"][0]["id"]
+        answer = present_answer(
+            SimpleNamespace(deps=deps),
+            AnswerPlan(language="en", tables=[TableSelection(table_id=table_id)]),
+        )
+        self.assertIn("Tailspin Toys", answer)
+        self.assertIsNone(deps.candidate_selection)
+
+    def test_list_mode_search_can_resolve_to_server_backed_clarification(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys", resolve_one=False)
+        self.assertIsNone(deps.candidate_selection)
+        answer = present_answer(ctx, AnswerPlan(language="en", notice="needs_details"))
+        self.assertIn("Please choose", answer)
+        self.assertEqual("needs_selection", deps.candidate_selection.mode)
+        self.assertEqual(2, len(deps.candidate_selection.candidate_ids))
+
+    def test_list_mode_incomplete_page_only_requests_refinement(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys", limit=1, resolve_one=False)
+        answer = present_answer(ctx, AnswerPlan(language="en", notice="needs_details"))
+        self.assertIn("More matches exist", answer)
+        self.assertEqual("needs_refinement", deps.candidate_selection.mode)
+
+    def test_list_mode_clarification_rejects_forged_reference(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys", resolve_one=False)
+        with self.assertRaises(ModelRetry):
+            present_answer(
+                ctx,
+                AnswerPlan(
+                    language="en",
+                    notice="needs_details",
+                    tables=[TableSelection(table_id="forged-table")],
+                ),
+            )
+
+    def test_latest_failed_tool_sequence_completes_with_clarification(self):
+        requests = 0
+
+        async def model_function(messages, info: AgentInfo):
+            nonlocal requests
+            requests += 1
+            if requests == 1:
+                return ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "search_customers",
+                            {"query": "Tailspin Toys", "resolve_one": False},
+                            "search",
+                        )
+                    ]
+                )
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "present_answer",
+                        {"plan": {"language": "en", "notice": "needs_details"}},
+                        "answer",
+                    )
+                ]
+            )
+
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        agent = create_operion_agent(
+            AgentSettings(max_model_requests=4, max_tool_calls=2),
+            model=FunctionModel(model_function),
+        )
+        result = asyncio.run(agent.run("Tailspin Toys contact email", deps=deps))
+        self.assertIn("Please choose", result.output)
+        self.assertEqual(["search_customers"], [c["name"] for c in deps.tool_calls])
+
+    def test_partial_overview_returns_typed_ambiguity(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        result = get_customer_overview(ctx, "Tailspin Toys")
+        self.assertEqual("ambiguous_customer", result["error"]["code"])
+        self.assertEqual("get_customer_overview", deps.candidate_selection.source_tool)
+        answer = present_answer(ctx, AnswerPlan(language="en"))
+        self.assertIn("Please choose", answer)
+        self.assertIn("wwi:organization:customer:11", answer)
+        self.assertIn("wwi:organization:customer:150", answer)
+
+    def test_ambiguous_search_removes_followup_tools(self):
+        async def model_function(messages, info: AgentInfo):
+            return output_response(messages)
+
+        model = FunctionModel(model_function)
+        agent = create_operion_agent(
+            AgentSettings(max_model_requests=4, max_tool_calls=2),
+            model=model,
+        )
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+        )
+        ctx = RunContext(deps=deps, model=model, usage=RunUsage())
+        toolset = agent.toolsets[-1]
+        self.assertIn("get_customer_overview", asyncio.run(toolset.get_tools(ctx)))
+        search_customers(ctx, "Tailspin Toys")
+        self.assertEqual({}, asyncio.run(toolset.get_tools(ctx)))
+
+    def test_same_turn_calls_are_blocked_at_execution(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+            proposal_service=SimpleNamespace(
+                propose=lambda **_: self.fail("action ran")
+            ),
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys")
+        with patch.object(
+            deps.repository, "customer_overview", side_effect=AssertionError("read ran")
+        ):
+            with self.assertRaises(ModelRetry):
+                get_customer_overview(ctx, "wwi:organization:customer:11")
+        with self.assertRaises(ModelRetry):
+            check_fulfillment(ctx, "F01")
+        with self.assertRaises(ModelRetry):
+            propose_followup_task(ctx, "F03", "title", "body", datetime.now(UTC))
+        self.assertEqual(
+            ["search_customers"], [call["name"] for call in deps.tool_calls]
+        )
+
+    def test_same_model_response_cannot_read_an_unselected_candidate(self):
+        responses = 0
+
+        async def model_function(messages, info: AgentInfo):
+            nonlocal responses
+            responses += 1
+            if responses == 1:
+                return ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "search_customers",
+                            {"query": "Tailspin Toys"},
+                            "call-search",
+                        ),
+                        ToolCallPart(
+                            "get_customer_overview",
+                            {"customer": CUSTOMER_ID},
+                            "call-overview",
+                        ),
+                    ]
+                )
+            return output_response(messages)
+
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        agent = create_operion_agent(
+            AgentSettings(max_model_requests=5, max_tool_calls=3),
+            model=FunctionModel(model_function),
+        )
+        result = asyncio.run(agent.run("Find the customer", deps=deps))
+        self.assertIn("Please choose", result.output)
+        self.assertEqual(["search_customers"], [c["name"] for c in deps.tool_calls])
+
+    def test_pending_selection_only_allows_selected_id_once(self):
+        chosen = "wwi:organization:customer:11"
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope("AI Demo GmbH", frozenset({chosen})),
+            user_id="user-1",
+            pending_selection=PendingSelection(
+                role="customer",
+                query="Tailspin Toys",
+                candidate_ids=(chosen, "wwi:organization:customer:150"),
+                context_fingerprint="scope",
+            ),
+            selected_candidate_id=chosen,
+        )
+        ctx = SimpleNamespace(deps=deps)
+        with self.assertRaises(ModelRetry):
+            get_customer_overview(ctx, "wwi:organization:customer:150")
+        result = get_customer_overview(ctx, chosen)
+        self.assertTrue(result["ok"])
+        with self.assertRaises(ModelRetry):
+            get_customer_overview(ctx, chosen)
+
+    def test_forged_clarification_reference_is_rejected(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys")
+        with self.assertRaises(ModelRetry):
+            present_answer(
+                ctx,
+                AnswerPlan(
+                    language="en",
+                    tables=[TableSelection(table_id="forged-table")],
+                ),
+            )
+
+    def test_incomplete_search_requires_refinement(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset(
+                    {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+                ),
+            ),
+            user_id="user-1",
+        )
+        ctx = SimpleNamespace(deps=deps)
+        search_customers(ctx, "Tailspin Toys", limit=1)
+        self.assertEqual("needs_refinement", deps.candidate_selection.mode)
+        self.assertIn(
+            "More matches exist", present_answer(ctx, AnswerPlan(language="en"))
+        )
+
+    def test_later_search_page_cannot_become_complete_candidate_set(self):
+        deps = AgentDependencies(
+            repository=CanonicalRepository(CANONICAL),
+            scope=AccessScope(
+                "AI Demo GmbH",
+                frozenset({CUSTOMER_ID, "wwi:organization:customer:150"}),
+            ),
+            user_id="user-1",
+        )
+        first = search_customers(
+            SimpleNamespace(deps=deps), "Tailspin Toys", limit=1, resolve_one=False
+        )
+        cursor = first["data"]["pagination"]["next_cursor"]
+        search_customers(
+            SimpleNamespace(deps=deps),
+            "Tailspin Toys",
+            limit=1,
+            cursor=cursor,
+        )
+        self.assertEqual("needs_refinement", deps.candidate_selection.mode)
+
     def test_tools_are_filtered_by_server_dependencies(self):
         observed_tools = []
 
@@ -129,14 +485,14 @@ class AgentRuntimeTests(unittest.TestCase):
 
     def test_settings_define_bounded_model_and_tool_usage(self):
         settings = AgentSettings(
-            max_model_requests=2,
+            max_model_requests=3,
             max_tool_calls=1,
             max_input_tokens=100,
             max_output_tokens=50,
             max_run_output_tokens=75,
         )
         limits = settings.usage_limits()
-        self.assertEqual(2, limits.request_limit)
+        self.assertEqual(3, limits.request_limit)
         self.assertEqual(1, limits.tool_calls_limit)
         self.assertEqual(100, limits.input_tokens_limit)
         self.assertEqual(75, limits.output_tokens_limit)
@@ -161,8 +517,10 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(3_000, settings.model_settings()["max_tokens"])
 
     def test_settings_reject_inconsistent_request_and_output_budgets(self):
-        with self.assertRaisesRegex(ValueError, "must exceed max_tool_calls"):
+        with self.assertRaisesRegex(ValueError, "max_tool_calls \\+ 2"):
             AgentSettings(max_model_requests=3, max_tool_calls=3)
+        with self.assertRaisesRegex(ValueError, "one answer repair"):
+            AgentSettings(max_model_requests=7, max_tool_calls=6)
         with self.assertRaisesRegex(ValueError, "at least max_output_tokens"):
             AgentSettings(max_output_tokens=100, max_run_output_tokens=99)
 

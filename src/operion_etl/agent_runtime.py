@@ -11,13 +11,13 @@ from typing import Any, Literal
 import httpx2
 from openai import AsyncOpenAI
 from opentelemetry import trace
+from pydantic import BaseModel, ConfigDict
 from pydantic_ai import (
     Agent,
     ModelRetry,
     ModelSettings,
     RunContext,
     ToolOutput,
-    UsageLimits,
 )
 from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -25,7 +25,8 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.toolsets import FunctionToolset
 
 from .action_models import ActionConflict, ActionDenied, ActionUnavailable
-from .answer_evidence import AnswerPlan, EvidenceRegistry
+from .agent_budget import DiagnosedUsageLimits
+from .answer_evidence import AnswerPlan, EvidenceRegistry, TableSelection
 from .identity_readback import ERPNextReadClient, TwentyReadClient
 from .observability import record_tool_result
 from .output_guardrails import (
@@ -115,8 +116,8 @@ class AgentSettings:
     model_api_key: str = "dummy"
     model_timeout_seconds: float = 45.0
     run_timeout_seconds: float = 60.0
-    max_model_requests: int = 4
-    max_tool_calls: int = 3
+    max_model_requests: int = 8
+    max_tool_calls: int = 6
     max_input_tokens: int = 16_000
     max_output_tokens: int = 1_500
     max_run_output_tokens: int = 6_000
@@ -141,10 +142,10 @@ class AgentSettings:
         invalid = [name for name, value in positive_limits.items() if value <= 0]
         if invalid:
             raise ValueError("agent limits must be positive: " + ", ".join(invalid))
-        if self.max_model_requests <= self.max_tool_calls:
+        if self.max_model_requests < self.max_tool_calls + 2:
             raise ValueError(
-                "max_model_requests must exceed max_tool_calls so the agent can "
-                "produce a final answer"
+                "max_model_requests must be at least max_tool_calls + 2 "
+                "to produce a final answer and allow one answer repair"
             )
         if self.max_run_output_tokens < self.max_output_tokens:
             raise ValueError("max_run_output_tokens must be at least max_output_tokens")
@@ -163,8 +164,8 @@ class AgentSettings:
             run_timeout_seconds=float(
                 os.environ.get("OPERION_RUN_TIMEOUT_SECONDS", "60")
             ),
-            max_model_requests=int(os.environ.get("OPERION_MAX_MODEL_REQUESTS", "4")),
-            max_tool_calls=int(os.environ.get("OPERION_MAX_TOOL_CALLS", "3")),
+            max_model_requests=int(os.environ.get("OPERION_MAX_MODEL_REQUESTS", "8")),
+            max_tool_calls=int(os.environ.get("OPERION_MAX_TOOL_CALLS", "6")),
             max_input_tokens=int(os.environ.get("OPERION_MAX_INPUT_TOKENS", "16000")),
             max_output_tokens=int(os.environ.get("OPERION_MAX_OUTPUT_TOKENS", "1500")),
             max_run_output_tokens=int(
@@ -193,13 +194,42 @@ class AgentSettings:
             },
         )
 
-    def usage_limits(self) -> UsageLimits:
-        return UsageLimits(
+    def usage_limits(self) -> DiagnosedUsageLimits:
+        return DiagnosedUsageLimits(
             request_limit=self.max_model_requests,
             tool_calls_limit=self.max_tool_calls,
             input_tokens_limit=self.max_input_tokens,
             output_tokens_limit=self.max_run_output_tokens,
         )
+
+
+class CandidateSelection(BaseModel):
+    """A scoped, evidence-backed choice that must be resolved by the user."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_tool: Literal[
+        "search_customers",
+        "search_suppliers",
+        "get_customer_overview",
+        "get_supplier_overview",
+    ]
+    mode: Literal["needs_selection", "needs_refinement"]
+    role: Literal["customer", "supplier"]
+    query: str
+    table_id: str
+    candidate_ids: tuple[str, ...]
+
+
+class PendingSelection(BaseModel):
+    """The completed candidate set bound to one conversation and access scope."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: Literal["customer", "supplier"]
+    query: str
+    candidate_ids: tuple[str, ...]
+    context_fingerprint: str
 
 
 @dataclass
@@ -216,6 +246,11 @@ class AgentDependencies:
     evidence: EvidenceRegistry = field(init=False)
     answer_plan: AnswerPlan | None = None
     output_decision: GuardrailDecision | None = None
+    candidate_selection: CandidateSelection | None = None
+    optional_selection: CandidateSelection | None = None
+    pending_selection: PendingSelection | None = None
+    selected_candidate_id: str | None = None
+    selected_lookup_complete: bool = False
 
     def __post_init__(self) -> None:
         self.evidence = EvidenceRegistry(
@@ -236,6 +271,59 @@ def _record_payload(
         **payload,
         "answer_evidence": deps.evidence.add(name, arguments, payload),
     }
+    candidate_rows = (
+        payload.get("error", {}).get("candidates", [])
+        if payload.get("ok") is False
+        else payload.get("data", {}).get("results", [])
+    )
+    ambiguous_error = payload.get("error", {}).get("code") in {
+        "ambiguous_customer",
+        "ambiguous_supplier",
+    }
+    matching_search = (
+        name in {"search_customers", "search_suppliers"}
+        and arguments.get("query", "").strip()
+    )
+    resolving_search = matching_search and arguments.get("resolve_one") is True
+    incomplete_search = (
+        payload.get("data", {}).get("completeness", {}).get("status") == "partial"
+    )
+    mode = (
+        "needs_refinement"
+        if matching_search and incomplete_search
+        else "needs_selection"
+        if (ambiguous_error or matching_search) and len(candidate_rows) > 1
+        else None
+    )
+    if mode and candidate_rows:
+        kind = "candidates" if payload.get("ok") is False else "results"
+        table = next(
+            (
+                item
+                for item in payload["answer_evidence"]["tables"]
+                if item["kind"] == kind
+            ),
+            None,
+        )
+        if table is not None:
+            selection = CandidateSelection(
+                source_tool=name,
+                mode=mode,
+                role="customer" if "customer" in name else "supplier",
+                query=str(
+                    arguments.get("query")
+                    or arguments.get("customer")
+                    or arguments.get("supplier_id")
+                    or ""
+                ),
+                table_id=table["id"],
+                candidate_ids=tuple(row["canonical_id"] for row in candidate_rows),
+            )
+            if ambiguous_error or resolving_search:
+                deps.evidence.register_clarification(table["id"], mode)
+                deps.candidate_selection = selection
+            else:
+                deps.optional_selection = selection
     deps.tool_calls.append({"name": name, "arguments": arguments, "result": payload})
     return payload
 
@@ -244,8 +332,42 @@ def present_answer(ctx: RunContext[AgentDependencies], plan: AnswerPlan) -> str:
     """Finish by selecting current-turn answer_evidence facts and tables.
 
     No business prose, custom labels, values or units are accepted. Use an empty
-    plan after a tool error. Use needs_details/unsupported only without facts.
+    plan after a tool error without candidates. A needs_details plan may select
+    an evidence-backed candidate table; unsupported remains conversation-only.
     """
+    if ctx.deps.pending_selection is not None and not ctx.deps.tool_calls:
+        raise ModelRetry("SELECTION_LOOKUP_REQUIRED")
+    selection = ctx.deps.candidate_selection
+    if (
+        selection is None
+        and plan.notice == "needs_details"
+        and ctx.deps.optional_selection is not None
+    ):
+        selection = ctx.deps.optional_selection
+        ctx.deps.evidence.register_clarification(selection.table_id, selection.mode)
+        ctx.deps.candidate_selection = selection
+    if selection is not None:
+        if plan.facts or plan.tables:
+            if (
+                len(plan.tables) != 1
+                or plan.tables[0].table_id != selection.table_id
+                or verify_answer_plan(
+                    ctx.deps.evidence,
+                    AnswerPlan(
+                        language=plan.language,
+                        notice="needs_details",
+                        facts=plan.facts,
+                        tables=plan.tables,
+                    ),
+                ).verdict
+                is not GuardrailVerdict.ALLOW
+            ):
+                raise ModelRetry("CLARIFICATION_REFERENCE_INVALID")
+        plan = AnswerPlan(
+            language=plan.language,
+            notice="needs_details",
+            tables=[TableSelection(table_id=selection.table_id)],
+        )
     decision = verify_answer_plan(ctx.deps.evidence, plan)
     ctx.deps.output_decision = decision
     record_guardrail(decision)
@@ -288,7 +410,7 @@ def get_customer_overview(
     """Read an authorized customer, their contacts, and recent sales orders.
 
     Args:
-        customer: Canonical ID, numeric WWI source ID, or exact display name.
+        customer: Canonical ID, numeric WWI source ID, or scoped name fragment.
         max_orders: Maximum recent orders to return, from 1 through 50.
     """
     return _record_tool(
@@ -319,12 +441,33 @@ def get_customer_portfolio_summary(
     )
 
 
+def _require_tool_execution_allowed(
+    deps: AgentDependencies, name: str, arguments: dict[str, Any]
+) -> None:
+    selection = deps.candidate_selection
+    pending = deps.pending_selection
+    if selection is not None:
+        raise ModelRetry("SELECTION_REQUIRED: finish with present_answer")
+    if pending is not None:
+        if deps.selected_lookup_complete:
+            raise ModelRetry("SELECTION_LOOKUP_COMPLETE: finish with present_answer")
+        overview = (
+            "get_customer_overview"
+            if pending.role == "customer"
+            else "get_supplier_overview"
+        )
+        key = "customer" if pending.role == "customer" else "supplier_id"
+        if name != overview or arguments.get(key) != deps.selected_candidate_id:
+            raise ModelRetry("SELECTION_REQUIRED: use the selected canonical ID")
+
+
 def _record_tool(
     ctx: RunContext[AgentDependencies],
     name: str,
     arguments: dict[str, Any],
     call: Any,
 ) -> dict[str, Any]:
+    _require_tool_execution_allowed(ctx.deps, name, arguments)
     tool_span = trace.get_current_span()
     with trace.get_tracer("operion.domain").start_as_current_span(
         "operion.domain.read",
@@ -347,7 +490,10 @@ def _record_tool(
             record_tool_result(span, "internal_error")
             record_tool_result(tool_span, "internal_error")
             raise
-        return _record_payload(ctx.deps, name, arguments, payload)
+        recorded = _record_payload(ctx.deps, name, arguments, payload)
+        if ctx.deps.pending_selection is not None and recorded.get("ok") is True:
+            ctx.deps.selected_lookup_complete = True
+        return recorded
 
 
 def get_customer_order_distribution(
@@ -386,6 +532,9 @@ def check_operation_capability(
     operation: Literal["read", "propose_followup_task", "business_write"],
 ) -> dict[str, Any]:
     """Check server-granted operation capability; this call grants no permission."""
+    _require_tool_execution_allowed(
+        ctx.deps, "check_operation_capability", {"operation": operation}
+    )
     if operation == "read":
         status, reason = "authorized", "scoped_read_tools_only"
     elif (
@@ -453,9 +602,18 @@ def search_customers(
     query: str = "",
     limit: int = 10,
     cursor: str | None = None,
+    resolve_one: bool = True,
 ) -> dict[str, Any]:
-    """Search or list authorized customers by partial name with stable pagination."""
-    args = {"query": query, "limit": limit, "cursor": cursor}
+    """Search customers; resolve_one requires a unique match before looking it up.
+
+    Set resolve_one=False for an explicit request to list or compare all matches.
+    """
+    args = {
+        "query": query,
+        "limit": limit,
+        "cursor": cursor,
+        "resolve_one": resolve_one,
+    }
     return _record_tool(
         ctx,
         "search_customers",
@@ -539,9 +697,18 @@ def search_suppliers(
     query: str = "",
     limit: int = 10,
     cursor: str | None = None,
+    resolve_one: bool = True,
 ) -> dict[str, Any]:
-    """Search or list authorized suppliers by partial name with stable pagination."""
-    args = {"query": query, "limit": limit, "cursor": cursor}
+    """Search suppliers; resolve_one requires a unique match before looking it up.
+
+    Set resolve_one=False for an explicit request to list or compare all matches.
+    """
+    args = {
+        "query": query,
+        "limit": limit,
+        "cursor": cursor,
+        "resolve_one": resolve_one,
+    }
     return _record_tool(
         ctx,
         "search_suppliers",
@@ -620,6 +787,7 @@ def check_fulfillment(
     Args:
         case_id: Allowlisted fulfillment scenario identifier, such as F01.
     """
+    _require_tool_execution_allowed(ctx.deps, "check_fulfillment", {"case_id": case_id})
     try:
         result = ctx.deps.repository.fulfillment_case(case_id)
         payload = {"ok": True, "data": result}
@@ -653,6 +821,7 @@ def propose_followup_task(
         "body": body,
         "due_at": due_at.isoformat(),
     }
+    _require_tool_execution_allowed(ctx.deps, "propose_followup_task", arguments)
     prior = next(
         (
             call["result"]
@@ -795,6 +964,17 @@ def create_operion_agent(
     filtered_tools = toolset.filtered(
         lambda ctx, tool: (
             tool.name in ctx.deps.allowed_tools
+            and ctx.deps.candidate_selection is None
+            and not ctx.deps.selected_lookup_complete
+            and (
+                ctx.deps.pending_selection is None
+                or tool.name
+                == (
+                    "get_customer_overview"
+                    if ctx.deps.pending_selection.role == "customer"
+                    else "get_supplier_overview"
+                )
+            )
             and not (
                 tool.name == "check_fulfillment"
                 and ctx.deps.repository.data_mode == "live"

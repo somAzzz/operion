@@ -81,6 +81,10 @@ customer scope, source path, or target address as a tool argument.
 
 ### `get_customer_overview`
 
+- This v1 entry records the original exact-name resolution rule. The current
+  Agent and repository use the scoped fragment resolution and selection flow
+  specified by `contact-overviews-v2`; canonical ID and source ID behavior,
+  authorization, response fields, and error distinctions below still apply.
 - Purpose: resolve one customer by canonical ID, numeric WWI source ID, or exact case-insensitive name and
   return its allowlisted contacts and recent sales orders.
 - Input: `customer` (required string), `max_orders` (integer, 1–50; default 20).

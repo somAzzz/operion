@@ -307,6 +307,82 @@ class OutputGuardrailTests(unittest.TestCase):
             ).reason_code,
         )
 
+    def test_ambiguous_search_can_request_selection_with_verified_candidates(self):
+        reg = registry()
+        evidence = add(
+            reg,
+            "search_customers",
+            {
+                "contract_version": "customer-search-v1",
+                "results": [
+                    {
+                        "canonical_id": "wwi:organization:customer:1",
+                        "name": "Tailspin Toys (A)",
+                    },
+                    {
+                        "canonical_id": "wwi:organization:customer:2",
+                        "name": "Tailspin Toys (B)",
+                    },
+                ],
+            },
+            {"query": "Tailspin Toys"},
+        )
+        reg.register_clarification(evidence["tables"][0]["id"], "needs_selection")
+        plan = AnswerPlan(
+            language="en",
+            notice="needs_details",
+            facts=[evidence["facts"][0]["id"]],
+            tables=[TableSelection(table_id=evidence["tables"][0]["id"])],
+        )
+        self.assertEqual(GuardrailVerdict.ALLOW, verify_answer_plan(reg, plan).verdict)
+        answer = reg.render(plan)
+        self.assertIn("Please choose", answer)
+        self.assertIn("wwi:organization:customer:1", answer)
+        self.assertIn("wwi:organization:customer:2", answer)
+        self.assertEqual(
+            "NOTICE_AFTER_BUSINESS_LOOKUP",
+            verify_answer_plan(
+                reg, AnswerPlan(language="en", notice="needs_details")
+            ).reason_code,
+        )
+
+    def test_needs_details_cannot_attach_unrelated_business_table(self):
+        reg = registry()
+        evidence = add(reg, "list_sales_orders", orders())
+        plan = AnswerPlan(
+            language="en",
+            notice="needs_details",
+            tables=[TableSelection(table_id=evidence["tables"][0]["id"])],
+        )
+        self.assertEqual(
+            "NOTICE_AFTER_BUSINESS_LOOKUP",
+            verify_answer_plan(reg, plan).reason_code,
+        )
+
+    def test_unregistered_search_results_are_not_a_clarification(self):
+        reg = registry()
+        evidence = add(
+            reg,
+            "search_customers",
+            {
+                "contract_version": "customer-search-v1",
+                "results": [
+                    {"canonical_id": "customer:1", "name": "Example A"},
+                    {"canonical_id": "customer:2", "name": "Example B"},
+                ],
+            },
+            {"query": "Example", "resolve_one": False},
+        )
+        plan = AnswerPlan(
+            language="en",
+            notice="needs_details",
+            tables=[TableSelection(table_id=evidence["tables"][0]["id"])],
+        )
+        self.assertEqual(
+            "NOTICE_AFTER_BUSINESS_LOOKUP",
+            verify_answer_plan(reg, plan).reason_code,
+        )
+
     def test_source_markdown_html_and_prompt_injection_are_quoted_as_data(self):
         reg = registry()
         data = orders()

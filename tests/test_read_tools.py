@@ -74,6 +74,22 @@ class ReadToolAcceptanceTests(unittest.TestCase):
             self.repository.customer_overview(original["name"], scope)
         self.assertEqual(2, len(raised.exception.candidates))
 
+    def test_partial_customer_name_returns_scoped_candidates(self):
+        scope = AccessScope(
+            "AI Demo GmbH",
+            frozenset(
+                {"wwi:organization:customer:11", "wwi:organization:customer:150"}
+            ),
+        )
+        with self.assertRaises(AmbiguousCustomerError) as raised:
+            self.repository.customer_overview("Tailspin Toys", scope)
+        self.assertEqual(
+            {"wwi:organization:customer:11", "wwi:organization:customer:150"},
+            {row["canonical_id"] for row in raised.exception.candidates},
+        )
+        resolved = self.repository.customer_overview("Tailspin Toys", self.scope)
+        self.assertEqual(self.customer_id, resolved["customer"]["canonical_id"])
+
     def test_name_resolution_does_not_disclose_out_of_scope_candidates(self):
         original = next(
             row

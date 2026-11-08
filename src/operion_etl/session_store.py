@@ -179,12 +179,15 @@ class ConversationStore:
                     connection.execute(
                         f"ALTER TABLE agent_runs ADD COLUMN {column} TEXT"
                     )
+            if "budget_json" not in columns:
+                connection.execute("ALTER TABLE agent_runs ADD COLUMN budget_json TEXT")
             columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(conversations)")
             }
             for column, definition in (
                 ("context_fingerprint", "TEXT NOT NULL DEFAULT ''"),
                 ("context_start", "INTEGER NOT NULL DEFAULT 0"),
+                ("pending_selection_json", "TEXT NOT NULL DEFAULT 'null'"),
             ):
                 if column not in columns:
                     connection.execute(
@@ -216,9 +219,10 @@ class ConversationStore:
             conversations = connection.execute(
                 """
                 UPDATE conversations SET messages_json = '[]',
-                    public_messages_json = '[]'
+                    public_messages_json = '[]', pending_selection_json = 'null'
                 WHERE updated_at < ? AND (
                     messages_json != '[]' OR public_messages_json != '[]'
+                    OR pending_selection_json != 'null'
                 )
                 """,
                 (cutoff,),
@@ -265,6 +269,31 @@ class ConversationStore:
         if row["owner_id"] != owner_id:
             raise SessionAccessDenied("conversation belongs to another user")
         return ModelMessagesTypeAdapter.validate_json(row["messages_json"])
+
+    def pending_selection(
+        self, conversation_id: str, owner_id: str
+    ) -> dict[str, Any] | None:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT owner_id, pending_selection_json FROM conversations "
+                "WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        if row["owner_id"] != owner_id:
+            raise SessionAccessDenied("conversation belongs to another user")
+        return json.loads(row["pending_selection_json"])
+
+    def clear_pending_selection(self, conversation_id: str, owner_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE conversations SET pending_selection_json = 'null' "
+                "WHERE conversation_id = ? AND owner_id = ?",
+                (conversation_id, owner_id),
+            )
+            if cursor.rowcount != 1:
+                raise SessionAccessDenied("conversation owner changed")
 
     def public_history(
         self, conversation_id: str, owner_id: str
@@ -390,6 +419,7 @@ class ConversationStore:
         *,
         context_fingerprint: str = "",
         context_start: int = 0,
+        pending_selection: dict[str, Any] | None = None,
     ) -> None:
         serialized = ModelMessagesTypeAdapter.dump_json(messages)
         public = json.dumps(public_messages(messages), ensure_ascii=False)
@@ -398,7 +428,8 @@ class ConversationStore:
                 """
                 UPDATE conversations
                 SET messages_json = ?, public_messages_json = ?, updated_at = ?,
-                    context_fingerprint = ?, context_start = ?
+                    context_fingerprint = ?, context_start = ?,
+                    pending_selection_json = ?
                 WHERE conversation_id = ? AND owner_id = ?
                 """,
                 (
@@ -407,6 +438,7 @@ class ConversationStore:
                     _now(),
                     context_fingerprint,
                     context_start,
+                    json.dumps(pending_selection, ensure_ascii=False),
                     conversation_id,
                     owner_id,
                 ),
@@ -455,13 +487,14 @@ class ConversationStore:
         input_tokens: int = 0,
         output_tokens: int = 0,
         error_code: str | None = None,
+        budget: dict[str, Any] | None = None,
     ) -> None:
         with self._lock, self._connect() as connection:
             connection.execute(
                 """
                 UPDATE agent_runs SET
                     status = ?, tool_calls_json = ?, input_tokens = ?,
-                    output_tokens = ?, error_code = ?, completed_at = ?
+                    output_tokens = ?, error_code = ?, completed_at = ?, budget_json = ?
                 WHERE run_id = ?
                 """,
                 (
@@ -471,6 +504,7 @@ class ConversationStore:
                     output_tokens,
                     error_code,
                     _now(),
+                    json.dumps(budget) if budget is not None else None,
                     run_id,
                 ),
             )
@@ -487,6 +521,8 @@ class ConversationStore:
             raise SessionAccessDenied("run belongs to another user")
         result = dict(row)
         result["tool_calls"] = json.loads(result.pop("tool_calls_json"))
+        budget_json = result.pop("budget_json")
+        result["budget"] = json.loads(budget_json) if budget_json is not None else None
         return result
 
 

@@ -21,6 +21,13 @@ an explicitly empty contact value. Credit limit, payment terms, notes, and
 arbitrary source fields remain outside the response. Search results, order lists, and errors do not expose contact
 details.
 
+Overview resolution accepts a canonical ID, a supported source ID, or a scoped
+case-insensitive name fragment. One match resolves; multiple matches return
+`ambiguous_customer` or `ambiguous_supplier` with canonical candidate IDs.
+An Agent run must present those candidates for selection before reading a
+candidate's contact details. The selected ID is rechecked against the current
+scope and query before the next run.
+
 Snapshot mode returns email and phone only for contacts classified as
 `public_sample` or `simulated`. It labels the result as a snapshot. Other data
 classes require a separate field-authorization decision under E5.1.

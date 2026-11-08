@@ -24,6 +24,7 @@ Implemented on 2026-10-17: runtime policy `structured-evidence-v1` replaces `bus
 | Conflict and scope | Contradictory evidence for the same object/field cannot be chosen arbitrarily. An out-of-scope related object rolls back the entire normalization |
 | Operation capability | Capability checks do not prove execution. Proposals accept only `PENDING_APPROVAL` and explicitly state that execution has not occurred. Approval/Worker gates remain independent |
 | Source text | Escape source strings such as names as Markdown/HTML data, never as model instructions, column labels, or arbitrary answer prose |
+| Ambiguity clarification | `needs_details` accepts only server-registered candidate/search tables. List-mode search results are registered when clarification is requested, not for ordinary list answers. Other business tables and forged references cannot serve as clarification. The server fixes the selected table and notice; incomplete pages require a narrower query |
 
 This validates **evidence support for selected facts**. The model can still choose the wrong tool, omit facts, or fail the task. E2 therefore independently checks tool choice, arguments, and whether required facts actually appear in the answer. Schema legality is not task completion. Tools and sources remain the trust boundary for facts. Unknown tools or contract versions cannot produce valid evidence. Complex calculations, tax, and currency conversion require typed, source-backed domain capabilities exposed through new contracts; never restore an unconstrained business-prose channel.
 

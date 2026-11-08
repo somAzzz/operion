@@ -41,6 +41,23 @@ class SessionStoreTests(unittest.TestCase):
         with self.assertRaises(RunReplayError):
             self.store.start_run("run-1", "conversation-1", "user-1", "model")
 
+    def test_budget_migration_preserves_legacy_runs_and_is_idempotent(self):
+        self.store.get_or_create("conversation-1", "user-1")
+        self.store.start_run("legacy", "conversation-1", "user-1", "model")
+        self.store.finish_run(
+            "legacy", status="succeeded", tool_calls=[], input_tokens=42
+        )
+        with self.store._connect() as connection:
+            connection.execute("ALTER TABLE agent_runs DROP COLUMN budget_json")
+        for _ in range(2):
+            self.store = ConversationStore(Path(self.temp.name) / "sessions.sqlite3")
+            row = self.store.run("legacy", "user-1")
+            self.assertEqual("succeeded", row["status"])
+            self.assertEqual(42, row["input_tokens"])
+            self.assertIsNone(row["budget"])
+        with self.assertRaises(SessionAccessDenied):
+            self.store.run("legacy", "other-user")
+
     def test_legacy_and_changed_scope_history_is_not_reused(self):
         self.store.get_or_create("scope-history", "user-1")
         old = [ModelResponse(parts=[TextPart("old evidence")])]
@@ -64,6 +81,21 @@ class SessionStoreTests(unittest.TestCase):
         self.assertEqual(2, len(self.store.public_history("scope-history", "user-1")))
         with self.assertRaises(SessionAccessDenied):
             self.store.history_start("scope-history", "other-user", "scope-a", 2)
+
+    def test_candidate_selection_is_owned_persisted_and_cleared(self):
+        self.store.get_or_create("choice", "user-1")
+        pending = {
+            "role": "customer",
+            "query": "Tailspin Toys",
+            "candidate_ids": ["customer:1", "customer:2"],
+            "context_fingerprint": "scope-a",
+        }
+        self.store.save_history("choice", "user-1", [], pending_selection=pending)
+        self.assertEqual(pending, self.store.pending_selection("choice", "user-1"))
+        with self.assertRaises(SessionAccessDenied):
+            self.store.pending_selection("choice", "user-2")
+        self.store.clear_pending_selection("choice", "user-1")
+        self.assertIsNone(self.store.pending_selection("choice", "user-1"))
 
     def test_expired_raw_content_is_scrubbed_but_access_audit_is_immutable(self):
         self.store.get_or_create("conversation-retention", "user-1")

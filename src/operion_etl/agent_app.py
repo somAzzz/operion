@@ -51,6 +51,7 @@ from .agent_runtime import (
     READ_TOOLS,
     AgentDependencies,
     AgentSettings,
+    PendingSelection,
     create_operion_agent,
     repository_from_environment,
     scope_from_environment,
@@ -76,7 +77,7 @@ from .output_guardrails import (
     record_guardrail,
     verify_answer_plan,
 )
-from .read_tools import AccessScope, CanonicalRepository
+from .read_tools import AccessScope, CanonicalRepository, ReadToolError
 from .session_store import (
     ConversationBusyError,
     ConversationStore,
@@ -87,6 +88,7 @@ from .twenty import TwentyClient
 from .twenty_actions import FollowupProposalService, TwentyFollowupGateway
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+CANONICAL_ID_MENTION = re.compile(r"(?:wwi|operion):[A-Za-z0-9_.:-]+")
 LIMIT_ERROR_MARKERS = (
     "input_tokens_limit",
     "output_tokens_limit",
@@ -296,6 +298,59 @@ class AgentApplication:
                     return prompt
         raise HTTPException(status_code=422, detail="one user prompt is required")
 
+    def _resume_pending_selection(
+        self,
+        conversation_id: str,
+        owner_id: str,
+        prompt: str,
+        identity: EnterpriseIdentity,
+        context_fingerprint: str,
+    ) -> tuple[PendingSelection | None, str | None, bool]:
+        """Validate a user-selected ID before exposing any dependent tool."""
+        raw = self.store.pending_selection(conversation_id, owner_id)
+        if raw is None:
+            return None, None, False
+        pending = PendingSelection.model_validate(raw)
+        mentioned_ids = [
+            match.group().rstrip(".,;")
+            for match in CANONICAL_ID_MENTION.finditer(prompt)
+        ]
+        if not mentioned_ids:
+            self.store.clear_pending_selection(conversation_id, owner_id)
+            return None, None, True
+        if len(mentioned_ids) != 1 or mentioned_ids[0] not in pending.candidate_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="selected ID is not in the pending candidate set",
+            )
+        selected_id = mentioned_ids[0]
+        if pending.context_fingerprint != context_fingerprint:
+            self.store.clear_pending_selection(conversation_id, owner_id)
+            raise HTTPException(
+                status_code=409,
+                detail="selection scope changed; search again",
+            )
+        try:
+            valid = self.repository.validate_organization_selection(
+                selected_id,
+                pending.query,
+                AccessScope(
+                    identity.operating_company,
+                    identity.customer_ids,
+                    identity.supplier_ids,
+                ),
+                pending.role,
+            )
+        except ReadToolError:
+            valid = False
+        if not valid:
+            self.store.clear_pending_selection(conversation_id, owner_id)
+            raise HTTPException(
+                status_code=409,
+                detail="selection is no longer valid; search again",
+            )
+        return pending, selected_id, False
+
     async def run_agent(self, request: Request) -> Response:
         identity = self.authenticate(request)
         owner_id = self._owner_key(identity)
@@ -333,7 +388,7 @@ class AgentApplication:
         # browser definitions as a second toolset both crosses that trust
         # boundary and collides with the server tools that share their names.
         adapter.run_input.tools.clear()
-        self._trusted_prompt(adapter)
+        trusted_prompt = self._trusted_prompt(adapter)
         conversation_id = self._validate_id(
             str(adapter.conversation_id or ""), "conversation ID"
         )
@@ -364,6 +419,17 @@ class AgentApplication:
             history_start = self.store.history_start(
                 conversation_id, owner_id, context_fingerprint, len(history)
             )
+            pending_selection, selected_candidate_id, fresh_question = (
+                self._resume_pending_selection(
+                    conversation_id,
+                    owner_id,
+                    trusted_prompt,
+                    identity,
+                    context_fingerprint,
+                )
+            )
+            if fresh_question:
+                history_start = len(history)
             self.store.start_run(
                 run_id,
                 conversation_id,
@@ -434,12 +500,39 @@ class AgentApplication:
             conversation_id=conversation_id,
             run_id=run_id,
             tenant_id=identity.tenant_id,
+            pending_selection=pending_selection,
+            selected_candidate_id=selected_candidate_id,
         )
         completed = False
         run_status = "running"
         verified_text = ""
         internal_output_calls: set[str] = set()
         output_decision: GuardrailDecision | None = None
+        limits = self.settings.usage_limits()
+        budget_started = time.monotonic()
+
+        def finish_run(status: str, error_code: str | None = None) -> None:
+            budget = limits.snapshot(
+                time.monotonic() - budget_started, self.settings.run_timeout_seconds
+            )
+            for name, value in budget["usage"].items():
+                run_span.set_attribute(f"operion.budget.usage.{name}", value)
+            for name, value in budget["limits"].items():
+                if value is not None:
+                    run_span.set_attribute(f"operion.budget.limit.{name}", value)
+            if exceeded := budget["exceeded"]:
+                for name, value in exceeded.items():
+                    if value is not None:
+                        run_span.set_attribute(f"operion.budget.exceeded.{name}", value)
+            self.store.finish_run(
+                run_id,
+                status=status,
+                tool_calls=deps.tool_calls,
+                input_tokens=budget["usage"]["input_tokens"],
+                output_tokens=budget["usage"]["output_tokens"],
+                error_code=error_code,
+                budget=budget,
+            )
 
         async def on_complete(result: AgentRunResult[Any]) -> None:
             nonlocal completed, run_status, output_decision, verified_text
@@ -454,12 +547,7 @@ class AgentApplication:
             )
             if output_decision.verdict is not GuardrailVerdict.ALLOW:
                 run_status = "blocked"
-                self.store.finish_run(
-                    run_id,
-                    status="failed",
-                    tool_calls=deps.tool_calls,
-                    error_code=output_decision.reason_code,
-                )
+                finish_run("failed", output_decision.reason_code)
                 return
             verified_text = deps.evidence.render(deps.answer_plan)
             manifest = deps.evidence.selection_manifest(deps.answer_plan)
@@ -483,15 +571,19 @@ class AgentApplication:
                 ],
                 context_fingerprint=context_fingerprint,
                 context_start=history_start,
+                pending_selection=(
+                    PendingSelection(
+                        role=deps.candidate_selection.role,
+                        query=deps.candidate_selection.query,
+                        candidate_ids=deps.candidate_selection.candidate_ids,
+                        context_fingerprint=context_fingerprint,
+                    ).model_dump(mode="json")
+                    if deps.candidate_selection is not None
+                    and deps.candidate_selection.mode == "needs_selection"
+                    else None
+                ),
             )
-            usage = result.usage
-            self.store.finish_run(
-                run_id,
-                status="succeeded",
-                tool_calls=deps.tool_calls,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-            )
+            finish_run("succeeded")
 
         async def on_cancel(cancelled: RunCancelled) -> None:
             nonlocal completed, run_status
@@ -499,12 +591,7 @@ class AgentApplication:
             run_status = "cancelled"
             # Cancelled output has not passed the final-fact gate. Keep only
             # the previously committed history, never the partial model response.
-            self.store.finish_run(
-                run_id,
-                status="cancelled",
-                tool_calls=deps.tool_calls,
-                error_code="CANCELLED",
-            )
+            finish_run("cancelled", "CANCELLED")
 
         async def events() -> AsyncIterator[Any]:
             nonlocal completed, run_status
@@ -518,14 +605,16 @@ class AgentApplication:
                     set_status_on_exception=False,
                 ),
             ):
+                deadline = asyncio.timeout(self.settings.run_timeout_seconds)
                 try:
-                    async with asyncio.timeout(self.settings.run_timeout_seconds):
+                    async with deadline:
                         source = adapter.run_stream(
                             message_history=history[history_start:],
                             conversation_id=conversation_id,
                             run_id=run_id,
                             deps=deps,
-                            usage_limits=self.settings.usage_limits(),
+                            usage_limits=limits,
+                            usage=limits.usage,
                             cancellation_token=cancellation,
                             on_complete=on_complete,
                             on_cancel=on_cancel,
@@ -596,6 +685,13 @@ class AgentApplication:
                                         "operion.guardrail.output.reason_code",
                                         deps.output_decision.reason_code,
                                     )
+                                if limits.exceeded is not None:
+                                    # A stale guardrail rejection must not hide the
+                                    # budget that prevented the subsequent repair.
+                                    event = RunErrorEvent(
+                                        code="LIMIT_EXCEEDED", message="usage limit"
+                                    )
+                                elif rejected:
                                     event = RunErrorEvent(
                                         code="OUTPUT_UNVERIFIED",
                                         message="The structured answer references could not be verified.",
@@ -604,61 +700,47 @@ class AgentApplication:
                                 if not completed:
                                     completed = True
                                     run_status = "failed"
-                                    self.store.finish_run(
-                                        run_id,
-                                        status="failed",
-                                        tool_calls=deps.tool_calls,
-                                        error_code=deps.output_decision.reason_code
-                                        if rejected
+                                    finish_run(
+                                        "failed",
+                                        deps.output_decision.reason_code
+                                        if rejected and limits.exceeded is None
                                         else event.code or "AGENT_ERROR",
                                     )
                             yield event
                 except TimeoutError:
                     completed = True
-                    run_status = "timeout"
+                    run_status = "timeout" if deadline.expired() else "error"
                     cancellation.cancel()
-                    self.store.finish_run(
-                        run_id,
-                        status="failed",
-                        tool_calls=deps.tool_calls,
-                        error_code="LIMIT_EXCEEDED",
-                    )
+                    if deadline.expired():
+                        limits.record_deadline(
+                            time.monotonic() - budget_started,
+                            self.settings.run_timeout_seconds,
+                        )
+                    code = "LIMIT_EXCEEDED" if deadline.expired() else "AGENT_ERROR"
+                    finish_run("failed", code)
                     yield RunErrorEvent(
                         type=EventType.RUN_ERROR,
-                        message="Agent run exceeded its time limit.",
-                        code="LIMIT_EXCEEDED",
+                        message="Agent run exceeded its time limit."
+                        if deadline.expired()
+                        else "The agent could not complete this request. Please retry.",
+                        code=code,
                     )
                 except asyncio.CancelledError:
                     run_status = "cancelled"
                     if not completed:
                         completed = True
-                        self.store.finish_run(
-                            run_id,
-                            status="cancelled",
-                            tool_calls=deps.tool_calls,
-                            error_code="CLIENT_DISCONNECTED",
-                        )
+                        finish_run("cancelled", "CLIENT_DISCONNECTED")
                     raise
                 except Exception:
                     run_status = "error"
                     if not completed:
                         completed = True
-                        self.store.finish_run(
-                            run_id,
-                            status="failed",
-                            tool_calls=deps.tool_calls,
-                            error_code="AGENT_ERROR",
-                        )
+                        finish_run("failed", "AGENT_ERROR")
                     raise
                 finally:
                     if not completed:
                         run_status = "cancelled"
-                        self.store.finish_run(
-                            run_id,
-                            status="cancelled",
-                            tool_calls=deps.tool_calls,
-                            error_code="STREAM_CLOSED",
-                        )
+                        finish_run("cancelled", "STREAM_CLOSED")
                     record_run_status(run_span, run_status)
                     run_span.end()
                     self.active_runs.pop(run_id, None)

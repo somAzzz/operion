@@ -513,6 +513,12 @@ class CanonicalRepository:
             if row["name"].strip().casefold() == needle and allowed(row["canonical_id"])
         ]
         if not matches:
+            matches = [
+                row
+                for row in organizations
+                if needle in row["name"].casefold() and allowed(row["canonical_id"])
+            ]
+        if not matches:
             raise NotFoundError(f"{role} was not found in the authorized scope")
         if len(matches) > 1:
             candidates = [
@@ -527,6 +533,17 @@ class CanonicalRepository:
                 raise AmbiguousCustomerError(candidates)
             raise AmbiguousSupplierError(candidates)
         return matches[0]
+
+    def validate_organization_selection(
+        self,
+        canonical_id: str,
+        query: str,
+        scope: AccessScope,
+        role: Literal["customer", "supplier"],
+    ) -> bool:
+        """Recheck a saved candidate against current data and authorization."""
+        organization = self._resolve_organization(canonical_id, scope, role)
+        return query.strip().casefold() in organization["name"].casefold()
 
     def _organization_search(
         self,

@@ -42,8 +42,9 @@ class AnswerPlan(ClosedModel):
 
     facts are scalar IDs. tables select server tables with optional column keys;
     an empty columns list uses the server's defaults. Tables include every row in
-    the returned page. Use notice only for a non-business conversational response.
-    Tool errors, missing data, scope and pagination warnings render automatically.
+    the returned page. A needs_details notice may accompany one evidence-backed
+    candidate table; unsupported is conversation-only. Tool errors, missing data,
+    scope and pagination warnings render automatically.
     """
 
     language: Literal["en", "zh"]
@@ -230,6 +231,21 @@ class EvidenceRegistry:
         self.call_count = 0
         self._claims: dict[tuple[str, ...], list[tuple[str, str]]] = {}
         self._conflicts: set[str] = set()
+        self.clarifications: dict[
+            str, Literal["needs_selection", "needs_refinement"]
+        ] = {}
+
+    def register_clarification(
+        self,
+        table_id: str,
+        mode: Literal["needs_selection", "needs_refinement"],
+    ) -> None:
+        table = self.tables.get(table_id)
+        if table is None or table.kind not in {"results", "candidates"}:
+            raise EvidenceError("CLARIFICATION_TABLE_INVALID")
+        if mode == "needs_selection" and len(table.rows) < 2:
+            raise EvidenceError("CLARIFICATION_CANDIDATES_INVALID")
+        self.clarifications[table_id] = mode
 
     def _bind(self, key: tuple[str, ...], value: Any, ref: str) -> None:
         serialized = json.dumps(value, sort_keys=True)
@@ -728,9 +744,31 @@ class EvidenceRegistry:
     def validate(self, plan: AnswerPlan) -> None:
         if not isinstance(plan, AnswerPlan):
             raise EvidenceError("STRUCTURED_ANSWER_REQUIRED")
-        if plan.notice != "none" and self.call_count:
+        clarification_table = None
+        if plan.notice == "needs_details" and len(plan.tables) == 1:
+            clarification_table = self.tables.get(plan.tables[0].table_id)
+        supported_clarification = (
+            clarification_table is not None
+            and clarification_table.kind in {"results", "candidates"}
+            and plan.tables[0].table_id in self.clarifications
+            and (
+                self.clarifications[plan.tables[0].table_id] == "needs_refinement"
+                or len(clarification_table.rows) > 1
+            )
+            and all(
+                (fact := self.facts.get(ref)) is not None
+                and fact.field == "result_count"
+                and fact.context == clarification_table.context
+                for ref in plan.facts
+            )
+        )
+        if plan.notice != "none" and self.call_count and not supported_clarification:
             raise EvidenceError("NOTICE_AFTER_BUSINESS_LOOKUP")
-        if plan.notice != "none" and (plan.facts or plan.tables):
+        if (
+            plan.notice != "none"
+            and (plan.facts or plan.tables)
+            and not supported_clarification
+        ):
             raise EvidenceError("NOTICE_WITH_FACTS")
         if (
             not plan.facts
@@ -818,7 +856,22 @@ class EvidenceRegistry:
         zh = plan.language == "zh"
         parts: list[str] = []
         contexts: dict[int, EvidenceContext] = {}
-        if plan.notice != "none":
+        if plan.notice == "needs_details" and plan.tables:
+            mode = self.clarifications[plan.tables[0].table_id]
+            parts.append(
+                (
+                    "More matches exist. Narrow the name before choosing a record."
+                    if not zh
+                    else "还有更多匹配记录。请缩小名称范围后再选择。"
+                )
+                if mode == "needs_refinement"
+                else (
+                    "Please choose the intended record by replying with its canonical ID from these matches."
+                    if not zh
+                    else "请回复匹配记录中要查询的规范 ID。"
+                )
+            )
+        elif plan.notice != "none":
             return {
                 "needs_details": (
                     "Please specify a customer, supplier, order, or scenario to look up.",

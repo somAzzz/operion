@@ -13,6 +13,7 @@ from ag_ui.core import (
     ToolCallEndEvent,
     ToolCallStartEvent,
 )
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic_ai import CancellationToken
 from pydantic_ai.messages import (
@@ -236,6 +237,174 @@ class AgentAppTests(unittest.TestCase):
         self.assertEqual(4, sum(m["role"] == "user" for m in public))
         self.assertTrue(any("**2**" in m["content"] for m in public))
 
+    def test_pending_choice_is_bound_to_conversation_scope_and_current_record(self):
+        candidate_ids = (
+            "wwi:organization:customer:11",
+            "wwi:organization:customer:150",
+        )
+        self.application.scope = AccessScope("AI Demo GmbH", frozenset(candidate_ids))
+        identity = EnterpriseIdentity(
+            user_id="user-1",
+            tenant_id="local-demo",
+            operating_company="AI Demo GmbH",
+            customer_ids=frozenset(candidate_ids),
+            roles=frozenset({"agent_read"}),
+            subject="user-1",
+            session_id="static-local-session",
+        )
+        fingerprint = self.application._context_fingerprint(identity)
+        store = self.application.store
+        store.get_or_create("choice", "user-1")
+        store.save_history(
+            "choice",
+            "user-1",
+            [],
+            pending_selection={
+                "role": "customer",
+                "query": "Tailspin Toys",
+                "candidate_ids": list(candidate_ids),
+                "context_fingerprint": fingerprint,
+            },
+        )
+        pending, chosen, fresh = self.application._resume_pending_selection(
+            "choice", "user-1", candidate_ids[0], identity, fingerprint
+        )
+        self.assertEqual(candidate_ids[0], chosen)
+        self.assertEqual(candidate_ids, pending.candidate_ids)
+        self.assertFalse(fresh)
+        with self.assertRaises(HTTPException) as invalid:
+            self.application._resume_pending_selection(
+                "choice",
+                "user-1",
+                "wwi:organization:customer:417",
+                identity,
+                fingerprint,
+            )
+        self.assertEqual(409, invalid.exception.status_code)
+        changed_identity = replace(identity, customer_ids=frozenset({candidate_ids[0]}))
+        with self.assertRaises(HTTPException) as changed:
+            self.application._resume_pending_selection(
+                "choice",
+                "user-1",
+                candidate_ids[0],
+                changed_identity,
+                self.application._context_fingerprint(changed_identity),
+            )
+        self.assertEqual(409, changed.exception.status_code)
+        self.assertIsNone(store.pending_selection("choice", "user-1"))
+
+    def test_new_question_discards_pending_choice_and_old_context(self):
+        identity = EnterpriseIdentity(
+            user_id="user-1",
+            tenant_id="local-demo",
+            operating_company="AI Demo GmbH",
+            customer_ids=frozenset({CUSTOMER_ID}),
+            roles=frozenset({"agent_read"}),
+            subject="user-1",
+            session_id="static-local-session",
+        )
+        store = self.application.store
+        store.get_or_create("new-question", "user-1")
+        store.save_history(
+            "new-question",
+            "user-1",
+            [],
+            pending_selection={
+                "role": "customer",
+                "query": "Tailspin Toys",
+                "candidate_ids": [CUSTOMER_ID, "wwi:organization:customer:150"],
+                "context_fingerprint": self.application._context_fingerprint(identity),
+            },
+        )
+        pending, chosen, fresh = self.application._resume_pending_selection(
+            "new-question",
+            "user-1",
+            "How many sales orders do we have?",
+            identity,
+            self.application._context_fingerprint(identity),
+        )
+        self.assertIsNone(pending)
+        self.assertIsNone(chosen)
+        self.assertTrue(fresh)
+        self.assertIsNone(store.pending_selection("new-question", "user-1"))
+
+    def test_candidate_choice_persists_and_controls_next_agent_run(self):
+        candidate_ids = (CUSTOMER_ID, "wwi:organization:customer:150")
+        self.application.scope = AccessScope("AI Demo GmbH", frozenset(candidate_ids))
+
+        async def stream(messages, info):
+            returns = [
+                part for part in messages[-1].parts if isinstance(part, ToolReturnPart)
+            ]
+            if returns:
+                if returns[0].tool_name == "search_customers":
+                    yield {
+                        0: DeltaToolCall(
+                            name="present_answer",
+                            json_args=json.dumps(
+                                {"plan": {"language": "en", "notice": "needs_details"}}
+                            ),
+                            tool_call_id="clarification",
+                        )
+                    }
+                else:
+                    yield output_delta(messages)
+                return
+            selected = last_user_text(messages) == CUSTOMER_ID
+            if selected:
+                yield {
+                    0: DeltaToolCall(
+                        name="get_customer_overview",
+                        json_args=json.dumps({"customer": CUSTOMER_ID}),
+                        tool_call_id="selected-overview",
+                    )
+                }
+            else:
+                yield {
+                    0: DeltaToolCall(
+                        name="search_customers",
+                        json_args=json.dumps(
+                            {"query": "Tailspin Toys", "resolve_one": False}
+                        ),
+                        tool_call_id="customer-search",
+                    )
+                }
+
+        self.application.agent = create_operion_agent(
+            self.application.settings, model=FunctionModel(stream_function=stream)
+        )
+
+        def run(index, prompt):
+            return self.client.post(
+                "/api/agent",
+                headers=self.headers,
+                json={
+                    "threadId": "choice-flow",
+                    "runId": f"choice-run-{index}",
+                    "state": {},
+                    "context": [],
+                    "forwardedProps": {},
+                    "tools": [],
+                    "messages": [
+                        {"id": f"q-{index}", "role": "user", "content": prompt}
+                    ],
+                },
+            )
+
+        first = run(1, "Find Tailspin Toys contact details")
+        self.assertIn("Please choose", first.text)
+        pending = self.application.store.pending_selection("choice-flow", "user-1")
+        self.assertEqual(list(candidate_ids), sorted(pending["candidate_ids"]))
+        second = run(2, CUSTOMER_ID)
+        self.assertIn("RUN_FINISHED", second.text)
+        self.assertIsNone(
+            self.application.store.pending_selection("choice-flow", "user-1")
+        )
+        recorded = self.application.store.run("choice-run-2", "user-1")
+        self.assertEqual(
+            ["get_customer_overview"], [call["name"] for call in recorded["tool_calls"]]
+        )
+
     def test_agent_requires_server_credential(self):
         response = self.client.post("/api/agent", json={})
         self.assertEqual(401, response.status_code)
@@ -319,7 +488,8 @@ class AgentAppTests(unittest.TestCase):
             ],
             response.json()["tools"],
         )
-        self.assertEqual(3, response.json()["limits"]["tool_calls"])
+        self.assertEqual(6, response.json()["limits"]["tool_calls"])
+        self.assertEqual(8, response.json()["limits"]["model_requests"])
         self.assertEqual(1_500, response.json()["limits"]["output_tokens_per_request"])
         self.assertEqual(6_000, response.json()["limits"]["output_tokens_per_run"])
 
