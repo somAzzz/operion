@@ -29,7 +29,7 @@ The parser covered only deterministically recognizable explicit claims, not all 
 | Baseline | Offline 204: 180 passed, 24 skipped; isolated postgres:16 24/24 | PASS |
 | Publication gate | `tests/test_output_guardrails.py` and `tests/test_agent_app.py` rejected wrong count/money/entity/state/fulfillment/failure text in SSE/history | PASS |
 | Web | TypeScript/production; local snapshot/live browser interactions | PASS |
-| Real snapshot model | qwen3.8-27b, `interview-wwi-v1`: customer 65/10 orders, order 66823/USD 177.60, write denial, injected wrong count, 4/4 | PASS; `reports/enterprise/guardrails/20261011/acceptance-snapshot-final.json` |
+| Real snapshot model | qwen3.8-27b, `demo-wwi-v1`: customer 65/10 orders, order 66823/USD 177.60, write denial, injected wrong count, 4/4 | PASS; `reports/enterprise/guardrails/20261011/acceptance-snapshot-final.json` |
 | Real live sources | `TWENTY_API_KEY_READ_ONLY` and `ERPNEXT_API_KEY_READ_ONLY` from `.env`; independently verified imported `wwi-v1-small-20260919-e1`: customer 11/1 order, 73595/EUR 2160.0/Draft; model 4/4 | PASS; `reports/enterprise/guardrails/20261011/acceptance-live-final.json` |
 | Actual browser | Local Web→Agent→live sources→SGLang; customer 11/1 order, `live · public_sample` evidence card, 73595/EUR 2160.0/Draft | PASS, local `http://127.0.0.1:3002/` |
 | Langfuse | Eight final traces with GUARDRAIL children linked to `operion.agent.run`; injected count `deny / ORDER_COUNT_MISMATCH`; guard Input/Output empty; live Boolean `operion_guardrail_acceptance` scores | PASS; [denial trace](https://cloud.langfuse.com/project/cmv41jt6h05egad0el9rcy2kh/traces/2e60253665108c44205f90c886ede3ad) |

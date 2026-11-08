@@ -1,4 +1,4 @@
-"""Extract the public WWI interview delivery sidecar from the restored source."""
+"""Extract the public WWI demo delivery sidecar from the restored source."""
 
 import csv
 import hashlib
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from operion_etl.sqlserver import SqlServer
 
-DIRECTORY = Path("data/canonical/interview-wwi-v1")
+DIRECTORY = Path("data/canonical/demo-wwi-v1")
 
 
 def main():
@@ -16,7 +16,7 @@ def main():
     with orders_path.open() as stream:
         expected = {int(r["source_id"]): r for r in csv.DictReader(stream)}
     if len(expected) != 30:
-        raise ValueError("expected the original 30-order WWI interview slice")
+        raise ValueError("expected the original 30-order WWI demo slice")
     rows = SqlServer().query_json(f"""
         SELECT o.OrderID AS order_id, o.CustomerID AS customer_id,
                COUNT(i.InvoiceID) OVER(PARTITION BY o.OrderID) AS linked_invoice_count,
@@ -62,7 +62,7 @@ def main():
     if len(orders) != len(expected):
         raise ValueError("incomplete source query")
     result = {
-        "snapshot_id": "interview-wwi-delivery-v1",
+        "snapshot_id": "demo-wwi-delivery-v1",
         "orders_sha256": hashlib.sha256(orders_path.read_bytes()).hexdigest(),
         "extracted_at": datetime.now(UTC).isoformat(),
         "orders": orders,

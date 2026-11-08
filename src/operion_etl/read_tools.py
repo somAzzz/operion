@@ -1497,9 +1497,10 @@ class CanonicalRepository:
 
     @property
     def supports_delivery_investigation(self) -> bool:
-        return (
-            self.data_mode == "snapshot" and self.dataset_version == "interview-wwi-v1"
-        )
+        return self.data_mode == "snapshot" and self.dataset_version in {
+            "demo-wwi-v1",
+            "interview-wwi-v1",
+        }
 
     def get_delivery_complaint(self, scope: AccessScope) -> dict:
         if not scope.allows_customer(complaint.CUSTOMER):

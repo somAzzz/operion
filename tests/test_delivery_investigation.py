@@ -11,7 +11,7 @@ from operion_etl.answer_evidence import AnswerPlan, EvidenceError, TableSelectio
 from operion_etl.mcp_server import create_server
 from operion_etl.read_tools import AccessScope, CanonicalRepository, ScopeDeniedError
 
-DATA = Path("data/canonical/interview-wwi-v1")
+DATA = Path("data/canonical/demo-wwi-v1")
 SCOPE = AccessScope(
     "AI Demo GmbH", frozenset(f"wwi:organization:customer:{i}" for i in (65, 935))
 )

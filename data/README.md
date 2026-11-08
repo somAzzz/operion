@@ -22,9 +22,9 @@ Each load records source batch, model/mapping and target versions, counts, failu
 
 Data and run results normally stay outside version control. Reusable nonsensitive models, mappings, contracts, and evaluation cases belong in their corresponding repository directories.
 
-`canonical/interview-demo-v1/` is an exception: the fixed-seed fictional `DEMO` dataset and initial empty-target-ID map are versioned. Actual readback IDs/reports stay in separate ignored run directories.
+`canonical/demo-v1/` is an exception: the fixed-seed fictional `DEMO` dataset and initial empty-target-ID map are versioned. Actual readback IDs/reports stay in separate ignored run directories.
 
-`canonical/interview-wwi-v1/` is another exception: deterministic versioned IDs and complete-order selection derive from a SHA-256-pinned WWI v1 public sample. Preserve `wwi:*` source keys and `data_class=public_sample`. Its committed map has empty target IDs; actual target readback is not committed.
+`canonical/demo-wwi-v1/` is another exception: deterministic versioned IDs and complete-order selection derive from a SHA-256-pinned WWI v1 public sample. Preserve `wwi:*` source keys and `data_class=public_sample`. Its committed map has empty target IDs; actual target readback is not committed.
 
 ## Minimum first-version requirements
 

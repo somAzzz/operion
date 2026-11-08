@@ -2,13 +2,13 @@
 
 > Historical snapshot: 2026-10-07, code baseline `2ef4420`. Preserve the findings, measurements, estimates, and proposed work below as evidence of that review, not today's defect list. Self-contained fixtures, D01–D03 repairs, CI, tracing, the minimal case runner, structured evidence output, ambiguity gates, and later Web controls were added afterward. See the [2026-10-11 review](progress-review-2026-10-11.md), [2026-10-17 fixes](fixes-2026-10-17.md), [structured evidence](structured-answer-evidence.md), and [current improvement queue](improvement-plan.md).
 
-Assessment date: 2026-10-07. Intended for personal development and interview delivery, primarily Python/backend with full-stack and AI application engineering context. Translation does not constitute a new assessment or rerun.
+Assessment date: 2026-10-07. Intended for personal development and demo delivery, primarily Python/backend with full-stack and AI application engineering context. Translation does not constitute a new assessment or rerun.
 
 The strongest positioning identified was a **controlled B2B trading assistant connecting ERPNext and Twenty for evidence-backed queries, exception analysis, and approved internal follow-up**. The technical foundation existed, but fact correctness, scope, reproducibility, and recovery needed stronger evidence.
 
-Cross-system mappings, deterministic calculations, the action ledger, and fault recovery were worth retaining. Interview gaps were new-environment reproduction, result trust, and a complete business story. Enterprise gaps included downstream sales/purchasing documents, real inventory/fulfillment, financial facts, CRM process, and actual operations.
+Cross-system mappings, deterministic calculations, the action ledger, and fault recovery were worth retaining. Demo gaps were new-environment reproduction, result trust, and a complete business story. Enterprise gaps included downstream sales/purchasing documents, real inventory/fulfillment, financial facts, CRM process, and actual operations.
 
-This assessment added positioning, scope, interview deliverables, and effort estimates. The then-existing improvement plan managed I01–I13; delivery rules managed E0–E6. It did not change historical acceptance or claim the planned work implemented. The current queue now manages I01–I16 separately.
+This assessment added positioning, scope, demo deliverables, and effort estimates. The then-existing improvement plan managed I01–I13; delivery rules managed E0–E6. It did not change historical acceptance or claim the planned work implemented. The current queue now manages I01–I16 separately.
 
 ## 1. Positioning and maturity at the review
 
@@ -21,7 +21,7 @@ Separate personal contributions from upstream ERPNext/Twenty/SGLang capabilities
 | Goal | Judgment at the review | Missing evidence |
 | --- | --- | --- |
 | Engineering practice | Useful technical depth | Clean regression, object scope, database faults, performance |
-| Interview | Strong examples, incomplete reproducible release | Three demo paths, contributions, failure/recovery, tests/latency |
+| Demo | Strong examples, incomplete reproducible release | Three demo paths, contributions, failure/recovery, tests/latency |
 | Single-user enterprise read-only | Identity/operational controls existed, live correctness and operations incomplete | I01–I03, real ingress/browser, alerts/restore, ten-day use |
 | Multiple-user production | Insufficient evidence | Multi-user scope/concurrency, service objectives, lifecycle, actual business |
 | Complete ERP/CRM | Narrow integration/action scope | Industry-specific native document chains and ownership |
@@ -34,7 +34,7 @@ Retain modular backend, separate Web/executor, and existing databases. New featu
 
 | Layer | Implementation observed | Boundary at this checkpoint |
 | --- | --- | --- |
-| Data | WWI extraction, Canonical CSV, validation, mappings, readback, two interview datasets | Complete-order/currency/UOM attention; no full expansion/sync loop |
+| Data | WWI extraction, Canonical CSV, validation, mappings, readback, two demo datasets | Complete-order/currency/UOM attention; no full expansion/sync loop |
 | Queries | Customers/contacts/suppliers/orders/aggregates/frozen fulfillment | Reproduced live-relation defect |
 | MCP | Fifteen read-only operations | Independent entry; must share Agent authorization/semantics |
 | Agent | Pydantic AI/local SGLang/allowlist/budgets/timeouts | Old grading did not establish final-answer correctness |
@@ -61,7 +61,7 @@ Read code/configuration, ran offline/worktree-copy regressions, and public/simul
 
 The copy used existing `.venv`; it tested the file set, not fresh-machine installation. Missing files included `data/canonical/wwi-v1-small-20260913-v4`, `data/test_data/companies-sample.csv`, and downstream artifacts.
 
-[Interview readiness](../interview-readiness.md) and [gateway acceptance](gateway-acceptance.md) supplied older evidence. Gateway 38/38 protocol and no browser were historical, not passes from this review.
+[Demo readiness](../demo-readiness.md) and [gateway acceptance](gateway-acceptance.md) supplied older evidence. Gateway 38/38 protocol and no browser were historical, not passes from this review.
 
 ## 3. Priority gaps identified then
 
@@ -89,7 +89,7 @@ Limit frozen cases to explicit demos; incomplete actual order evidence means ins
 
 ### 3.4 Reproduce without personal historical files
 
-P0 interview delivery: local pass versus 44 tracked-copy errors required small tracked fixtures in `tests/fixtures/` or fixed-seed temporary generation. [Read tests](../../tests/test_read_tools.py) and [MCP tests](../../tests/test_mcp_server.py) were affected.
+P0 demo delivery: local pass versus 44 tracked-copy errors required small tracked fixtures in `tests/fixtures/` or fixed-seed temporary generation. [Read tests](../../tests/test_read_tools.py) and [MCP tests](../../tests/test_mcp_server.py) were affected.
 
 Provide locked installation, fixture preparation, tests, Web build, and one startup path. Offline regression should not need restored WWI. CI runs clean files; isolated PostgreSQL must actually execute its group, reporting missing prerequisites/skips honestly.
 
@@ -153,13 +153,13 @@ Reuse quarantine/reports/identity/audit. Structured business reads first; add do
 
 ### 5.1 Users and value
 
-One-company/warehouse B2B trade for account managers/order operators/buyers. Interview uses public/synthetic data; pilot uses one authorized person/limited customers. Measure manual search/reconciliation/follow-up steps, time, and errors before comparing Operion. Resume/demo benefit numbers must be measured.
+One-company/warehouse B2B trade for account managers/order operators/buyers. Demo uses public/synthetic data; pilot uses one authorized person/limited customers. Measure manual search/reconciliation/follow-up steps, time, and errors before comparing Operion. Resume/demo benefit numbers must be measured.
 
 ### 5.2 Three priority chains
 
 | Chain | Task and facts | Delivery boundary |
 | --- | --- | --- |
-| Customer operations | Find customer/contact/order/open activity, later opportunity/invoice/balance | Interview customer→order first; later opportunity→delivery/receivables |
+| Customer operations | Find customer/contact/order/open activity, later opportunity/invoice/balance | Demo customer→order first; later opportunity→delivery/receivables |
 | Order exceptions | Demand/delivery/stock/reservation/unknown evidence→internal follow-up | Frozen demos separate; actual commercial promises stay human |
 | Purchase arrival | Remaining quantity/arrival/explicit affected-demand relation | Never infer which sales order a PO replenishes from matching items |
 
@@ -193,7 +193,7 @@ Separate ordered/invoiced/received amounts and stock/available/reserved quantiti
 | Web | Tasks/facts/exceptions/human confirmation | Server owns identity/authority |
 | Pipeline | Rerun/import/lineage/diff/quality | Import and Agent credentials separate |
 
-Observed sizes were about 2,016 lines in read_tools.py, 1,205 pipeline.py, 1,460 interview_demo.py: maintenance signals, not defect counts. Split identity/order facts/adapters/fulfillment as features evolve, protected by types/contracts. The `operion_etl` package name no longer described all responsibilities, but renaming could wait for a stable release.
+Observed sizes were about 2,016 lines in read_tools.py, 1,205 pipeline.py, 1,460 demo.py: maintenance signals, not defect counts. Split identity/order facts/adapters/fulfillment as features evolve, protected by types/contracts. The `operion_etl` package name no longer described all responsibilities, but renaming could wait for a stable release.
 
 Reuse ledger/strict schemas/version/recovery. A new write requires preconditions/idempotency/readback/failure semantics, not merely another POST tool.
 
@@ -211,7 +211,7 @@ Read-only difference reports precede watermarked increments/periodic reconciliat
 
 ### 6.4 Models and resources
 
-Keep local SGLang but make endpoint/model/context/budgets verifiable. Record weight/quantization/GPU/VRAM/startup/task latency for reproducible interview hardware. Offer model-free tool self-check and clearly labeled recorded fallback. Live inference, self-test, replay are distinct; replay is not real-model success. Compare accuracy/refusal/latency/resources on the same evaluation version before model changes.
+Keep local SGLang but make endpoint/model/context/budgets verifiable. Record weight/quantization/GPU/VRAM/startup/task latency for reproducible demo hardware. Offer model-free tool self-check and clearly labeled recorded fallback. Live inference, self-test, replay are distinct; replay is not real-model success. Compare accuracy/refusal/latency/resources on the same evaluation version before model changes.
 
 ## 7. Quality and acceptance proposals
 
@@ -249,7 +249,7 @@ Reuse I04 CS01–CS40: six normal, eight identity, six source/semantic, six faul
 
 These exploratory 3/30-second targets did not replace the operating plan's 5/60-second proposed limits. Neither was a measured commitment. Do not hide scope errors in average success or claim usefulness by refusing everything. Ten days do not prove annual availability. The then-observed 90-second profile limit was a protection ceiling, not a user-experience target or today's universal default.
 
-## 8. Frontend and interview
+## 8. Frontend and demo
 
 ### 8.1 Task-oriented UI proposal
 
@@ -274,7 +274,7 @@ WWI query and E2 action profiles share ports and need planned switching or a lab
 
 README introduction/one recommended startup, actual architecture page, three pinned scripts, short video/backup recording, test/evaluation/performance reports, limits/contributions. Four short decisions: why retain ERP/CRM, deterministic business facts, UNKNOWN, and modular monolith. Retain data origin/licenses; publish no credentials/private business data.
 
-| Interview question | Evidence to prepare |
+| Demo question | Evidence to prepare |
 | --- | --- |
 | Why not arbitrary model SQL? | Contracts/minimum fields/scope |
 | Why does login not stop all unauthorized reads? | Old mapping versus current relation probe/fix |
@@ -284,17 +284,17 @@ README introduction/one recommended startup, actual architecture page, three pin
 | How do multiple users work? | Scope/concurrency/limits/locks/multiprocess limitations |
 | What is personal work? | ETL/maps/domain/protocol/history/ledger/evaluation; upstream separately |
 
-Backend interviews emphasize authority/transactions/idempotency/SQL/testing; AI emphasizes facts/evaluation/protocol/budgets; full-stack adds interaction/recovery. Resume numbers must be actual measurements.
+Backend demos emphasize authority/transactions/idempotency/SQL/testing; AI emphasizes facts/evaluation/protocol/budgets; full-stack adds interaction/recovery. Resume numbers must be actual measurements.
 
 ## 9. Historical phased estimates
 
 ### 9.1 Assumptions
 
-One familiar developer with working model/business environments: interview-ready version **80–130 hours**, roughly **6–9 weeks at fifteen hours/week**. Individual stages summed to 76–122 hours plus integration margin. New machines/external outages/major rework were extra.
+One familiar developer with working model/business environments: demo-ready version **80–130 hours**, roughly **6–9 weeks at fifteen hours/week**. Individual stages summed to 76–122 hours plus integration margin. New machines/external outages/major rework were extra.
 
 One deeper chain added **60–100 hours**; operations **30–50 hours**, plus at least ten business days of actual observation. Under deadlines, cut new features, not correctness/reproduction. These estimates are historical plans, not completed labor or current fresh estimates.
 
-### 9.2 Interview-ready version
+### 9.2 Demo-ready version
 
 | Stage | Hours | Work | Exit/dependency |
 | --- | --- | --- | --- |
@@ -303,7 +303,7 @@ One deeper chain added **60–100 hours**; operations **30–50 hours**, plus at
 | C Integration/demo | 24–40 | Isolated DB, CS40/model repeats, browser/I07, performance | B; mandatory layered evidence |
 | D Release | 20–30 | Task views/evidence, startup/self-check, video/decisions/scripts/summary | A–C; another clean environment and ten-minute demo |
 
-Operator implements/self-reviews actual diffs/cases. Prepare documentation/video/business questions during waits; independent real-write approval remains. If actual APIs are unavailable, deliver a labeled snapshot/simulated interview build with live disabled/unaccepted; it cannot receive enterprise pilot release.
+Operator implements/self-reviews actual diffs/cases. Prepare documentation/video/business questions during waits; independent real-write approval remains. If actual APIs are unavailable, deliver a labeled snapshot/simulated demo build with live disabled/unaccepted; it cannot receive enterprise pilot release.
 
 ### 9.3 Business-depth version
 
@@ -356,7 +356,7 @@ I05 mapping/dry-run could proceed, but currency/USD assumption/EUR target/stock-
 | Risk | Effect | Response |
 | --- | --- | --- |
 | Expansion outruns evidence | More tools, unproven facts | One chain, gold/scope first |
-| Local hardware | Interview startup/latency | Document resources, model-free check, labeled recording |
+| Local hardware | Demo startup/latency | Document resources, model-free check, labeled recording |
 | Upstream change | Adapter/readback breaks | Pin accepted versions and test contracts |
 | WWI semantics | Currency/delivery/replenishment misunderstanding | Assumptions/unknowns and separate simulation |
 | Shared state/cache | Hidden scope/concurrency issues | Test/isolate before optimizing/scaling |
@@ -385,6 +385,6 @@ Tracked-copy method used `git ls-files -z`, copied ordinary tracked files to a t
 | I02 | Tool zero orders; answer claiming one hundred | `grade_case` returned `[]` | Fail critical mismatch |
 | I03 | Live F01 with counted fake client | Zero upstream calls, satisfiable, snapshot/frozen markers | Demo-only; no live proof |
 
-Repository references: [queue/original findings](improvement-plan.md), [gateway scope](gateway-acceptance.md), [interview evidence](../interview-readiness.md), [human responsibilities](../human-functions-agent-map.md), [E5 gates](phases/e5-enterprise-pilot.md), [action contract](../../contracts/e3-action-control-v1.md), [Task contract](../../contracts/e4-followup-task-v1.md).
+Repository references: [queue/original findings](improvement-plan.md), [gateway scope](gateway-acceptance.md), [demo evidence](../demo-readiness.md), [human responsibilities](../human-functions-agent-map.md), [E5 gates](phases/e5-enterprise-pilot.md), [action contract](../../contracts/e3-action-control-v1.md), [Task contract](../../contracts/e4-followup-task-v1.md).
 
 External references above were official ERPNext/Twenty/OWASP material used in the original assessment, not a current-version audit. Installed APIs still need acceptance. This deliverable was assessment/planning; later implementations and their separate results are linked in the historical notice, never backfilled into this run.

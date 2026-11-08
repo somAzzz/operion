@@ -1,4 +1,4 @@
-"""Provision the public interview Company, simulated Note and its Company link."""
+"""Provision the public demo Company, simulated Note and its Company link."""
 
 import csv
 from pathlib import Path
@@ -28,7 +28,7 @@ def main():
     base = env.get("TWENTY_API_BASE_URL", "http://127.0.0.1:3000")
     admin = TwentyClient(base, env["TWENTY_API_KEY"])
     reader = TwentyReadClient(base, env["TWENTY_API_KEY_READ_ONLY"])
-    with Path("data/canonical/interview-wwi-v1/organizations.csv").open() as stream:
+    with Path("data/canonical/demo-wwi-v1/organizations.csv").open() as stream:
         row = next(r for r in csv.DictReader(stream) if r["canonical_id"] == CUSTOMER)
     companies = reader.records("companies")
     matches = [c for c in companies if c["wwiExternalId"] == CUSTOMER]
@@ -106,8 +106,8 @@ def main():
     result = read_complaint(reader, NOTE_ID, frozenset({CUSTOMER}))
     if result["sender"].get("id") != sender["id"]:
         raise ValueError("complaint sender readback failed")
-    destination = Path("var/interview-demo/wwi-direct-identity-map.csv")
-    baseline = Path("reports/interview-wwi-v1/identity_map.csv")
+    destination = Path("var/demo/wwi-direct-identity-map.csv")
+    baseline = Path("reports/demo-wwi-v1/identity_map.csv")
     mappings = read_identity_map(destination if destination.exists() else baseline)
     (binding,) = (
         m

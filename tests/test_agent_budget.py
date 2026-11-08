@@ -40,7 +40,7 @@ class AnswerBudgetTests(unittest.TestCase):
     def test_configured_six_tools_and_one_answer_repair_finish(self):
         configured = dict(
             line.split("=", 1)
-            for line in Path("config/interview/wwi-snapshot.env")
+            for line in Path("config/demo/wwi-snapshot.env")
             .read_text()
             .splitlines()
             if line.startswith("OPERION_MAX_")

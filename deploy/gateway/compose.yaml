@@ -113,8 +113,8 @@ services:
       OPERION_IDENTITY_POLICY: /run/policy/identity-policy.json
       OPERION_WRITES_ENABLED: "0"
       OPERION_ENABLE_FOLLOWUP_PROPOSALS: "0"
-      OPERION_CANONICAL_DIR: /app/data/canonical/interview-wwi-v1
-      OPERION_IDENTITY_MAP: /app/reports/interview-wwi-v1/identity_map.csv
+      OPERION_CANONICAL_DIR: /app/data/canonical/demo-wwi-v1
+      OPERION_IDENTITY_MAP: /app/reports/demo-wwi-v1/identity_map.csv
       OPERION_DATA_MODE: snapshot
       OPERION_CUSTOMER_IDS: wwi:organization:customer:65
       OPERION_COMPANY: AI Demo GmbH

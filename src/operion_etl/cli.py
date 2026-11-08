@@ -5,6 +5,27 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from .demo import (
+    DEFAULT_BUSINESS_DATE,
+    DEFAULT_SEED,
+    apply_demo,
+    prepare_demo,
+    provision_plan,
+    validate_demo,
+)
+from .demo_wwi import (
+    DEFAULT_BUSINESS_DATE as WWI_BUSINESS_DATE,
+)
+from .demo_wwi import (
+    DEFAULT_SEED as WWI_SEED,
+)
+from .demo_wwi import (
+    DEFAULT_SOURCE_MANIFEST,
+    apply_demo_wwi,
+    prepare_demo_wwi,
+    provision_wwi_plan,
+    validate_demo_wwi,
+)
 from .download import download_wwi
 from .e2_data import prepare_e2_batch, seed_e2_targets
 from .erpnext_audit import audit_erpnext
@@ -18,27 +39,6 @@ from .identity_readback import (
     reconcile_identity_rows,
     verify_erpnext_permission_evidence,
     write_identity_map,
-)
-from .interview_demo import (
-    DEFAULT_BUSINESS_DATE,
-    DEFAULT_SEED,
-    apply_interview_demo,
-    prepare_interview_demo,
-    provision_plan,
-    validate_interview_demo,
-)
-from .interview_wwi import (
-    DEFAULT_BUSINESS_DATE as WWI_BUSINESS_DATE,
-)
-from .interview_wwi import (
-    DEFAULT_SEED as WWI_SEED,
-)
-from .interview_wwi import (
-    DEFAULT_SOURCE_MANIFEST,
-    apply_interview_wwi,
-    prepare_interview_wwi,
-    provision_wwi_plan,
-    validate_interview_wwi,
 )
 from .pipeline import run_etl
 from .preimport import validate_files
@@ -117,41 +117,44 @@ def build_parser() -> argparse.ArgumentParser:
     seed_e2.add_argument("--report", type=Path, required=True)
     seed_e2.add_argument("--env-file", type=Path, default=Path(".env"))
     prepare_demo = subparsers.add_parser(
-        "prepare-interview-demo",
-        help="Generate the deterministic, isolated interview-demo-v1 dataset",
+        "prepare-demo",
+        aliases=["prepare-interview-demo"],
+        help="Generate the deterministic, isolated demo-v1 dataset",
     )
     prepare_demo.add_argument(
         "--output-directory",
         type=Path,
-        default=Path("data/canonical/interview-demo-v1"),
+        default=Path("data/canonical/demo-v1"),
     )
     prepare_demo.add_argument(
         "--identity-map",
         type=Path,
-        default=Path("reports/interview-demo-v1/identity_map.csv"),
+        default=Path("reports/demo-v1/identity_map.csv"),
     )
     prepare_demo.add_argument(
         "--business-date", type=date.fromisoformat, default=DEFAULT_BUSINESS_DATE
     )
     prepare_demo.add_argument("--seed", type=int, default=DEFAULT_SEED)
     validate_demo = subparsers.add_parser(
-        "validate-interview-demo",
-        help="Validate counts, references, edge cases, and amounts in interview-demo-v1",
+        "validate-demo",
+        aliases=["validate-interview-demo"],
+        help="Validate counts, references, edge cases, and amounts in demo-v1",
     )
     validate_demo.add_argument(
-        "--directory", type=Path, default=Path("data/canonical/interview-demo-v1")
+        "--directory", type=Path, default=Path("data/canonical/demo-v1")
     )
     provision_demo = subparsers.add_parser(
-        "provision-interview-demo",
+        "provision-demo",
+        aliases=["provision-interview-demo"],
         help="Print a dry-run plan by default; --apply performs guarded idempotent writes",
     )
     provision_demo.add_argument(
-        "--directory", type=Path, default=Path("data/canonical/interview-demo-v1")
+        "--directory", type=Path, default=Path("data/canonical/demo-v1")
     )
     provision_demo.add_argument(
         "--identity-map",
         type=Path,
-        default=Path("reports/interview-demo-v1/identity_map.csv"),
+        default=Path("reports/demo-v1/identity_map.csv"),
     )
     provision_demo.add_argument("--apply", action="store_true")
     provision_demo.add_argument(
@@ -160,18 +163,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dedicated provisioning credentials; required with --apply",
     )
     prepare_wwi = subparsers.add_parser(
-        "prepare-interview-wwi",
-        help="Extract the deterministic interview-wwi-v1 batch from pinned WWI v1",
+        "prepare-demo-wwi",
+        aliases=["prepare-interview-wwi"],
+        help="Extract the deterministic demo-wwi-v1 batch from pinned WWI v1",
     )
     prepare_wwi.add_argument(
         "--output-directory",
         type=Path,
-        default=Path("data/canonical/interview-wwi-v1"),
+        default=Path("data/canonical/demo-wwi-v1"),
     )
     prepare_wwi.add_argument(
         "--identity-map",
         type=Path,
-        default=Path("reports/interview-wwi-v1/identity_map.csv"),
+        default=Path("reports/demo-wwi-v1/identity_map.csv"),
     )
     prepare_wwi.add_argument(
         "--source-manifest", type=Path, default=DEFAULT_SOURCE_MANIFEST
@@ -182,23 +186,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_wwi.add_argument("--seed", type=int, default=WWI_SEED)
     validate_wwi = subparsers.add_parser(
-        "validate-interview-wwi",
+        "validate-demo-wwi",
+        aliases=["validate-interview-wwi"],
         help="Validate lineage, counts, references, edge cases, and WWI amounts",
     )
     validate_wwi.add_argument(
-        "--directory", type=Path, default=Path("data/canonical/interview-wwi-v1")
+        "--directory", type=Path, default=Path("data/canonical/demo-wwi-v1")
     )
     provision_wwi = subparsers.add_parser(
-        "provision-interview-wwi",
+        "provision-demo-wwi",
+        aliases=["provision-interview-wwi"],
         help="Dry-run WWI provisioning; --apply uses the same guarded writer",
     )
     provision_wwi.add_argument(
-        "--directory", type=Path, default=Path("data/canonical/interview-wwi-v1")
+        "--directory", type=Path, default=Path("data/canonical/demo-wwi-v1")
     )
     provision_wwi.add_argument(
         "--identity-map",
         type=Path,
-        default=Path("reports/interview-wwi-v1/identity_map.csv"),
+        default=Path("reports/demo-wwi-v1/identity_map.csv"),
     )
     provision_wwi.add_argument("--apply", action="store_true")
     provision_wwi.add_argument(
@@ -310,32 +316,32 @@ def main() -> None:
         )
     elif args.command == "seed-e2-targets":
         print(seed_e2_targets(args.identity_map, args.report, args.env_file))
-    elif args.command == "prepare-interview-demo":
+    elif args.command in ("prepare-demo", "prepare-interview-demo"):
         print(
-            prepare_interview_demo(
+            prepare_demo(
                 args.output_directory,
                 args.identity_map,
                 business_date=args.business_date,
                 seed=args.seed,
             )
         )
-    elif args.command == "validate-interview-demo":
-        result = validate_interview_demo(args.directory)
+    elif args.command in ("validate-demo", "validate-interview-demo"):
+        result = validate_demo(args.directory)
         print(result)
         if result["status"] != "passed":
             raise SystemExit(1)
-    elif args.command == "provision-interview-demo":
+    elif args.command in ("provision-demo", "provision-interview-demo"):
         if args.apply:
             if args.admin_env is None:
                 raise SystemExit("--admin-env is required with --apply")
             print(
-                apply_interview_demo(args.directory, args.identity_map, args.admin_env)
+                apply_demo(args.directory, args.identity_map, args.admin_env)
             )
         else:
             print(provision_plan(args.directory))
-    elif args.command == "prepare-interview-wwi":
+    elif args.command in ("prepare-demo-wwi", "prepare-interview-wwi"):
         print(
-            prepare_interview_wwi(
+            prepare_demo_wwi(
                 args.output_directory,
                 args.identity_map,
                 source_manifest=args.source_manifest,
@@ -344,17 +350,17 @@ def main() -> None:
                 seed=args.seed,
             )
         )
-    elif args.command == "validate-interview-wwi":
-        result = validate_interview_wwi(args.directory)
+    elif args.command in ("validate-demo-wwi", "validate-interview-wwi"):
+        result = validate_demo_wwi(args.directory)
         print(result)
         if result["status"] != "passed":
             raise SystemExit(1)
-    elif args.command == "provision-interview-wwi":
+    elif args.command in ("provision-demo-wwi", "provision-interview-wwi"):
         if args.apply:
             if args.admin_env is None:
                 raise SystemExit("--admin-env is required with --apply")
             print(
-                apply_interview_wwi(
+                apply_demo_wwi(
                     args.directory,
                     args.identity_map,
                     args.admin_env,

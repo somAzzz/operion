@@ -24,7 +24,7 @@ The six fulfillment cases are simulated overlays derived from public WWI lines.
 They use a fixed historical business date, are explicitly marked `simulated`, and
 do not modify or impersonate the historical orders or inventory.
 
-The separately versioned `interview-demo-v1` batch uses
+The separately versioned `demo-v1` batch uses
 `operion:demo:interview-v1:*` keys and contains only explicitly simulated DEMO
 records. Its rows add `dataset_version`, `business_date`, and `seed`; order rows
 also carry native `docstatus`, source/business status, EUR currency, and a
@@ -32,7 +32,7 @@ tax-exclusive net total. `source_observed_at` is deliberately null in the datase
 manifest: runtime observation time must come from an actual snapshot/readback and
 must never be invented by the generator.
 
-The separately versioned `interview-wwi-v1` batch uses the same extended CSV
+The separately versioned `demo-wwi-v1` batch uses the same extended CSV
 shape and demonstration scale, but every business record is an unmodified
 selection from the pinned WWI v1 public sample. It retains stable `wwi:*` keys,
 `data_class=public_sample`, source dates and source statuses. `docstatus` is blank

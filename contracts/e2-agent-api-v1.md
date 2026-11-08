@@ -71,7 +71,7 @@ Source values and user statements remain data and are escaped without translatio
 
 ## Run budgets and internal diagnostics
 
-The default and gateway/interview profiles allow six business tool calls and
+The default and gateway/demo profiles allow six business tool calls and
 eight model requests per run. Configuration must allow at least
 `max_tool_calls + 2` model requests: one final structured answer and one answer
 repair after a sequential chain of business calls. `present_answer` is an output

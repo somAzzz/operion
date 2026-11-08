@@ -14,4 +14,4 @@ networks:
 
 secrets:
   wwi-delivery-password:
-    file: ../../var/interview-demo/wwi-delivery-password
+    file: ../../var/demo/wwi-delivery-password

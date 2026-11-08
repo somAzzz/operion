@@ -4,7 +4,7 @@ Historical status for this 2026-10-17 run: **PROTOCOL_AND_CLOUD_VERIFIED / BROWS
 
 Later bounded [session recovery](session-expiry-login.md) and [navigation access](navigation-access.md) browser checks are separate records. They do not overwrite the CA/browser result below or complete the full I06/I07/E5 matrix. Current implementation and remaining work are maintained in the [improvement plan](improvement-plan.md). The release, running-service statements, and certificate dates below describe this acceptance window, not a current deployment assertion.
 
-The authenticated Web → Agent → Collector → Langfuse path was tested before and after the change using the local synthetic Alice identity and the public Wide World Importers snapshot (`interview-wwi-v1`, customer 65). The protocol client verifies the local CA and hostname and completes the existing OIDC code/PKCE flow. No business object was written. Protocol requests create local conversation/run history and Langfuse observations.
+The authenticated Web → Agent → Collector → Langfuse path was tested before and after the change using the local synthetic Alice identity and the public Wide World Importers snapshot (`demo-wwi-v1`, customer 65). The protocol client verifies the local CA and hostname and completes the existing OIDC code/PKCE flow. No business object was written. Protocol requests create local conversation/run history and Langfuse observations.
 
 ## Applied configuration
 

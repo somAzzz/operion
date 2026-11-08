@@ -31,7 +31,7 @@ class OrderInvoices(BaseModel):
 
 
 class Slice(BaseModel):
-    snapshot_id: Literal["interview-wwi-delivery-v1"]
+    snapshot_id: Literal["demo-wwi-delivery-v1", "interview-wwi-delivery-v1"]
     extracted_at: AwareDatetime
     orders_sha256: str
     orders: dict[str, OrderInvoices]

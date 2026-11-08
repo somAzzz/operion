@@ -32,7 +32,7 @@ class DirectDeliveryTests(DeliveryTestHelpers, unittest.TestCase):
     def test_wwi_runtime_defaults_to_sql_and_snapshot_is_explicit(self):
         env = {
             "OPERION_CANONICAL_DIR": str(DATA),
-            "OPERION_IDENTITY_MAP": "reports/interview-wwi-v1/identity_map.csv",
+            "OPERION_IDENTITY_MAP": "reports/demo-wwi-v1/identity_map.csv",
             "OPERION_OBSERVED_AT": "2026-11-08T00:00:00Z",
         }
         with patch.dict(os.environ, env, clear=True):

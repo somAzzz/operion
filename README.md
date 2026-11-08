@@ -93,7 +93,7 @@ current worktree includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer, supplier, contact-search, sales-order, purchase-order,
-  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI interview catalog with delivery investigation; fourteen in live mode);
+  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI demo catalog with delivery investigation; fourteen in live mode);
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and
@@ -125,7 +125,7 @@ server-side Redis sessions, and private Web/Agent services. See the
 It uses synthetic users and public snapshots; browser and real-user pilot
 acceptance remain separate.
 
-The interview demonstration adds scoped customer/supplier search and order
+The demo adds scoped customer/supplier search and order
 listing/detail. It includes both a separate simulated dataset and a pinned,
 deterministically extracted WWI public-sample dataset at the same demonstration
 scale, while retaining the deterministic fulfilment check and its 15 fixed
@@ -161,12 +161,13 @@ Source values and quoted user statements remain escaped data without translation
 - [Agent API](contracts/e2-agent-api-v1.md), [action control](contracts/e3-action-control-v1.md), [follow-up Task](contracts/e4-followup-task-v1.md), and [enterprise boundary](contracts/e5-enterprise-boundary-v1.md) contracts.
 - [Agent](ops/e2-agent.md), [actions](ops/e3-action-control.md), [follow-up Task](ops/e4-followup-task.md), and [single-operator pilot](ops/e5-enterprise-pilot.md) runbooks.
 - [Gateway](ops/auth-gateway.md), [telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md), [navigation access](docs/enterprise/navigation-access.md), and [session-expiry login](docs/enterprise/session-expiry-login.md).
-- [Data storage](data/README.md), [simulated demo data](ops/interview-demo-data.md), and [WWI interview data](ops/interview-wwi-data.md).
+- [WWI demo walkthrough](docs/wwi-demo-walkthrough.md) · [German presentation script](docs/wwi-demo-walkthrough-de.md) · [Demo readiness](docs/demo-readiness.md).
+- [Data storage](data/README.md), [simulated demo data](ops/demo-data.md), and [WWI demo data](ops/wwi-demo-data.md).
 
 Current implementation also includes server-owned ambiguity selection, cross-turn
 candidate validation, and content-free budget diagnostics. The default run allows
 six business calls and eight model requests, with a 60-second deadline. Gateway
-and interview profiles explicitly override some limits; see the Agent API and
+and demo profiles explicitly override some limits; see the Agent API and
 profile configuration. Implementation, historical acceptance, and operational
 release are separate states: E5 actual-user observation, operational evidence,
 and real-data writes remain unapproved.

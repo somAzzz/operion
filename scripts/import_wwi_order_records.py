@@ -1,4 +1,4 @@
-"""Import the authorized WWI interview sales orders into the local demo systems."""
+"""Import the authorized WWI demo sales orders into the local demo systems."""
 
 import argparse
 import json
@@ -15,8 +15,8 @@ from operion_etl.identity_readback import (
     read_identity_map,
     write_identity_map,
 )
-from operion_etl.interview_demo import _existing_mismatches
-from operion_etl.interview_wwi import CUSTOMER_ORDER_COUNTS
+from operion_etl.demo import _existing_mismatches
+from operion_etl.demo_wwi import CUSTOMER_ORDER_COUNTS
 from operion_etl.sqlserver import SqlServer
 from operion_etl.twenty import TwentyClient, read_env
 
@@ -69,8 +69,8 @@ def unique_index(records, field):
 
 
 def save_verified_targets(targets):
-    dest = Path("var/interview-demo/wwi-direct-identity-map.csv")
-    template = Path("reports/interview-wwi-v1/identity_map.csv")
+    dest = Path("var/demo/wwi-direct-identity-map.csv")
+    template = Path("reports/demo-wwi-v1/identity_map.csv")
     records = read_identity_map(dest if dest.exists() else template)
     indexed = {(r["target_system"], r["canonical_id"]): r for r in records}
     for (system, key), target in targets.items():
@@ -83,7 +83,7 @@ def save_verified_targets(targets):
                 "source_id": key.split(":")[-1],
                 "entity_type": key.split(":")[1],
                 "batch_id": "wwi-direct",
-                "mapping_version": "interview-wwi-v1.2",
+                "mapping_version": "demo-wwi-v1.2",
             },
         )
         if row.get("target_id") and row["target_id"] != target:

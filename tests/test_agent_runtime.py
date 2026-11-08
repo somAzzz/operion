@@ -497,7 +497,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(75, limits.output_tokens_limit)
         self.assertEqual(50, settings.model_settings()["max_tokens"])
 
-    def test_settings_read_explicit_interview_token_budgets(self):
+    def test_settings_read_explicit_demo_token_budgets(self):
         with patch.dict(
             os.environ,
             {

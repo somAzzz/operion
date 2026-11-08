@@ -2,7 +2,8 @@
 set -euo pipefail
 umask 077
 repo=$(cd "$(dirname "$0")/.." && pwd)
-secret="$repo/var/interview-demo/wwi-delivery-password"
+source "$repo/scripts/demo-runtime.sh"
+secret="$repo/var/demo/wwi-delivery-password"
 mkdir -p "$(dirname "$secret")"
 if [[ ! -e "$secret" ]]; then
   temp=$(mktemp "${secret}.XXXXXX")

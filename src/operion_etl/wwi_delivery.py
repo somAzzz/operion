@@ -107,7 +107,7 @@ class WwiDeliveryReader:
             Path(
                 os.environ.get(
                     "OPERION_WWI_PASSWORD_FILE",
-                    "var/interview-demo/wwi-delivery-password",
+                    "var/demo/wwi-delivery-password",
                 )
             ),
             os.environ.get("OPERION_WWI_HOST", "127.0.0.1"),

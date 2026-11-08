@@ -85,13 +85,13 @@ I14 was prompted by the existing one-critical/two-high production audit; this re
 
 I15 operationalized the earlier testing design, not new business scope. Proposed interface was `verify case <id> --layer domain|mcp|agent|web --mode fixture|live`, then unavailable. Expected manifest/results/events/assertions/JUnit/HTML/rerun with code/model/prompt/schema/data/scorer versions and trace/run/tool/request IDs. PASS/FAIL/SKIP/BLOCKED differ; mandatory missing layers fail release. Fixtures can replay exactly; real-model inputs/config/repeats can be retained without promising verbatim reproduction.
 
-## 6. Business scope and interview delivery
+## 6. Business scope and demo delivery
 
 Infrastructure did not supply complete ERP/CRM flows. Missing integration/acceptance included downstream sales delivery/returns/receivables; purchase receipt/payables; stock/reservations; opportunity/activity/follow-up outcomes; field authority/incremental changes. This did not mean the upstream products lacked those features.
 
 Choose one loop, such as order exception→conflict/evidence explanation→human-approved internal Task→readback. Reuse the limited Task contract, not simultaneously open invoice/payment/stock/external notification tools. Do not describe current scope as complete ERP/CRM.
 
-Interview delivery: reproducible startup, actual architecture, redacted gold cases, failure-to-fix evidence, normal/denied/outage demos, and a one-page separation of stubs/real dependencies/unverified production. Clarify existing work before adding capabilities solely for breadth.
+Demo delivery: reproducible startup, actual architecture, redacted gold cases, failure-to-fix evidence, normal/denied/outage demos, and a one-page separation of stubs/real dependencies/unverified production. Clarify existing work before adding capabilities solely for breadth.
 
 ## 7. Maintenance rule
 

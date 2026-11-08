@@ -37,7 +37,7 @@ Keep original dates, baselines, failures, counts, skips, source modes, and limit
 
 - [2026-10-17 fixes](fixes-2026-10-17.md): old explicit-fact parser, cancellation, dependency repair, isolated PostgreSQL, and minimal runner. The parser was subsequently replaced by structured evidence.
 - [2026-10-11 progress review](progress-review-2026-10-11.md): reproduced gaps and the state before those fixes.
-- [2026-10-07 system assessment](system-assessment-and-roadmap.md): historical engineering/interview assessment and ERP/CRM capability gaps.
+- [2026-10-07 system assessment](system-assessment-and-roadmap.md): historical engineering and demo assessment and ERP/CRM capability gaps.
 - [Guardrails/Langfuse implementation](guardrails-langfuse-implementation.md) and [initial tracing acceptance](opentelemetry-langfuse-acceptance.md): earlier selected snapshot/live/model/cloud evidence, not current universal correctness.
 - [Minimum demo](../minimum-demo.md): original C/F/P/A cases and fixed fulfillment semantics.
 - [Human workflows](../human-functions-agent-map.md): human/Agent responsibility split.
