@@ -36,8 +36,7 @@ The separately versioned `interview-wwi-v1` batch uses the same extended CSV
 shape and demonstration scale, but every business record is an unmodified
 selection from the pinned WWI v1 public sample. It retains stable `wwi:*` keys,
 `data_class=public_sample`, source dates and source statuses. `docstatus` is blank
-because WWI has no ERPNext-native document state. USD is an explicit dataset-level
-assumption because WWI v1 order rows do not contain a currency code; it is not
+because WWI has no ERPNext-native document state. EUR is the demo denomination for prices and amounts because WWI v1 order rows do not contain a currency code; it is not
 presented as a source column. The manifest pins the source backup SHA-256, source
 profile, selection IDs, and extraction rule.
 

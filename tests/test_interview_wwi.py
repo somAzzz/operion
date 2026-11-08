@@ -56,7 +56,39 @@ class InterviewWwiDatasetTests(unittest.TestCase):
             "wide-world-importers-v1.0", manifest["source_snapshot"]["data_version"]
         )
         self.assertEqual(663, manifest["source_profile"]["customers"])
-        self.assertEqual("interview-wwi-v1.1", manifest["mapping_revision"])
+        self.assertEqual("interview-wwi-v1.2", manifest["mapping_revision"])
+
+    def test_all_monetary_rows_use_demo_euros(self):
+        self.assertEqual(
+            "EUR", json.loads((CANONICAL / "dataset.json").read_text())["currency"]
+        )
+        for table in (
+            "products",
+            "sales_orders",
+            "sales_order_lines",
+            "purchase_orders",
+            "purchase_order_lines",
+        ):
+            with (
+                self.subTest(table=table),
+                (CANONICAL / f"{table}.csv").open() as stream,
+            ):
+                self.assertEqual(
+                    {"EUR"}, {row["currency"] for row in csv.DictReader(stream)}
+                )
+
+    def test_validator_rejects_a_single_non_eur_line(self):
+        import shutil
+
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory) / "wwi"
+            shutil.copytree(CANONICAL, copy)
+            path = copy / "purchase_order_lines.csv"
+            path.write_bytes(path.read_bytes().replace(b",EUR,", b",USD,", 1))
+            self.assertIn(
+                "purchase_order_lines: WWI demo amounts require EUR",
+                validate_interview_wwi(copy)["errors"],
+            )
 
     def test_identity_map_is_pending_and_unique_per_target(self):
         with IDENTITY.open(encoding="utf-8", newline="") as stream:
@@ -485,7 +517,7 @@ class InterviewWwiQueryTests(unittest.TestCase):
         self.assertEqual("177.60", detail["order"]["net_total_ex_tax"])
         self.assertEqual("picked", detail["order"]["source_status"])
         self.assertEqual("", detail["order"]["docstatus"])
-        self.assertEqual("USD", detail["order"]["currency"])
+        self.assertEqual("EUR", detail["order"]["currency"])
         self.assertEqual(1, len(detail["lines"]))
         self.assertEqual("48", detail["lines"][0]["picked_quantity"])
         self.assertEqual("0", detail["lines"][0]["unpicked_quantity"])

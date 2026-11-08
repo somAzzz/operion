@@ -413,7 +413,7 @@ def build_interview_wwi(
             "quantity_on_hand": _number(row.get("QuantityOnHand")),
             "warehouse": "WWI Main Warehouse",
             "bin_location": row.get("BinLocation") or "",
-            "currency": "USD",
+            "currency": "EUR",
             **common,
         }
         for row in source["products"]
@@ -447,7 +447,7 @@ def build_interview_wwi(
                 "unit_price_ex_tax": _money(unit_price),
                 "tax_rate_percent": _number(row["TaxRate"]),
                 "net_amount": _money(amount),
-                "currency": "USD",
+                "currency": "EUR",
                 **common,
             }
         )
@@ -471,7 +471,7 @@ def build_interview_wwi(
                 "source_status": status,
                 "docstatus": "",
                 "business_status": status,
-                "currency": "USD",
+                "currency": "EUR",
                 "net_total_ex_tax": _money(sales_totals[order_id]),
                 **common,
             }
@@ -507,7 +507,7 @@ def build_interview_wwi(
                     (outer_price / factor).quantize(Decimal("0.000001")), "f"
                 ),
                 "net_amount": _money(amount),
-                "currency": "USD",
+                "currency": "EUR",
                 "last_receipt_date": _date(row.get("LastReceiptDate")),
                 **common,
             }
@@ -531,7 +531,7 @@ def build_interview_wwi(
                 "source_status": status,
                 "docstatus": "",
                 "business_status": status,
-                "currency": "USD",
+                "currency": "EUR",
                 "net_total_ex_tax": _money(purchase_totals[order_id]),
                 **common,
             }
@@ -581,7 +581,7 @@ def prepare_interview_wwi(
         writer.writerows(identity_rows)
     dataset_manifest = {
         "dataset_version": DATASET_VERSION,
-        "mapping_revision": "interview-wwi-v1.1",
+        "mapping_revision": "interview-wwi-v1.2",
         "source_system": "wwi",
         "data_class": "public_sample",
         "seed": seed,
@@ -603,9 +603,9 @@ def prepare_interview_wwi(
                 "latest 15 complete 1-4-line orders using only selected products"
             ),
         },
-        "currency": "USD",
+        "currency": "EUR",
         "currency_basis": (
-            "dataset-level assumption for the US-oriented WWI v1 sample; "
+            "EUR demo denomination with source numeric amounts preserved; "
             "WWI order rows do not store a currency code"
         ),
         "amount_basis": "tax_exclusive",
@@ -649,6 +649,8 @@ def validate_interview_wwi(directory: Path) -> dict[str, Any]:
     }
     for name, rows in data.items():
         for row in rows:
+            if "currency" in row and row["currency"] != "EUR":
+                errors.append(f"{name}: WWI demo amounts require EUR")
             if row.get("source_system") not in (None, "wwi"):
                 errors.append(f"{name}: non-WWI source record")
             if row.get("data_class") not in (None, "public_sample"):
