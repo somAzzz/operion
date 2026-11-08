@@ -1,412 +1,375 @@
-# Operion 系统评估与发展规划
+# Operion system assessment and development roadmap
 
-> 历史快照：下文反映 2026-10-07 的状态。可移植 fixture、原始 D01–D03 修复和 tracing 此后已落地；当前差异、剩余缺口与新增优先级见 [2026-10-11 进展复核](progress-review-2026-10-11.md)，实施状态以总体改进计划 v1.4 为准。
+> Historical snapshot: 2026-10-07, code baseline `2ef4420`. Preserve the findings, measurements, estimates, and proposed work below as evidence of that review, not today's defect list. Self-contained fixtures, D01–D03 repairs, CI, tracing, the minimal case runner, structured evidence output, ambiguity gates, and later Web controls were added afterward. See the [2026-10-11 review](progress-review-2026-10-11.md), [2026-10-17 fixes](fixes-2026-10-17.md), [structured evidence](structured-answer-evidence.md), and [current improvement queue](improvement-plan.md).
 
-评估日期：2026 年 10 月 7 日。代码基线：`2ef4420`。面向个人持续开发与面试展示，默认以 Python 后端岗位为主，兼顾全栈和 AI 应用工程能力。
+Assessment date: 2026-10-07. Intended for personal development and interview delivery, primarily Python/backend with full-stack and AI application engineering context. Translation does not constitute a new assessment or rerun.
 
-Operion 最有价值的定位是：**面向中小型 B2B 贸易企业，连接 ERPNext 与 Twenty，提供有证据的业务查询、异常判断和经过审批的内部跟进。** 当前已经具备这一路线的技术骨架；下一阶段应集中证明业务事实准确、权限有效、环境可复现和异常可恢复。
+The strongest positioning identified was a **controlled B2B trading assistant connecting ERPNext and Twenty for evidence-backed queries, exception analysis, and approved internal follow-up**. The technical foundation existed, but fact correctness, scope, reproducibility, and recovery needed stronger evidence.
 
-作为个人工程项目，跨系统映射、确定性计算、动作账本和故障恢复值得保留。作为面试作品，主要短板是新环境复现、结果可信度和业务故事尚未形成完整交付。作为真实企业系统，主要缺口是销售与采购后续单据、库存履约、财务事实、CRM 经营过程及实际运行证据。
+Cross-system mappings, deterministic calculations, the action ledger, and fault recovery were worth retaining. Interview gaps were new-environment reproduction, result trust, and a complete business story. Enterprise gaps included downstream sales/purchasing documents, real inventory/fulfillment, financial facts, CRM process, and actual operations.
 
-本规划补充项目定位、业务范围、面试交付与工作量。现有 [总体改进计划](improvement-plan.md) 继续管理 I01–I13 的实施状态，[阶段计划](delivery-plan.md) 继续管理 E0–E6 的验收与放行；本次评估不改变历史阶段状态，也不代表下述功能已经实施。
+This assessment added positioning, scope, interview deliverables, and effort estimates. The then-existing improvement plan managed I01–I13; delivery rules managed E0–E6. It did not change historical acceptance or claim the planned work implemented. The current queue now manages I01–I16 separately.
 
-## 1 项目定位与成熟度
+## 1. Positioning and maturity at the review
 
-建议对外描述为：
+Suggested description:
 
-> 我构建了一个连接 ERPNext 和 Twenty 的受控业务助手。系统用统一身份映射和确定性服务查询客户、供应商及订单，通过本地模型解释证据，并使用持久化审批和执行账本控制内部跟进任务。项目重点验证对象权限、数据语义、重复执行和故障恢复。
+> I built a controlled assistant connecting ERPNext and Twenty. Stable identity maps and deterministic services query customers, suppliers, and orders. A local model works with evidence, while persistent approval and execution ledgers control internal follow-up Tasks. The project focuses on object authority, data semantics, duplicate prevention, and recovery.
 
-这个表述明确了个人实现的部分，也保留底层开源产品的归属。ERPNext 的 ERP 功能、Twenty 的 CRM 功能和 SGLang 的推理能力应作为集成依赖说明。企业化设计、隔离环境验收和真实生产使用应分别陈述。
+Separate personal contributions from upstream ERPNext/Twenty/SGLang capabilities. Enterprise design, isolated acceptance, and real production use are distinct claims.
 
-| 目标 | 当前判断 | 最应补齐的证据 |
-|---|---|---|
-| 个人测试与工程训练 | 已有值得继续深化的技术内容 | 干净环境回归、对象权限、数据库故障测试、性能测量 |
-| 面试展示 | 有可讲的技术亮点，尚需稳定可复现的发行版本 | 三条演示路径、个人贡献、失败恢复、测试与性能报告 |
-| 单人企业只读试运行 | 有身份和运行控制实现，实时正确性及运维验收仍未完成 | I01–I03、真实入口与浏览器、告警与恢复、至少 10 个业务日使用 |
-| 多人企业生产使用 | 当前证据不足 | 多用户权限、并发隔离、运行服务目标、生命周期管理和真实业务验证 |
-| 完整 ERP 与 CRM 产品 | Operion 当前覆盖较窄的查询和动作范围 | 按目标行业接入底层业务闭环，明确各类单据的状态与责任 |
+| Goal | Judgment at the review | Missing evidence |
+| --- | --- | --- |
+| Engineering practice | Useful technical depth | Clean regression, object scope, database faults, performance |
+| Interview | Strong examples, incomplete reproducible release | Three demo paths, contributions, failure/recovery, tests/latency |
+| Single-user enterprise read-only | Identity/operational controls existed, live correctness and operations incomplete | I01–I03, real ingress/browser, alerts/restore, ten-day use |
+| Multiple-user production | Insufficient evidence | Multi-user scope/concurrency, service objectives, lifecycle, actual business |
+| Complete ERP/CRM | Narrow integration/action scope | Industry-specific native document chains and ownership |
 
-建议保留单体模块化后端、独立 Web、独立受控执行器及既有数据库。新增功能由具体用户任务驱动，优先提高业务深度。
+Retain modular backend, separate Web/executor, and existing databases. New features should deepen a concrete user task.
 
-## 2 当前能力与本次验证
+## 2. Capabilities and actual verification
 
-### 2.1 已经具备的能力
+### 2.1 What existed
 
-| 层次 | 当前实现 | 评价及边界 |
-|---|---|---|
-| 数据准备 | WWI 抽取、Canonical CSV、校验、身份映射、导入回读、两套面试数据 | 已关注完整订单、来源、币种和单位；扩量与持续同步尚未形成运行闭环 |
-| 业务查询 | 客户、联系人、供应商、销售/采购订单、汇总、固定履约场景 | 有业务语义；实时关系核验存在已复现问题 |
-| MCP | 15 个只读业务工具 | 独立访问入口，授权和语义应与 Agent 一致 |
-| Agent | Pydantic AI、本地 SGLang、工具白名单、预算、超时 | 有控制基础；旧评分器不足以证明最终回答准确 |
-| Web | Next.js、assistant-ui、AG-UI、证据卡片、可信历史、审批和动作页面 | 技术链路完整度较好；还缺业务角色入口和详情工作台 |
-| 动作执行 | PostgreSQL 账本、版本/哈希、审批、租约、UNKNOWN 对账 | 核心亮点；实际写入限于隔离演示中的 Twenty 内部 Task |
-| 身份与会话 | OIDC、服务端 scope/角色、撤销、历史与访问审计 | 本地网关有历史协议证据；对象级授权仍须在业务层成立 |
-| 运行控制 | 健康检查、Worker 心跳、运维快照、发布门禁、会话清理 | 不能说完全没有运维；实际告警、恢复和持续观察仍待完成 |
+| Layer | Implementation observed | Boundary at this checkpoint |
+| --- | --- | --- |
+| Data | WWI extraction, Canonical CSV, validation, mappings, readback, two interview datasets | Complete-order/currency/UOM attention; no full expansion/sync loop |
+| Queries | Customers/contacts/suppliers/orders/aggregates/frozen fulfillment | Reproduced live-relation defect |
+| MCP | Fifteen read-only operations | Independent entry; must share Agent authorization/semantics |
+| Agent | Pydantic AI/local SGLang/allowlist/budgets/timeouts | Old grading did not establish final-answer correctness |
+| Web | Next/assistant-ui/AG-UI/evidence/history/approval/actions | Needed task-oriented entry/details |
+| Actions | PostgreSQL revisions/hashes/approval/leases/UNKNOWN | Actual writes limited to isolated Twenty Task |
+| Identity/history | OIDC/server scopes/roles/revocation/audit | Local protocol evidence, object checks still required |
+| Operations | Health, heartbeat, operations snapshots, release gate, purge | Actual alerts/restore/observation pending |
 
-代码入口：[读取服务](../../src/operion_etl/read_tools.py)、[MCP](../../src/operion_etl/mcp_server.py)、[Agent](../../src/operion_etl/agent_runtime.py)、[动作账本](../../src/operion_etl/action_store.py)、[执行器](../../src/operion_etl/action_worker.py)、[身份策略](../../src/operion_etl/enterprise_auth.py)、[会话存储](../../src/operion_etl/session_store.py)。
+Sources: [read service](../../src/operion_etl/read_tools.py), [MCP](../../src/operion_etl/mcp_server.py), [Agent](../../src/operion_etl/agent_runtime.py), [ledger](../../src/operion_etl/action_store.py), [Worker](../../src/operion_etl/action_worker.py), [identity](../../src/operion_etl/enterprise_auth.py), [history](../../src/operion_etl/session_store.py).
 
-需要说准确的架构细节：当前 Web Agent 使用 `FunctionToolset` 调用共享 Python 业务函数；MCP 是复用同一业务仓库的独立入口。现有链路不能笼统画成“每次 Web 请求都通过网络 MCP 调用业务系统”。
+Web Agent used `FunctionToolset` over shared Python business services; stdio MCP was a separate entry. Do not draw every Web read as a network MCP call.
 
-### 2.2 本次实际结果
+### 2.2 Results executed for this assessment
 
-本次进行了代码与配置阅读、离线回归、Git 跟踪文件副本回归，以及使用公共样例和模拟上游的探针。没有重跑真实业务 API、真实模型、数据库集成或浏览器验收。
+Read code/configuration, ran offline/worktree-copy regressions, and public/simulated probes. No actual business API, model, database integration, or browser acceptance reran here.
 
-| 验证 | 结果 | 解释 |
-|---|---|---|
-| 当前目录离线回归 | 169 项，146 通过，23 跳过，0 失败 | 本机当前数据与依赖条件下通过 |
-| 仅复制 Git 跟踪文件后的同命令回归 | 169 项，44 项报错，23 跳过，退出码 1 | 新检出文件集不能直接复现本机通过状态 |
-| 实时订单换属探针 | 上游订单属于客户 B 和其他公司，仍以快照客户 A 返回并标记 authorized | 实时对象关系和公司核验存在缺口 |
-| 最终答案评分探针 | 工具返回 0 张订单，回答“一百张订单”，`grade_case` 返回空失败列表 | 评分器可以放过关键事实错误 |
-| live 履约探针 | live 仓库调用 F01，上游调用 0 次，返回 satisfiable | 仍使用固定场景；返回值已有 snapshot 标记和 frozen 警告 |
+| Check | Actual result | Meaning |
+| --- | --- | --- |
+| Worktree offline | 169: 146 passed, 23 skipped, zero failures | Current local data/dependencies passed |
+| Tracked-file copy, same interpreter/command | 169: 44 errors, 23 skipped, exit 1 | Fresh tracked files depended on ignored inputs |
+| Live ownership probe | Customer B/OTHER-COMPANY order returned as snapshot A, authorized | Current relation/company verification defect |
+| Final-answer probe | Tool zero orders plus answer claiming one hundred; empty failure list | Old grader missed critical error |
+| Live fulfillment probe | F01, zero upstream calls, satisfiable | Frozen scenario inherited into live; snapshot/frozen marker existed |
 
-干净检出验证继续使用现有 `.venv`，隔离的是仓库文件集；它证明存在夹具依赖问题，不等于完成新机器依赖安装测试。报错涉及未跟踪的 `data/canonical/wwi-v1-small-20260913-v4`、`data/test_data/companies-sample.csv`，以及缺失输入引起的后续文件缺失。
+The copy used existing `.venv`; it tested the file set, not fresh-machine installation. Missing files included `data/canonical/wwi-v1-small-20260913-v4`, `data/test_data/companies-sample.csv`, and downstream artifacts.
 
-历史证据见 [面试准备记录](../interview-readiness.md) 和 [网关验收](gateway-acceptance.md)。例如网关历史记录为 38/38 协议通过、浏览器未运行；这些结果不计入本次重验。
+[Interview readiness](../interview-readiness.md) and [gateway acceptance](gateway-acceptance.md) supplied older evidence. Gateway 38/38 protocol and no browser were historical, not passes from this review.
 
-## 3 必须优先解决的不足
+## 3. Priority gaps identified then
 
-### 3.1 实时对象授权必须使用当前关系
+### 3.1 Current relations must enforce live authority
 
-**P0，对应 I01。** `LiveReadRepository._refresh_erpnext()` 读取上游订单的 customer/supplier，但构造订单时从快照复制原关系，未据实时关系重新确认；订单列表读取也未获取 company 字段。历史映射与当前归属可能不一致。
+P0/I01: `LiveReadRepository._refresh_erpnext()` read current customer/supplier but copied snapshot relationships; order lists omitted company. Old mappings could misrepresent current scope.
 
-本次模拟返回属于 CUSTOMER-B、OTHER-COMPANY 的订单；用户范围只有快照客户 A，读取仍成功，金额 `321.00` 也返回。这是离线适配器复现，不能推定真实环境已经发生泄露。
+Synthetic CUSTOMER-B/OTHER-COMPANY under scope A returned amount `321.00` as authorized. This did not prove an actual production disclosure.
 
-修复应在共享业务层完成：获取当前对象，核验唯一来源键，解析当前交易对手与公司，核验 scope，再返回字段。关系冲突、重复键、删除重建和无法确认应有明确结果。客户、供应商、联系人、列表及详情入口使用同一规则。
+Repair the shared domain layer: fetch current object, verify unique source key, resolve current party/company, enforce scope, then return fields. Explicitly handle conflicts, duplicates, deletion/recreation, and unverifiable relations. Apply across customer/supplier/contact/list/detail paths.
 
-验收覆盖合法读取、客户/供应商换属、联系人换公司、公司不符、重复键、旧 ID 失效、分页与详情不一致。每个拒绝用例配一个合法成功用例。对象权限需要逐次访问核验，符合 [OWASP 对对象级授权的要求](https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/)。
+Tests require valid reads and reassignment/company/duplicate/obsolete-ID/list-detail failures. Per-object checks remain necessary after login: [OWASP object-level authorization](https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/).
 
-### 3.2 工具正确还不足以证明答案正确
+### 3.2 Correct tools do not establish correct answers
 
-**P0，对应 I02。** [E2 评分器](../../src/operion_etl/e2_evaluation.py) 主要检查工具 payload、禁用字段、少量禁用表述及答案非空，尚未系统比对最终答案中的数量、金额、状态和对象。
+P0/I02: [old grading](../../src/operion_etl/e2_evaluation.py) focused on payloads, forbidden fields/phrases, and nonempty output rather than systematic final quantity/amount/state/entity agreement.
 
-改进分三层：确定性服务输出有 schema 的事实；重要数值和状态由事实卡片直接呈现；模型解释中的关键断言再与来源事实核对。允许业务等价的答案，不能只匹配固定措辞，也不能仅依赖另一个模型评分。
+The proposed approach then was typed facts, deterministic critical cards, and constrained narrative assertions. Independent gold and counterexamples were needed: correct tools/wrong answer, wrong tools/fluent answer, unsupported certainty, valid negation/paraphrase. Separately report tools, arguments, facts, evidence, permission, completion. This historical proposal is superseded by the current closed `AnswerPlan`/server-rendering contract; it does not authorize free-form business prose now.
 
-评分器自身增加反例：正确工具配错误答案、错误工具配流畅答案、无证据肯定、正确否定句和正确同义表达。报告分开列出工具选择、参数、事实、证据、权限及任务完成率。
+### 3.3 Frozen scenarios versus live fulfillment
 
-### 3.3 区分固定履约演示与真实履约能力
+P0/I03: `evaluate_fulfillment()` already returned `data_mode=snapshot` and `frozen_fulfillment_snapshot`. Retain those markers. The gap was live inheritance of F cases without real stock/reservation/inbound/delivery/order links.
 
-**P0，对应 I03。** `evaluate_fulfillment()` 已返回 `data_mode=snapshot` 和 `frozen_fulfillment_snapshot`，工具描述也说明是冻结场景。已有标识应保留。
+Limit frozen cases to explicit demos; incomplete actual order evidence means insufficient information. Future live capabilities use order ID/warehouse/promise date, not F01. Verify registration/result/UI/mode agree and no unauthorized real-order conclusion follows from a public scenario.
 
-缺口是 live 仓库仍继承固定场景入口，真实库存、预留、到货、交付和订单关系尚未组成实时事实。近期将固定案例限制在明确的演示能力中；真实订单证据不全时返回信息不足。后续真实能力使用订单 ID、仓库和承诺日期，不依赖 F01 之类案例编号。
+### 3.4 Reproduce without personal historical files
 
-验收要求：无证据不输出实时交付承诺；模式在工具注册、结果、UI 和解释中一致；公共场景不被当作任意用户的真实订单数据。
+P0 interview delivery: local pass versus 44 tracked-copy errors required small tracked fixtures in `tests/fixtures/` or fixed-seed temporary generation. [Read tests](../../tests/test_read_tools.py) and [MCP tests](../../tests/test_mcp_server.py) were affected.
 
-### 3.4 仓库需要独立于本机历史数据
+Provide locked installation, fixture preparation, tests, Web build, and one startup path. Offline regression should not need restored WWI. CI runs clean files; isolated PostgreSQL must actually execute its group, reporting missing prerequisites/skips honestly.
 
-**P0，新增面试交付工作包。** 本机通过而跟踪文件副本有 44 项错误，说明测试夹具依赖操作者的历史目录。相关入口包括 [读取测试](../../tests/test_read_tools.py) 和 [MCP 测试](../../tests/test_mcp_server.py)。
+### 3.5 Measure performance and concurrency first
 
-将最小合成夹具提交到 `tests/fixtures/`，或由固定 seed 生成器在临时目录产生；公开样例测试单独注明准备步骤、校验值和来源。日常业务测试应无需恢复完整 WWI 数据库。
+P1/P2/I08: live refresh scanned objects and per-order details; overview/detail could repeat full reads. Shared mutable repository and process-local semaphore/locks did not prove multiprocess safety.
 
-提供锁文件安装、夹具准备、测试、Web 构建和演示启动的统一入口。CI 在干净文件集运行。隔离 PostgreSQL 作业必须执行当前跳过组；缺失配置时明确失败或标为未运行，不能静默当成全套通过。
+Observed structure was not proof of a leak or measured bottleneck. Measure API volume, rows, p50/p95, queue/memory before on-demand/filter/index/immutable-request-snapshot/cache work. Cache keys include scope/company/tenant/permission version/mode without extending revocation. Multi-instance limits/locks/cancellation require separate acceptance.
 
-### 3.5 性能与并发需要先测量
+### 3.6 Operations need actual evidence
 
-**P1 到 P2，对应 I08。** 实时刷新读取多类对象列表，并逐订单请求明细；连续调用概览和详情可能重复扫描。Agent 共享可变仓库，进程内 semaphore 和会话锁不能证明多进程部署安全。
+I07/I13/I08/I10: loopback Keycloak start-dev/H2 and unpersisted Redis needed explicit failure/persistence boundaries. Relogin after Redis loss may be accepted if tested; identity/business state needs suitable storage.
 
-本次确认了读取方式和共享状态，但未证明并发串数据或具体性能瓶颈。先测上游请求数、返回行数、p50/p95、排队与内存，再做按需读取、服务端过滤、索引、不可变请求快照或范围隔离缓存。
+Build from audit/heartbeat/snapshots into actual login/revocation, alert receipt, restore, rollback, and use. RPO ≤15 minutes/RTO ≤4 hours were [E5](phases/e5-enterprise-pilot.md) targets, not measurements.
 
-缓存键需包含用户授权相关范围、公司/租户、权限版本、数据模式；缓存不能延长撤销窗口。多实例部署前单独验证分布式限流、会话互斥和取消。
+## 4. Real CRM and ERP capability gaps
 
-### 3.6 运维需要实际证据
-
-**企业试运行门槛，对应 I07、I13、I08、I10。** 当前 loopback 网关使用 Keycloak start-dev/H2 和不持久化 Redis。会话丢失后重新登录可以是接受的行为，但要明确并验证；身份库和业务状态需要匹配运行目标的持久化。
-
-在已有审计、心跳和运维快照上增加关联 ID、指标与告警，补齐浏览器登录/退出/撤销、备份恢复、发布回退、告警送达和实际使用。保留 [E5](phases/e5-enterprise-pilot.md) 适用门槛；RPO ≤15 分钟、RTO ≤4 小时目前是目标，不能展示为实测成果。
-
-## 4 现实 CRM 和 ERP 的功能差距
-
-这里的“未接入”指 Operion 尚未提供经过验证的闭环，并不表示 ERPNext 或 Twenty 没有该能力。底层系统是否配置完成，还需按实际版本验证。
+“Not integrated” below means no verified Operion loop at this checkpoint, not absence from the upstream product. Installed product configuration still needs verification.
 
 ### 4.1 CRM
 
-| 业务域 | 当前覆盖 | 缺口与建议 |
-|---|---|---|
-| 客户与联系人 | 搜索、详情、ID 映射、部分关系核验 | 生命周期、负责人、分组、查重合并、换公司历史；先做好身份与详情 |
-| 线索与商机 | 尚未形成查询闭环 | 来源、阶段、金额、预计成交日、赢单/丢单原因；先接入商机与停滞提醒 |
-| 活动与跟进 | 单一内部 Task 受控创建 | 活动历史、到期任务、工作量、完成情况；先做时间线和待办查询 |
-| CRM 到 ERP 交接 | 示例映射与导入 | 赢单到报价/订单的显式链接、交易客户开户和交接状态；人工确认候选 |
-| 商业条款 | 未形成经营视图 | 报价有效期、价目表、折扣、付款条件和附件；先读 ERP 权威条款 |
-| 销售管理 | 有限客户/订单汇总 | 漏斗、转化率、销售周期、跟进及时率；明确分母与日期口径 |
-| 客户服务 | 未接入 | 工单、投诉、退货申请、SLA、服务历史；企业扩展时选一个来源 |
-| 市场与沟通 | 未接入完整营销闭环 | 触达、偏好、退订、邮件/日历；按需后置，首期聚焦内部跟进 |
+| Domain | Coverage then | Gap/proposed next scope |
+| --- | --- | --- |
+| Customers/contacts | Search/detail/IDs/some relations | Lifecycle/owner/groups/merge/company history; identity/detail first |
+| Leads/opportunities | No complete query loop | Source/stage/amount/close date/win-loss; opportunity/stagnation reads |
+| Activities/follow-up | One controlled Task creation | Timeline/due work/load/completion reads |
+| CRM→ERP | Example mapping/import | Explicit won-deal→quote/order, trading-account handoff state |
+| Terms | No operating view | Quote validity/prices/discount/terms/attachments; read ERP authority |
+| Sales management | Limited aggregates | Funnel/conversion/cycle/follow-up timeliness with denominators/dates |
+| Service | Not integrated | Tickets/complaints/returns/SLA/history from one chosen source |
+| Marketing/communication | No full loop | Outreach/preferences/unsubscribe/email/calendar later; internal follow-up first |
 
-Twenty 官方产品包括 Companies、People、Opportunities、Tasks、Notes、Dashboards 和 Workflows。扩展商机与活动宜复用其对象体系，API 需核对当前部署版本。[Twenty 产品能力](https://twenty.com/product)
+The review referenced Twenty Companies, People, Opportunities, Tasks, Notes, Dashboards, Workflows; reuse native objects and verify installed APIs. [Product reference](https://twenty.com/product).
 
 ### 4.2 ERP
 
-| 业务域 | 当前覆盖 | 缺口 | 优先程度 |
-|---|---|---|---|
-| 主数据 | 客户、供应商、商品、联系人和小样本映射 | 地址、税类别、价目表、UOM、仓库、付款条件、变更历史 | 高，其他能力的前提 |
-| 销售到收款 | 销售订单及明细 | 报价、交付、发票、收款分配、未收余额、退货与贷项 | 高，先完整只读单据链 |
-| 采购到付款 | 供应商、采购订单 | 请购、询价、收货、供应商发票、付款、退货 | 中高，先补到货与剩余量 |
-| 库存与履约 | 固定单仓计算和部分订单数量 | 仓库库存、预留、可用量、入库关联、调拨、安全库存 | 高，先限定单公司单仓 |
-| 批次与质量 | 未形成完整链路 | 批次、序列号、有效期、质检、不合格品和召回 | 按行业选择 |
-| 应收与信用 | 未形成事实服务 | 余额、账龄、部分收款、贷项分配、信用条件 | 高，只读展示价值较大 |
-| 应付与对账 | 未接入 | 采购单/收货单/发票差异、部分付款、未分配付款 | 中，采购闭环之后 |
-| 退货与修正 | 未形成闭环 | 原单关联、部分退货、冲销、取消重开、状态传播 | 中，至少准备异常样例 |
-| 金额与财务口径 | 部分金额、币种、UOM 已处理 | 税额、折扣、汇率日期、精度、账期、总账关联 | 先保证读取解释，记账交给 ERP |
-| 多公司与组织 | 有 tenant/company，试运行限定一家公司 | 公司切换、部门/地区范围、跨公司交易、隔离证明 | 后续专项验收 |
-| 制造与资产 | 未接入 | BOM、工单、生产计划、设备、成本、资产 | 贸易场景暂缓 |
-| 经营分析 | 小范围客户与订单汇总 | 毛利、周转、履约及时率、采购延迟、回款趋势 | 先选两个有完整事实的指标 |
+| Domain | Coverage then | Gap/priority |
+| --- | --- | --- |
+| Master data | Small customer/supplier/item/contact maps | Addresses/tax/prices/UOM/warehouse/terms/history; high prerequisite |
+| Order-to-cash | Sales order/lines | Quote/delivery/invoice/payment allocation/open balance/returns/credit; high read-chain priority |
+| Procure-to-pay | Supplier/PO | Request/RFQ/receipt/invoice/payment/return; medium-high receipt/remaining first |
+| Inventory/fulfillment | Frozen single-warehouse rule/partial quantities | Stock/reservation/availability/inbound links/transfer/safety stock; high, one company/warehouse |
+| Batch/quality | No full chain | Batch/serial/expiry/inspection/nonconformance/recall by industry |
+| Receivables/credit | No fact service | Balance/aging/partial receipt/credit allocation/terms; valuable read scope |
+| Payables/reconciliation | Not integrated | PO/receipt/invoice differences, partial/unallocated payment; after purchasing |
+| Returns/corrections | No full loop | Original relation/partial return/reversal/cancel-reopen/state propagation; exception fixtures |
+| Finance semantics | Some amount/currency/UOM | Tax/discount/FX date/precision/period/GL; explain reads, ERP owns posting |
+| Companies/organization | Tenant/company, one-company pilot | Switching/departments/regions/intercompany/isolation; separate acceptance |
+| Manufacturing/assets | Not integrated | BOM/work orders/planning/equipment/cost/assets; defer for trading |
+| Analytics | Small aggregates | Margin/turnover/on-time fulfillment/delays/collection; two fully evidenced metrics first |
 
-ERPNext 销售订单可衔接交付、开票和收款，并支持部分交付/开票；采购订单可衔接收货、供应商发票和付款。补齐查询链应复用原生单据关系。[销售订单](https://docs.frappe.io/erpnext/sales-order) · [采购订单](https://docs.frappe.io/erpnext/purchase-order)
+Use native sales→delivery/invoice/payment and purchase→receipt/invoice/payment relations, including partial operations: [sales orders](https://docs.frappe.io/erpnext/sales-order), [purchase orders](https://docs.frappe.io/erpnext/purchase-order). Stock presence is not this order's promise: [reservation](https://docs.frappe.io/erpnext/stock-reservation).
 
-库存预留包含订单行、仓库和数量关系，不能把“有库存”直接解释为“本单可承诺交付”。[ERPNext 库存预留](https://docs.frappe.io/erpnext/stock-reservation)
+### 4.3 Cross-system daily work
 
-### 4.3 跨系统日常工作
+Five missing loops: source-row/batch/rule→import error→repair/rerun; incremental watermark/delete-recreate/duplicate/missed-event recovery; onboarding/offboarding/owner/approver change; exception assignment/resolution/recheck; permission-inheriting attachments/download/export.
 
-需要补齐五类流程：导入错误从批次、来源行、规则版本到修复重跑的闭环；增量水位、删除重建、重复事件与漏事件补扫；入职/离职、负责人变更和审批人替换；异常认领、处理意见和结果复查；继承对象权限的附件、下载与导出管理。
+Reuse quarantine/reports/identity/audit. Structured business reads first; add document/email retrieval only for a specific task.
 
-现有 quarantine、报告、身份策略和审计可作为基础。结构化业务查询优先，文档检索及邮件接入在有具体任务后再添加。
+## 5. Suggested business scope
 
-## 5 建议选择的业务范围
+### 5.1 Users and value
 
-### 5.1 目标用户与价值
+One-company/warehouse B2B trade for account managers/order operators/buyers. Interview uses public/synthetic data; pilot uses one authorized person/limited customers. Measure manual search/reconciliation/follow-up steps, time, and errors before comparing Operion. Resume/demo benefit numbers must be measured.
 
-首期选择一家公司、一处仓库的 B2B 贸易场景，角色为客户经理、订单运营和采购人员。面试版使用公开或合成数据；企业试运行版使用一名被授权用户及有限客户范围。
+### 5.2 Three priority chains
 
-核心价值是减少跨两个系统找人、找单、核对状态和建立内部待办的时间。每个场景先记录人工步骤、耗时和错误点，再与 Operion 实测比较；简历和展示中的节省时间数据必须来自测量。
+| Chain | Task and facts | Delivery boundary |
+| --- | --- | --- |
+| Customer operations | Find customer/contact/order/open activity, later opportunity/invoice/balance | Interview customer→order first; later opportunity→delivery/receivables |
+| Order exceptions | Demand/delivery/stock/reservation/unknown evidence→internal follow-up | Frozen demos separate; actual commercial promises stay human |
+| Purchase arrival | Remaining quantity/arrival/explicit affected-demand relation | Never infer which sales order a PO replenishes from matching items |
 
-### 5.2 三条优先业务链
+First chain shows normal queries, second judgment/approval/recovery, third cross-domain evidence. Polish existing paths before adding opportunities/invoices/live stock; do not rewrite all three at once.
 
-| 业务链 | 用户任务 | 事实与计算 | 交付范围 |
-|---|---|---|---|
-| 客户经营概览 | 找客户、联系人、订单、未完成事项，决定下一步 | 对象关系、订单、活动/商机；后续加发票和余额 | 面试版做好客户到订单；扩展版形成商机到交付及应收视图 |
-| 订单异常跟进 | 识别未交付或信息不足的订单，查看依据并建立内部跟进 | 订单、交付、库存、预留；缺证据须明确 | 固定场景单独演示；真实判断接入后商业承诺仍由人确认 |
-| 采购到货跟踪 | 解释剩余量、预计到货、明确关联的受影响订单 | 采购、收货、显式需求/订单链接 | 无关联证据时不能凭商品相同推断补货给哪张订单 |
+### 5.3 Minimum sales-chain model
 
-第一条提供正常路径，第二条展示复杂判断与审批恢复，第三条展示跨域查询。面试可信版先打磨现有能力，新增商机、发票和真实库存放在其后的扩展阶段，避免同时重写三条链。
+Lead→opportunity→quote→order→delivery→invoice→payment is not one-to-one. Orders split across deliveries/invoices; payments allocate across invoices.
 
-### 5.3 销售单据链的最小模型
+| Relation/fact | Requirement |
+| --- | --- |
+| CRM/ERP party | Stable IDs/source/verification time/conflict, no silent name join |
+| Opportunity/quote/order | Explicit links; missing remains missing; old order is not a new opportunity |
+| Order/delivery/invoice lines | Line-level provenance/quantity/split/partial relationship |
+| Invoice/payment | ERP allocation/credit/balance definitions |
+| Original/return/reversal | References/state history, no overwritten original fact |
 
-业务顺序可以是线索、商机、报价、销售订单、交付、发票、收款，但模型不能假设严格一对一：一张订单可能分次交付与开票，一次付款也可能分配给多张发票。
+Separate ordered/invoiced/received amounts and stock/available/reserved quantities. A single-currency limit must agree in configuration/API/UI. Aging needs cutoff/due dates; unallocated payments stay separate. Order amount minus receipts is not automatically receivables balance.
 
-| 关系或事实 | 最小要求 |
-|---|---|
-| CRM 客户与 ERP 客户 | 稳定 ID、来源、验证时间、冲突状态；不能只凭名称静默关联 |
-| 商机与报价/订单 | 显式关联；没有链接时展示缺失，不把历史订单当作新商机 |
-| 订单行与交付/开票行 | 行级来源和数量关系，支持拆分及部分履约 |
-| 发票与付款 | 付款分配、贷项关系，使用 ERP 权威余额口径 |
-| 原单与退货/冲销 | 保留引用及状态历史，避免覆盖原事实 |
+## 6. Data and architecture improvements proposed then
 
-订单金额、开票金额、回款金额分别呈现；库存、可用量和本单预留量也分别呈现。首版可以限制单币种，但配置、API、UI 必须一致表达。应收账龄按明确的截止日及到期日计算，未分配付款单独展示，不能简单用订单额减回款额代替余额。
+### 6.1 Module ownership
 
-## 6 数据与架构提升
+| Module | Responsibility | Boundary |
+| --- | --- | --- |
+| Adapters | Request/pagination/validation/mapping/errors | Missing response is not empty business data |
+| Domain services | Permission/relations/money/quantity/state/document chain | Test without model |
+| Queries | Scope/filter/cursor/completeness/source/freshness | Explain origin/coverage |
+| Agent/MCP | Contracts/input/budgets/envelopes | Shared rules, separate entry tests |
+| Actions | Proposal/approval/version/lease/preflight/readback | Accepted action types only |
+| Web | Tasks/facts/exceptions/human confirmation | Server owns identity/authority |
+| Pipeline | Rerun/import/lineage/diff/quality | Import and Agent credentials separate |
 
-### 6.1 模块职责
+Observed sizes were about 2,016 lines in read_tools.py, 1,205 pipeline.py, 1,460 interview_demo.py: maintenance signals, not defect counts. Split identity/order facts/adapters/fulfillment as features evolve, protected by types/contracts. The `operion_etl` package name no longer described all responsibilities, but renaming could wait for a stable release.
 
-| 模块 | 职责 | 边界 |
-|---|---|---|
-| ERPNext/Twenty 适配器 | 请求、分页、响应验证、字段映射、错误分类 | 缺失响应不能转为空业务结果 |
-| 领域服务 | 权限、关联、金额/数量/状态、单据链 | 计算可脱离模型独立测试 |
-| 查询服务 | 范围、过滤、游标、完整性、来源、新鲜度 | 每个结果能说明从哪里来、是否完整 |
-| Agent/MCP 入口 | 工具合同、参数验证、预算、结果封装 | 共用规则，不同入口分别做契约测试 |
-| 动作控制 | 提案、审批、版本、租约、执行前核验、回读 | 仅允许通过验收的动作类型 |
-| Web | 任务入口、事实、异常处理、人工确认 | 服务器决定身份与权限 |
-| 数据流水线 | 重跑、导入、血缘、差异、质量报告 | 导入凭据与 Agent 执行凭据分开 |
+Reuse ledger/strict schemas/version/recovery. A new write requires preconditions/idempotency/readback/failure semantics, not merely another POST tool.
 
-`read_tools.py` 约 2,016 行、`pipeline.py` 约 1,205 行、`interview_demo.py` 约 1,460 行；这是维护复杂度信号，不是缺陷数量。随功能迭代拆出身份解析、订单事实、适配器与履约计算，并用明确类型与契约测试保护边界。当前包名 `operion_etl` 已不足以概括职责，但重命名可等稳定版本后安排。
+### 6.2 Common fact contract
 
-现有动作账本、严格 schema、版本绑定和恢复机制继续复用。新增写操作必须有自己的前置条件、幂等键、可回读结果和失败处理，不能只增加一个 HTTP POST 工具就视为完成。
+Extend existing source/state fields with stable/source/target/company/scope IDs and field authority; snapshot/live/source-update/fetch/snapshot version; currency/tax/precision and UOM/factor/base unit; source/native/business states and mapping version; completeness/pagination/partial failure/conflict/missing/provenance; schema/rule/request versioning.
 
-### 6.2 统一事实合同
+Startup time cannot replace source time. Distinguish absent/no-in-scope/not-imported/failed/forbidden internally without disclosing external-scope existence. Explicit business types reduce arbitrary dictionary guessing. The later evidence contract implements part of this direction; this historical list is not a current schema declaration.
 
-现有结果已包含部分来源与状态字段，应在其上统一扩充：
+### 6.3 Authority and synchronization
 
-- 稳定对象 ID、目标 ID、公司和权限范围，字段级权威来源。
-- snapshot/live、源记录更新时间、抓取时间、快照版本；服务启动时间不能代替源数据时间。
-- 金额的币种、税前/税后口径和精度，数量的单位、系数和基准单位。
-- 来源原状态与标准化业务状态，保留映射规则版本。
-- 完整性、分页、部分失败、冲突、缺失信息和来源引用。
-- schema/规则版本、请求关联 ID，便于复现。
+CRM owns relationship/contact/activity; ERP owns trading party/order/stock/invoice/payment. Decide overlapping fields individually, never newest whole-record wins.
 
-“不存在”“当前范围无结果”“尚未导入”“读取失败”“无权访问”内部使用不同结果类型；对用户的表述仍要避免泄露范围外对象是否存在。关键业务字段逐步采用明确的类型和 schema，减少前后端依赖任意字典猜测字段。
+Read-only difference reports precede watermarked increments/periodic reconciliation; add webhooks/durable inbox/dedup/retry/failure queues only for demonstrated freshness needs. Remote effects have no natural global transaction. Describe per-action deduplication/exact readback/UNKNOWN, not universal exactly-once. Missing target version/dedup guarantees requires explicit limits/manual conflict handling.
 
-### 6.3 权威来源与同步
+### 6.4 Models and resources
 
-客户关系、联系人和活动优先以 CRM 为权威；交易客户、订单、库存、发票和付款以 ERP 为权威。重叠字段逐项决定规则，不能简单采用更新时间较新的整条记录。
+Keep local SGLang but make endpoint/model/context/budgets verifiable. Record weight/quantization/GPU/VRAM/startup/task latency for reproducible interview hardware. Offer model-free tool self-check and clearly labeled recorded fallback. Live inference, self-test, replay are distinct; replay is not real-model success. Compare accuracy/refusal/latency/resources on the same evaluation version before model changes.
 
-先建立只读差异报告，处理重复键、缺映射、换属和删除；再做带水位的增量读取与周期全量核对；有实际时效需求后增加 webhook、持久事件收件箱、去重、重试和失败队列。
+## 7. Quality and acceptance proposals
 
-跨系统副作用没有天然全局事务。沿用动作持久化、确定性 ID、回读与 UNKNOWN 对账的设计，逐动作说明防重条件；受限场景的保证不能描述为所有操作 exactly-once。远端不提供版本条件或原子去重时，需要明确能力限制与人工冲突处理。
+### 7.1 Layers
 
-### 6.4 模型与资源
+| Layer | Focus | Conditions |
+| --- | --- | --- |
+| Pure domain | Values/UOM/state/time/scope | Every commit; synthetic/no network |
+| Adapter contract | Pages/fields/duplicates/relations/delete/429/timeout/partial | Mock APIs/pinned samples |
+| PostgreSQL | Claims/leases/expiry/old approval/response loss/UNKNOWN | Owned isolated database; no silent mandatory skips |
+| Actual read-only API | Installed fields/version/scope/complete relations | Isolated or authorized reads |
+| Agent | Tools/final facts/evidence/refusal/budgets/recovery | Pinned model/prompt/schema/data |
+| Browser | Login/query/cancel/disconnect/refresh/history/roles | Actual clicks separate from protocol |
+| Capacity/recovery | One-to-five sessions/outage/restart/restore/rollback | Hardware/data scale recorded |
 
-保留本地 SGLang，同时将地址、模型名、上下文和预算作为可验证配置。记录权重/量化设置、GPU、显存、启动时间及任务耗时，避免面试运行依赖没有说明的硬件条件。
+The review proposed CI lint/offline/PostgreSQL/Web types/build/browser checks. At its baseline no tracked `.github` workflow or Web test script was found; this did not exclude external automation. Those absences were later repaired and must not be treated as current. Real-model evaluation can run in controlled release jobs; prose-only edits need no model call.
 
-提供无需模型的工具自测；现场可准备明确标识的录制回放。真实推理、自测、回放分别标记，回放不计入实时模型成功率。更换模型时重跑同一版本的评测，比较准确率、拒绝率、延迟和资源成本后再决定。
+### 7.2 Agent suite
 
-## 7 质量与验收
+Reuse I04 CS01–CS40: six normal, eight identity, six source/semantic, six faults, six permission/context, four final facts, four session/stream. Three repeats mean at least 120 runs, retaining failures/errors. At least ten untuned holdouts; replace any used for tuning. New documents add partial delivery/invoice/payment/return/precision/stale-relation cases. Independent source/constants produce gold.
 
-### 7.1 分层测试
+### 7.3 Proposed metrics, not achieved results
 
-| 层次 | 重点 | 条件 |
-|---|---|---|
-| 纯业务单元 | 数量、金额、单位、状态、时间、scope | 每次提交；合成夹具，无网络 |
-| 适配器契约 | 分页、缺字段、重复键、换属、删除、429/超时、部分响应 | 每次提交；模拟 API 与固定样本 |
-| PostgreSQL 集成 | 并发认领、租约、过期、旧审批、响应丢失、UNKNOWN | 隔离数据库；该组不得悄悄跳过 |
-| 真实只读 API | 当前版本、字段、scope、完整对象关系 | 隔离环境或授权只读范围 |
-| Agent | 工具、最终事实、证据、拒绝、预算、恢复 | 固定模型/提示词/schema/数据版本 |
-| 浏览器 | 登录、问答、取消、断流、刷新、历史隔离、审批角色 | 实际浏览器；协议与点击分别记录 |
-| 容量与恢复 | 1 到 5 并发、上游失败、重启、恢复、回退 | 记录硬件和数据规模 |
+| Metric | Goal/report |
+| --- | --- |
+| Reproduction | Clean file set and clean install, consistent results/explicit skips |
+| Critical invariants | Zero unauthorized/wrong-relation/critical-value/unapproved/duplicate effects in the specified suite |
+| Legitimate tasks | Mandatory cases individually pass; exploratory completion/sample count separate |
+| Completeness | Full required dependencies/lines, reconcilable aggregates |
+| Evidence | Object/mode/source/time; visible missing information |
+| Performance | Tool/end-to-end p50/p95, queue, tokens, API volume, concurrency |
+| Initial experiment | Try tool p95 ≤3 seconds/end-to-end ≤30, then freeze by measured hardware/task |
+| Recovery | Terminal timeout/disconnect, later request recovery, duplicate-free unknown reconciliation |
+| Benefit | At least ten business days of nonzero actual use/manual comparison/errors/false refusal |
 
-CI 最小作业是 Python lint、离线回归、隔离 PostgreSQL 集成、Web 类型检查与构建、关键浏览器测试。本次检查未发现仓库跟踪的 `.github` 工作流，也未见前端 `test` 脚本；这不排除仓库外存在自动化，但交付版本需要仓库内可复现的入口。真实模型评测可在受控 runner 或发行前执行，不必每次文案修改都调用模型。
+These exploratory 3/30-second targets did not replace the operating plan's 5/60-second proposed limits. Neither was a measured commitment. Do not hide scope errors in average success or claim usefulness by refusing everything. Ten days do not prove annual availability. The then-observed 90-second profile limit was a protection ceiling, not a user-experience target or today's universal default.
 
-### 7.2 Agent 验收集
+## 8. Frontend and interview
 
-复用 I04 的 CS01–CS40：6 个正常任务、8 个身份关系异常、6 个来源/语义冲突、6 个上游故障、6 个权限/上下文边界、4 个最终事实、4 个会话/流式恢复案例。
+### 8.1 Task-oriented UI proposal
 
-每个模型案例至少重复三次，即至少 120 次运行；报告重复结果、运行错误和全部失败样本。至少 10 个案例作为未用于提示词调优的留出集，一旦用于调整，就补充新案例。
+Build on evidence/history/actions with customer operations, order exceptions, and purchase arrival entry points plus free query. Fixed customer/order views show contacts/orders/state/source/exceptions and link to proposals/execution. Tables need filters/stable sort/real pages. Lead with outcome/missing evidence; expandable diagnostics hold IDs/parameters/versions. Approval shows exact object/content/effects/version/expiry and useful next steps.
 
-接入新单据后增加部分交付、部分开票/付款、退货、金额精度和失效关系案例。gold 使用独立常量或独立原始数据核对，不能调用待测 helper 生成自己的标准答案。
+No screenshots/interaction audit were performed here. These were code-informed proposals, not visual/accessibility acceptance. Later test keyboard/focus/status announcements/small tables/errors.
 
-### 7.3 交付指标
+### 8.2 Ten-minute demonstration
 
-以下是目标和测量口径，不是当前成绩。
+| Minutes | Demo | Evidence |
+| --- | --- | --- |
+| 0–1 | User, systems, personal scope | Positioning/business understanding |
+| 1–3 | Customer selection/contact/orders/source | Cross-system facts |
+| 3–5 | Changed ownership/scope or unknown delivery | Permission/uncertainty |
+| 5–7 | Isolated proposal/different-identity approval/readback | Controlled effects/separation |
+| 7–9 | Response loss/duplicates/reconciliation | Distributed-effect recovery |
+| 9–10 | Tests/latency/limits | Engineering tradeoffs |
 
-| 指标 | 建议门槛或报告方式 |
-|---|---|
-| 复现 | 干净文件集与干净安装各验证一次；结果一致，跳过有原因 |
-| 关键不变量 | 指定验收集的越权、错误关联、关键数值错误、未批准写入、重复副作用为 0 |
-| 合法任务 | 保留成功路径；强制案例逐项通过，探索集单独报告完成率和样本量 |
-| 完整性 | 必选场景依赖和明细完整，汇总可与底层逐项核对 |
-| 证据 | 每个结论可定位对象、模式、来源、时间；缺失可见 |
-| 性能 | 工具与端到端 p50/p95、排队、token、API 请求数、并发量 |
-| 初始预算 | 可先试设工具 p95 ≤3 秒、单任务端到端 p95 ≤30 秒；实测后按硬件/任务冻结，未达标说明原因 |
-| 恢复 | 超时/断流有终态，后续请求可恢复，未知写入可对账且不重复 |
-| 使用价值 | 至少 10 个业务日实际非零使用，比较人工耗时并记录错误与误拒绝 |
+WWI query and E2 action profiles share ports and need planned switching or a labeled recording. Simulated roles demonstrate technical separation, not an actual independent human approver.
 
-不能用总通过率掩盖越权，用全部拒绝证明安全好用，或从 10 日观察推出全年高可用。现有 90 秒运行上限属于保护边界，与用户体验延迟目标是不同指标。
+### 8.3 Release materials
 
-## 8 前端与面试展示
+README introduction/one recommended startup, actual architecture page, three pinned scripts, short video/backup recording, test/evaluation/performance reports, limits/contributions. Four short decisions: why retain ERP/CRM, deterministic business facts, UNKNOWN, and modular monolith. Retain data origin/licenses; publish no credentials/private business data.
 
-### 8.1 围绕业务任务组织界面
+| Interview question | Evidence to prepare |
+| --- | --- |
+| Why not arbitrary model SQL? | Contracts/minimum fields/scope |
+| Why does login not stop all unauthorized reads? | Old mapping versus current relation probe/fix |
+| What if write succeeds but response is lost? | UNKNOWN/exact ID/readback/dedup |
+| What if data changes after approval? | Revision/binding/preflight |
+| How is correctness established? | Independent gold, scorer counterexamples, final facts, holdouts |
+| How do multiple users work? | Scope/concurrency/limits/locks/multiprocess limitations |
+| What is personal work? | ETL/maps/domain/protocol/history/ledger/evaluation; upstream separately |
 
-在已有证据卡片、会话历史和动作页面上增加“客户经营情况”“订单异常”“采购到货”三个入口，同时保留自由问答。客户摘要与订单详情提供固定视图，集中显示联系人、订单、状态、来源和异常，动作能跳到提案及执行记录。
+Backend interviews emphasize authority/transactions/idempotency/SQL/testing; AI emphasizes facts/evaluation/protocol/budgets; full-stack adds interaction/recovery. Resume numbers must be actual measurements.
 
-长表格提供过滤、稳定排序和真实分页；先显示业务结论及缺失信息，技术 ID、参数与版本放入可展开诊断区。审批页面清楚显示对象、内容、副作用、版本和有效期；错误有下一步操作。
+## 9. Historical phased estimates
 
-本次没有截图或交互审查，以上是基于代码结构的产品规划，不是已完成的视觉/无障碍审计。后续覆盖键盘、焦点、流式状态播报、小屏表格和错误提示。
+### 9.1 Assumptions
 
-### 8.2 十分钟演示
+One familiar developer with working model/business environments: interview-ready version **80–130 hours**, roughly **6–9 weeks at fifteen hours/week**. Individual stages summed to 76–122 hours plus integration margin. New machines/external outages/major rework were extra.
 
-| 时间 | 演示 | 证明的能力 |
-|---|---|---|
-| 0 到 1 分钟 | 用户、两套系统、个人负责范围 | 定位与业务理解 |
-| 1 到 3 分钟 | 客户消歧、联系人、订单、证据回查 | 跨系统事实查询 |
-| 3 到 5 分钟 | 换属/范围限制或交付证据不足 | 权限与不确定性 |
-| 5 到 7 分钟 | 隔离环境中的 Task 提案、独立身份审批、回读 | 受控执行与职责分离 |
-| 7 到 9 分钟 | 响应丢失、重复请求、对账恢复证据 | 分布式副作用处理 |
-| 9 到 10 分钟 | 测试、延迟和限制 | 工程交付与取舍 |
+One deeper chain added **60–100 hours**; operations **30–50 hours**, plus at least ten business days of actual observation. Under deadlines, cut new features, not correctness/reproduction. These estimates are historical plans, not completed labor or current fresh estimates.
 
-WWI 查询与 E2 动作演示使用不同 profile 且共享端口，需要提前安排切换，或用明确标识的录像展示另一条路径。两个模拟角色可展示权限分离，但不等于真实独立审批人验收。
+### 9.2 Interview-ready version
 
-### 8.3 发行材料
+| Stage | Hours | Work | Exit/dependency |
+| --- | --- | --- | --- |
+| A Reproduction | 8–12 | Fixtures, hidden dependencies, offline entry, versions/modes | No prerequisite; tracked-copy pass |
+| B Correctness | 24–40 | I01 relations, I02 grading, I03 modes, negatives/valid controls | A baseline; three probes permanently repaired |
+| C Integration/demo | 24–40 | Isolated DB, CS40/model repeats, browser/I07, performance | B; mandatory layered evidence |
+| D Release | 20–30 | Task views/evidence, startup/self-check, video/decisions/scripts/summary | A–C; another clean environment and ten-minute demo |
 
-交付 README 首屏介绍及唯一推荐启动路径、一页真实架构说明、三条固定数据演示脚本、短视频与备用录像、测试/评测/性能报告、当前限制和个人贡献清单。
+Operator implements/self-reviews actual diffs/cases. Prepare documentation/video/business questions during waits; independent real-write approval remains. If actual APIs are unavailable, deliver a labeled snapshot/simulated interview build with live disabled/unaccepted; it cannot receive enterprise pilot release.
 
-补四份简短设计决策：为何保留 ERP/CRM，为何业务计算确定化，为何需要 UNKNOWN，为何采用单体模块化。公开样例保留来源，检查依赖与数据使用许可，公开材料中排除真实凭据和业务数据。
+### 9.3 Business-depth version
 
-| 面试追问 | 应准备的证据 |
-|---|---|
-| 为什么不让模型直接查库执行 SQL | 工具合同、最小字段、scope |
-| 登录后为什么还可能越权 | 历史映射与当前关系不同的探针及修复测试 |
-| 写成功但响应丢失怎么办 | UNKNOWN、目标 ID、回读、防重 |
-| 审批后数据变了怎么办 | 内容版本、审批绑定、执行前再核验 |
-| 怎样证明答案正确 | 独立 gold、评分器反例、最终事实、留出集 |
-| 多用户如何运行 | 并发范围隔离、限流、锁、多进程限制 |
-| 哪些是个人实现 | ETL/映射、领域工具、协议处理、会话、账本、评测；底层产品单列 |
+60–100 hours for one chain, not both complete sales and purchasing. Prefer customer operations with opportunity/activity/delivery/invoice/balance reads, or fulfillment/arrival for supply-chain needs.
 
-后端岗位重点讲权限、事务、幂等、SQL 与测试；AI 应用岗位重点讲事实合同、评测、协议和预算；全栈岗位补充交互与错误恢复。简历只填写实际测量的准确率、延迟和收益。
+| Package | Deliverable | Exit |
+| --- | --- | --- |
+| Rules | Roles/authority/state/relations/scope/amount/date | Explain every field with normal/exception examples |
+| Data | Normal/partial/missing/cancel-return/partial payment | Complete dependencies and source/mode labels |
+| Adapters | Read APIs/IDs/line links/time | Independent source agreement, truthful denials/partial failures |
+| Agent | Summary/exception with existing capabilities first | New independent gold on required facts/evidence |
+| Views | Customer/order chain/exception/provenance | Understandable without technical parameters |
+| Follow-up | Existing Task; new action separately contracted | Approval/dedup/version/disconnect recovery |
 
-## 9 分阶段执行路线
+Invoice/payment initially read-only; posting/refund/stock/external email require separate release.
 
-### 9.1 工作量假设
+### 9.4 Enterprise read-only pilot
 
-按一人、熟悉代码、现有模型及业务环境可用估算。面试可信版约 **80 到 130 小时**，每周投入 15 小时约 **6 到 9 周**。各阶段合计 76 到 122 小时，取整留出小幅集成余量；新机器准备、外部服务故障和大范围返工另计。
+30–50 operations hours plus at least ten business days. Start on an accepted limited read scope without waiting for every expansion:
 
-后续接入一条较完整业务链约增加 60 到 100 小时，运维完善再增加 30 到 50 小时，并另需至少 10 个业务日真实观察。截止日期紧时削减新增功能，保留正确性和复现门槛。以下工作包均为计划，不代表已经执行。
+1. Actual identity/scope/browser/network acceptance.
+2. I13 received alerts/off-host backup/isolated restore with measured loss/time.
+3. I08 five sessions/degradation/rollback, explicit single-host/multi-instance limits.
+4. One actual user/few customers recording requests/errors/time/unknowns/benefit daily.
+5. Applicable O01–O08 then release only evidenced reads; writes still independent.
 
-### 9.2 面试可信版
+Add certificate/key rotation, identity persistence, store/backup retention, access-audit export, minimum accounts, upgrade compatibility. Bind operations/restore evidence to one release/schema.
 
-| 阶段 | 工时 | 主要任务 | 依赖及退出条件 |
-|---|---|---|---|
-| A 复现基线 | 8 到 12 | 合成夹具、清理隐式依赖、离线测试入口、版本与模式清单 | 无前置；跟踪文件副本回归通过 |
-| B 正确性修复 | 24 到 40 | I01 对象核验、I02 最终事实评分、I03 履约边界；反例与合法路径 | 依赖 A 的稳定回归；三个探针转为永久回归并通过 |
-| C 集成与展示验收 | 24 到 40 | 隔离 PostgreSQL、CS40、模型重复评测、浏览器关键路径、I07 浏览器补验、性能基线 | 依赖 B；强制案例通过，API/模型/浏览器分别记录 |
-| D 面试发行版本 | 20 到 30 | 任务入口与证据呈现、启动/自检、录像、设计决策、脚本、发行摘要 | 依赖 A–C；另一干净环境按文档可运行，十分钟演示完成 |
+### 9.5 Demand-led expansion
 
-默认由项目操作者实施和自检，逐项对照验收案例审查实际 diff。文档、录像准备和业务问题定义可在等待评测时推进；企业写入的独立审批人要求继续保留。
+Incremental sync/multiple warehouses/companies/users/reporting/service/writes belong to E6. Specify benefit/authority/permission/faults/recovery/regressions. Change the model/product positioning for manufacturing/POS/industry traceability only when needed.
 
-真实 API 环境暂不可用时，可以交付清楚标识的快照/模拟面试版，关闭未验证 live 能力，把真实 API 标为未验收。这样的版本不能获得企业试运行放行。
+## 10. First batch proposed then
 
-### 9.3 业务扩展版
+20–30 hours to stabilize reproduction and the first correctness repair, not finish all P0:
 
-**约 60 到 100 小时，一次完成一条业务链。** 推荐先做客户经营概览，接入商机/活动、交付、发票/余额的只读事实；若岗位或行业更重供应链，则先做订单履约和采购到货。
+| Order | Task | Reviewable output |
+| --- | --- | --- |
+| 1 | Freeze baseline/three probes | Version, simulated inputs, independent expected/actual, old evidence |
+| 2 | Self-contained fixtures | Tracked copy passes without personal history |
+| 3 | Repair current customer/supplier/company I01 | Reassignment rejection/valid controls; shared MCP/Agent |
+| 4 | Permanent wrong-answer/live-frozen regressions | Accurate before-fix failure matching probes |
+| 5 | Remaining I02/I03 and status | Carry unfinished work forward with disabled scope |
+| 6 | Owned PostgreSQL/CI baseline | Actual database execution/clean install evidence |
 
-| 工作包 | 产出 | 完成标准 |
-|---|---|---|
-| 业务规则 | 角色、字段权威、状态、关系、权限、金额/日期口径 | 用正常及异常样例解释每个字段 |
-| 数据准备 | 正常、部分交付、缺信息、取消/退货、部分付款场景 | 单据依赖完整，公开/模拟/live 来源有标识 |
-| 事实适配器 | 新单据只读接口、稳定 ID、行级关联、来源时间 | 源系统独立核对一致；越权及部分失败正确 |
-| Agent | 摘要、异常解释，优先复用已有工具 | 最终事实与证据通过新增 gold 案例 |
-| 业务视图 | 客户详情或订单单据链、异常定位和回查 | 用户不读技术参数也能理解结论 |
-| 内部跟进 | 复用现有 Task；新增动作另立合同 | 审批、防重、版本变更、断连恢复通过 |
+I05 mapping/dry-run could proceed, but currency/USD assumption/EUR target/stock-Item conflicts needed policy first. Complete readback/idempotent rerun after import; volume is not semantic correctness. Much of this first batch was later implemented; consult current status before scheduling it again.
 
-销售完整链和采购完整链不能都计入同一 60 到 100 小时估算。发票/付款先做只读，正式过账、退款、库存调整和对外邮件作为后续独立能力验收。
+## 11. Risks and scope
 
-### 9.4 企业只读试运行版
+| Risk | Effect | Response |
+| --- | --- | --- |
+| Expansion outruns evidence | More tools, unproven facts | One chain, gold/scope first |
+| Local hardware | Interview startup/latency | Document resources, model-free check, labeled recording |
+| Upstream change | Adapter/readback breaks | Pin accepted versions and test contracts |
+| WWI semantics | Currency/delivery/replenishment misunderstanding | Assumptions/unknowns and separate simulation |
+| Shared state/cache | Hidden scope/concurrency issues | Test/isolate before optimizing/scaling |
+| Simulated-only evidence | No actual-user proof | Separate layers and nonzero actual enterprise use |
+| Duplicate/stale docs | Narrative/code disagreement | One current queue and shared release evidence |
 
-**约 30 到 50 小时运维建设，加至少 10 个业务日观察。** 可在已有有限只读范围通过验收后进行，不要求等待所有业务扩展完成。
+Prioritize correctness/reproduction/one chain. Defer unjustified microservices/Kubernetes/multi-agent/vector stores/full ERP UI replication/full sample import. Sync needs freshness demand; retrieval needs an actual document/email task; extra agents need a demonstrated single-agent bottleneck. Measure benefit and maintenance.
 
-1. 完成实际用户身份、范围、浏览器与适用网络边界验收。
-2. 完成 I13 的告警接收、异机备份和隔离恢复，记录恢复时间及数据损失窗口。
-3. 完成 I08 的五并发、失败降级和版本回退，说明单机与多实例边界。
-4. 选择一位使用者和少量客户，每日记录请求、错误、耗时、缺失信息和收益。
-5. 通过 E5 适用的 O01–O08 后，仅开放明确的只读能力；写入仍需独立审批人与专项验收。
+Each package records state/dependency/reviewer/version/evidence/unexecuted layers. Invariants pass individually; performance/benefit include distributions/counts. The proposed next assessment followed stage B to check repaired probes/reproduction/database before selecting C.
 
-除已有保护外，运行配置需要补齐证书/密钥轮换、身份持久化、日志与备份保留、访问审计导出、最小权限账号及升级兼容性验证。运维状态、告警和恢复证据应关联同一发行版本，避免恢复旧数据后无法对应当前 schema。
+## 12. Verification and references
 
-### 9.5 按需扩展版
-
-增量同步、多仓、多公司、多人组织权限、复杂报表、客服及更多写入进入 E6。每次明确业务收益、来源权威、权限、异常、恢复和回归范围。确需制造、零售 POS 或行业追溯时，再调整模型与产品定位。
-
-## 10 首个工作批次
-
-建议先安排 20 到 30 小时，目标是稳定修复基线和首个正确性修复，不要求一次做完整个 P0。
-
-| 顺序 | 任务 | 可检查的完成物 |
-|---|---|---|
-| 1 | 固定评估基线和三个问题 | 版本、模拟输入、独立预期、实际结果；保留历史证据 |
-| 2 | 最小自足夹具 | 跟踪文件副本可回归，不读取个人历史目录 |
-| 3 | 核验实时 customer/supplier/company 并修复 I01 | 换属拒绝与合法成功回归通过；MCP/Agent 共用规则 |
-| 4 | 错误最终答案、live 固定履约纳入永久回归 | 修复前能准确失败，与本次探针一致 |
-| 5 | 完成 I02/I03 剩余修复并更新状态 | 超出批次预算则进入下一批，明确未完成项与禁用能力 |
-| 6 | PostgreSQL 隔离作业与 CI 基线 | 数据库组明确执行，干净安装结果可追溯 |
-
-I05 的 WWI 首批导入可先做映射分析和 dry-run，但现有币种假设、目标 EUR 环境和 Item 库存属性冲突必须先确定政策。导入后完成完整回读与幂等重跑，不以增加数据量替代语义确认。
-
-## 11 风险与范围管理
-
-| 风险 | 对计划的影响 | 处理方式 |
-|---|---|---|
-| 功能扩张快于验证 | 工具变多但无法证明正确 | 每次只扩展一条业务链，先定义 gold 和权限 |
-| 本地模型硬件依赖 | 面试现场无法启动或延迟不可控 | 写清资源，提供工具自测与明确标识的备用录像 |
-| 上游版本或字段变化 | 适配器及动作回读失效 | 固定已验收版本，运行契约测试再升级 |
-| WWI 语义不足或冲突 | 币种、交付和补货关系被误解 | 保留假设和未知值，合成场景独立标记 |
-| 共享可变状态或缓存优化 | 并发和权限出现隐藏问题 | 先压测和范围隔离验证，再扩大并发/缓存 |
-| 只有模拟证据 | 无法证明真实用户可用 | 运行层分开记录，企业试运行必须真实非零使用 |
-| 文档重复与状态失真 | 面试叙述和代码不一致 | I01–I13 集中维护，发行摘要引用同一证据 |
-
-当前先投入正确性、复现和一条业务链。暂缓缺乏实际需求的微服务拆分、Kubernetes、多 Agent 编排、通用向量数据库、完整 ERP 页面复制和全量样例导入。
-
-持续同步要有新鲜度需求；文档检索要有合同、邮件或说明书等任务；多 Agent 要能证明单一 Agent 的任务瓶颈。技术选型应有可观察收益和维护成本。
-
-每个工作包记录状态、依赖、验收人、代码版本、证据路径和未执行层次。关键不变量逐项通过/失败，性能与收益按样本量和分布报告。下一次复评安排在阶段 B 完成后，确认三个问题、干净检出和数据库执行情况，再决定阶段 C 重点。
-
-## 12 验证方式与参考入口
-
-本次本机回归命令主动移除了数据库测试配置：
+Actual safe command used for this review:
 
 ```bash
 env -u OPERION_TEST_ACTION_DATABASE_URL \
@@ -414,22 +377,14 @@ env -u OPERION_TEST_ACTION_DATABASE_URL \
   .venv/bin/python -m unittest discover -s tests -q
 ```
 
-跟踪文件副本验证方法：读取 `git ls-files -z`，把常规文件复制到临时目录，使用现有 Python 解释器、该副本的 `src` 和同一 unittest 命令。没有复制忽略数据，也没有修改当前业务数据或访问真实 API。
+Tracked-copy method used `git ls-files -z`, copied ordinary tracked files to a temporary directory, and used the existing interpreter with copied source and the same unittest command. No ignored data, real business changes, or actual API access.
 
-| 探针 | 输入 | 实际结果 | 修复后预期 |
-|---|---|---|---|
-| I01 | 同一来源订单键；快照客户 A；上游 customer B、company OTHER-COMPANY；scope 仅 A | 返回 A、321.00、authorized | 拒绝或关系不可验证，不输出错误归属数据 |
-| I02 | 工具为 0 张订单，答案为“一百张订单” | `grade_case` 返回 `[]` | 关键事实不一致，评分失败 |
-| I03 | live 仓库调用 F01，模拟客户端统计调用次数 | 0 次上游调用，satisfiable，snapshot/frozen 标记 | 固定案例仅在明确演示能力内可用，不证明实时履约 |
+| Probe | Input | Observed | Required after repair |
+| --- | --- | --- | --- |
+| I01 | Same source order, snapshot A, live B/OTHER-COMPANY, scope A | A/321.00/authorized | Deny or unverifiable relation |
+| I02 | Tool zero orders; answer claiming one hundred | `grade_case` returned `[]` | Fail critical mismatch |
+| I03 | Live F01 with counted fake client | Zero upstream calls, satisfiable, snapshot/frozen markers | Demo-only; no live proof |
 
-主要仓库依据：
+Repository references: [queue/original findings](improvement-plan.md), [gateway scope](gateway-acceptance.md), [interview evidence](../interview-readiness.md), [human responsibilities](../human-functions-agent-map.md), [E5 gates](phases/e5-enterprise-pilot.md), [action contract](../../contracts/e3-action-control-v1.md), [Task contract](../../contracts/e4-followup-task-v1.md).
 
-- [当前执行队列和原始发现](improvement-plan.md)
-- [网关验收范围与未完成项](gateway-acceptance.md)
-- [面试数据及历史验收](../interview-readiness.md)
-- [人工业务与 Agent 分工](../human-functions-agent-map.md)
-- [E5 实际运行门槛](phases/e5-enterprise-pilot.md)
-- [动作控制合同](../../contracts/e3-action-control-v1.md)
-- [内部 Task 写入合同](../../contracts/e4-followup-task-v1.md)
-
-外部对照使用 ERPNext、Twenty 和 OWASP 官方资料，链接附于对应结论。当前在线文档不能替代实际安装版本的 API 契约验收。本次交付为评估与规划，业务功能修复和新功能开发尚待按上述批次执行。
+External references above were official ERPNext/Twenty/OWASP material used in the original assessment, not a current-version audit. Installed APIs still need acceptance. This deliverable was assessment/planning; later implementations and their separate results are linked in the historical notice, never backfilled into this run.

@@ -10,9 +10,11 @@ npm ci
 npm run dev
 ```
 
-Use Node.js 22 or newer. The current dependency lock also builds under Node
-20.20, but one transitive `nanoid` package declares Node 22 as its supported
-minimum.
+Use Node.js 22.18 or newer for the implemented session/navigation checks and
+current CI/deployment baseline. A historical build passed under Node 20.20 with
+engine warnings (including the transitive `nanoid` minimum); that does not establish support for today's complete Web checks.
+Run `scripts/verify.sh web` from the repository root for session/navigation tests,
+TypeScript, the webpack production build, and server-rendered access checks.
 
 The active conversation ID is kept in local storage. Message history and tool
 authorization remain authoritative in the Python service.

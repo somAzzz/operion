@@ -1,3 +1,5 @@
+Historical generation prompt for architecture.png. Its explicit-claim-check wording predates the current structured AnswerPlan / EvidenceRegistry architecture. Retained for provenance, not as current implementation guidance. See README.md and docs/enterprise/structured-answer-evidence.md for the current design.
+
 Generated using the built-in GPT Image tool.
 Style reference: pipeline.png.
 

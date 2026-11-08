@@ -1,16 +1,14 @@
-# E4 内部跟进任务运行手册
+# E4 internal follow-up Task runbook
 
-E4 在 E3 动作账本上启用唯一真实适配器 `twenty.followup_task`。仅用于公开/模拟数据的隔离演示 workspace。
+E4 enables only `twenty.followup_task` on the E3 ledger, in the isolated public/simulated demonstration workspace. Enterprise use additionally obeys [E5 gates](e5-enterprise-pilot.md).
 
-## 凭据隔离
+## Credential separation
 
-三个进程使用不同能力：
+- Agent: read-only Twenty/ERPNext credentials and restricted action-database identity; proposal creation only.
+- Action API: ledger credential, no Twenty write key.
+- Worker: ledger, dedicated Twenty write key, and ERPNext read key.
 
-- Agent：只读 Twenty/ERPNext 凭据和受限动作数据库身份；只能创建提案。
-- Action API：动作数据库身份；不持有 Twenty 写密钥。
-- Worker：动作数据库身份、Twenty 专用写密钥和 ERPNext 只读密钥。
-
-Agent 不读取包含管理员 key 的 `.env` 文件。启用提案前，把只读值作为该进程的环境变量显式注入：
+Agent must not load an admin-key `.env`. Inject only the intended read values explicitly:
 
 ```bash
 export OPERION_ENABLE_FOLLOWUP_PROPOSALS=1
@@ -19,11 +17,11 @@ export OPERION_ACTION_TENANT_ID='operion-demo'
 export OPERION_FOLLOWUP_ASSIGNEE_ID='<fixed Twenty workspace-member UUID>'
 export TWENTY_API_KEY_READ_ONLY='<read-only key>'
 export ERPNEXT_API_KEY_READ_ONLY='<api-key:api-secret>'
-# 同时设置 E2 的 canonical、identity map、scope 和 observation 环境变量
+# Also set E2 canonical, identity-map, scope, and observation variables.
 uv run operion-agent
 ```
 
-Action API 的提案人和审批人必须是不同服务端身份。审批人配置示例：
+Proposer and approver are different server identities. Approver example:
 
 ```bash
 export OPERION_ACTION_USER_ID='e4-approver'
@@ -34,60 +32,61 @@ export OPERION_ACTION_CAN_APPROVE=1
 uv run operion-action-api
 ```
 
-Worker 才能读取 `.env` 中的 `TWENTY_API_KEY`：
+Only Worker may load `TWENTY_API_KEY` from `.env`:
 
 ```bash
 export OPERION_ACTION_DATABASE_URL='postgresql://restricted-action-login@...'
 uv run operion-action-worker --once --worker-id e4-worker-1
 ```
 
-不要把写 key 配置到 Next.js、Agent、MCP 或 Action API。
+Never configure the write key in Next.js, Agent, MCP, or Action API.
 
-## 操作流程
+## Operation
 
-1. Agent 先运行 `check_fulfillment`，只对确定的 `shortfall` 调用 `propose_followup_task`。
-2. 在 `/approvals` 核对 Company、ERPNext order、负责人、title/body、dueAt、修订、摘要和三项副作用。
-3. 由不同身份批准 exact revision。
-4. Worker 原子领取并在发送前复核当前 Company、order 和 assignee。
-5. `/actions/{action_id}` 观察事件；只有 `SUCCEEDED` 才打开 Twenty Task 链接。
+1. Agent runs `check_fulfillment`, proposing only a verified `shortfall` through `propose_followup_task`.
+2. On `/approvals`, check Company, ERPNext order, owner, title/body, dueAt, revision, digest, and all three effects.
+3. A different identity approves the exact revision.
+4. Worker atomically claims and revalidates current Company/order/assignee before sending.
+5. Follow `/actions/{action_id}` events; only `SUCCEEDED` permits presenting the verified Twenty Task link.
 
-`UNKNOWN`、`RECONCILING` 或 `MANUAL_REVIEW` 时禁止重新提案或手工重复创建。恢复租约过期动作：
+For UNKNOWN/RECONCILING/MANUAL_REVIEW, do not submit another proposal or manually duplicate creation. Recover expired leases:
 
 ```bash
 uv run operion-action-worker --recover --worker-id e4-recovery-1
 ```
 
-立即对账一个 `UNKNOWN/RECONCILING` 动作：
+Immediately reconcile a specific UNKNOWN/RECONCILING action:
 
 ```bash
 uv run operion-action-worker --reconcile <action_id> --worker-id e4-recovery-1
 ```
 
-## 验收复现
+## Reproduce acceptance
 
-准备隔离 PostgreSQL，按 E3 手册运行迁移，然后：
+Prepare isolated PostgreSQL and migrate under the E3 runbook. The evaluator needs that separate isolated database; never use a business database. Keep historical output intact by selecting a new report directory for new runs.
 
 ```bash
 export OPERION_TEST_ACTION_DATABASE_URL='postgresql://...'
 uv run ruff format --check src tests
 uv run ruff check .
-uv run python -m unittest discover -s tests -q
+scripts/verify.sh offline
+scripts/verify.sh postgres
 uv run operion-evaluate-e4 \
   --database-url "$OPERION_TEST_ACTION_DATABASE_URL" \
   --live-report reports/enterprise/e4/20260920T-followup-task/live-fault-evaluation.json \
   --output reports/enterprise/e4/20260920T-followup-task/w01-w15.json
-cd apps/web && npm run build
+scripts/verify.sh web
 ```
 
-真实故障演练必须使用新的 action ID，并确认：批准前不存在 Task；响应丢失后为 `UNKNOWN`；按 action ID 回读恢复；双 Worker 仅一方领取；租约过期先对账；Task 和 TaskTarget 各唯一且字段完全匹配。
+Real fault drills use new action IDs. Check zero Tasks before approval; UNKNOWN after response loss; exact-ID recovery; one claim with two Workers; reconciliation before resending after lease expiry; one Task/TaskTarget with exact fields.
 
-## 暂停、异常与补偿
+## Pause, faults, and compensation
 
-- 发现错误目标、重复 Task 或未知外部通知：立即暂停 `twenty.followup_task`。
-- precondition 变化：保留 `CONFLICT`，重新生成提案，不覆盖旧批准。
-- Task 内容或确定性 ID 不符：保持 `MANUAL_REVIEW`，比较 Twenty 与动作修订。
-- Task 已创建但 Target 缺失：只允许 recovery 按确定性 Target ID 补齐。
-- 验收/错误 Task：授权人员在 Twenty 标记 `DONE`；记录 action ID 和原因，不数据库删除。
-- 新增成员、邮件、workflow 或通知能力后，在恢复写入前重跑 side-effect probe。
+- Wrong target, duplicate Task, or unknown external notification: pause `twenty.followup_task` immediately.
+- Changed precondition: retain CONFLICT; create a new proposal, never overwrite old approval.
+- Wrong content/deterministic ID: retain MANUAL_REVIEW and compare target/revision.
+- Task present/Target absent: only recovery may complete the deterministic Target.
+- Authorized people mark test/erroneous Tasks DONE in Twenty and record action/reason; no database deletion.
+- Reprobe effects after membership/email/workflow/notification changes before resuming writes.
 
-E4 通过只授权隔离演示的内部 Task 创建。企业登录、真实数据、长期审计备份、告警和发布流程属于 E5。
+E4 releases only isolated internal Task creation. Actual identity/data, durable audit/backups, alerts, and release operations require E5 plus independent write-specific acceptance.

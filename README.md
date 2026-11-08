@@ -1,7 +1,5 @@
 # Operion
 
-English | [中文](README.zh-CN.md)
-
 Operion is a controlled business agent layer built on top of Twenty CRM and
 ERPNext. Agent and MCP workflows are the product focus; the business systems and a
 lightweight ETL pipeline provide governed facts and tools.
@@ -17,16 +15,33 @@ search, consolidation, recommendations, and narrowly controlled execution.
 
 ## Architecture
 
-![Operion architecture: read-only Agent and MCP services, independently approved actions, data preparation, and optional telemetry](docs/imgs/architecture.png)
+The current architecture uses shared deterministic business services, server-owned
+workflow/authorization state, and closed evidence plans with server rendering.
+The diagram is a component map, not E5 deployment or production approval.
 
-Architecture reviewed against the current implementation. This is a
-component map; optional services are enabled separately, and the diagram does
-not imply E5 production or real-data pilot approval.
+```mermaid
+flowchart TB
+  Browser[Business user / approver] --> Gateway[Trusted ingress in enterprise mode]
+  Gateway --> Web[Next.js / assistant-ui]
+  Web -->|AG-UI| Agent[FastAPI / Pydantic AI Agent]
+  Agent -->|OpenAI-compatible API| Model[SGLang / qwen3.8-27b]
+  Agent -->|Python tools| Domain[Shared deterministic read services]
+  MCPClient[MCP client] --> MCP[Separate stdio MCP server]
+  MCP --> Domain
+  Domain --> Source[Canonical snapshot or read-only Twenty / ERPNext]
+  Agent -->|present_answer / AnswerPlan| Evidence[EvidenceRegistry validation and deterministic rendering]
+  Evidence -->|Verified final answer| Web
+  Agent -->|Eligible proposal only| Ledger[(PostgreSQL action ledger)]
+  Web -->|REST / independent approval| ActionAPI[Action API]
+  ActionAPI -->|Immutable decision| Ledger
+  Ledger -->|Approved immutable revision| Worker[Separate Action Worker]
+  Worker -->|Preflight / restricted write / exact readback| Task[Twenty internal Task]
+```
 
-The diagram separates browser access, Agent/MCP reads, controlled actions, and
-data/telemetry flows. Repeated endpoint names refer to the same component;
-arrows show requests or operations, rather than response data. Components inside
-the Agent service boundary run within that service.
+Action services are separately enabled and absent from the read-only gateway
+stack. SQLite holds trusted conversation history; the server enforces ambiguity
+selection, execution gates, run limits, and evidence validity. Optional telemetry
+observes these paths without authorizing them.
 
 - **Web and identity:** Next.js / assistant-ui provides conversations, evidence,
   approvals, and action status. Server routes proxy AG-UI/SSE and action requests.
@@ -34,9 +49,10 @@ the Agent service boundary run within that service.
   login sessions; enterprise services enforce OIDC identity and server-side scope.
 - **Agent and evidence:** FastAPI hosts the Pydantic AI runtime, calling local
   SGLang through an OpenAI-compatible API. SQLite holds trusted conversation
-  history. Tool permissions, run budgets, and output checks against tool evidence
-  constrain execution and final answers; these checks do not prove arbitrary
-  natural-language claims.
+  history. Tool permissions and run budgets constrain execution. The model selects
+  current-run evidence through `present_answer` / `AnswerPlan`; `EvidenceRegistry`
+  validates it and the server renders the final answer. Free-form business prose
+  is not a fallback. Evidence support does not prove user-task completion.
 - **Shared read services:** the Agent calls Python business tools directly;
   the separate stdio MCP server exposes the same repository services to MCP
   clients. Snapshot mode reads canonical CSV and an identity map; live mode
@@ -52,16 +68,18 @@ the Agent service boundary run within that service.
   connect them to business systems. Optional OpenTelemetry traces flow through
   a Collector to Langfuse; telemetry does not authorize actions.
 
-The image was generated with GPT Image using the built-in image-generation tool;
-the [generation prompt](docs/imgs/architecture.prompt.txt) is retained
-for future updates. Operational details: [Agent](ops/e2-agent.md),
+The [older generated illustration](docs/imgs/architecture.png) and its
+[generation prompt](docs/imgs/architecture.prompt.txt) are retained as historical
+design artifacts. Their explicit-claim-check wording predates the closed evidence
+plan; use the diagram above and current contracts for implementation.
+Operational details: [Agent](ops/e2-agent.md),
 [actions](ops/e3-action-control.md), [gateway](ops/auth-gateway.md), and
 [telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md).
 
 ## Current status
 
-E0 through E4 have passed. The
-project currently includes:
+E0 through E4 passed their historical experimental acceptance scopes. The
+current worktree includes:
 
 - a reproducible Wide World Importers download and minimal ETL pipeline;
 - canonical records and target mappings for Twenty and ERPNext;
@@ -83,9 +101,11 @@ project currently includes:
 - one separately approved Twenty internal follow-up Task path with deterministic
   IDs, exact readback, and recovery after response loss or worker crashes.
 
-The E2 baseline passes all 15 behavior cases three times and all seven model
-compatibility probes. E3 passes W01-W15 against a persistent stub, and E4
-repeats the applicable gates against Twenty 2.39.0. Writes remain limited to one
+The historical E2 baseline recorded 15 behavior cases repeated three times and
+all seven compatibility probes passing. E3 recorded W01-W15 against a persistent
+stub; E4 repeated applicable gates against isolated Twenty 2.39.0. Selected later
+structured-answer acceptance does not replace a full repeated evaluation after
+contract changes; that revalidation remains in the current queue. Writes remain limited to one
 internal Task in the isolated public/simulated demo workspace; E5 enterprise
 identity, real-data controls, monitoring, and release operations are not yet
 approved.
@@ -93,7 +113,7 @@ The next operational gate is an E5 single-operator, read-only pilot. The immedia
 implementation priority is live cross-system correctness and final-answer
 evaluation, followed by the first complete WWI import batch and measured
 expansion. See the [prioritized improvement plan](docs/enterprise/improvement-plan.md)
-(Chinese) for findings, dependencies, and acceptance criteria. Historical E0–E4
+for findings, dependencies, and acceptance criteria. Historical E0–E4
 passes remain limited to their tested scope. The pilot does not authorize
 real-data writes, which still require an independent approver and a separate gate.
 
@@ -123,6 +143,31 @@ use cases and expected answers
   → synchronization when justified
 ```
 
+## Documentation
+
+The repository maintains one English documentation set. Supported application
+answer languages and multilingual evaluation fixtures are unchanged.
+
+- [Architecture decision and development boundaries](docs/architecture/adr-001-deterministic-agent.md)
+- [Agent / MCP capability boundaries](docs/agent-boundaries.md)
+- [Structured answers and evidence](docs/enterprise/structured-answer-evidence.md)
+- [Enterprise documentation index](docs/enterprise/README.md): current implementation, historical acceptance, and pending operational gates.
+- [Current improvement queue](docs/enterprise/improvement-plan.md): remaining task evaluation, live correctness, WWI import, and E5 work.
+- [Human workflows and Agent responsibilities](docs/human-functions-agent-map.md)
+- [Minimum demo and original evaluation cases](docs/minimum-demo.md)
+- [Agent API](contracts/e2-agent-api-v1.md), [action control](contracts/e3-action-control-v1.md), [follow-up Task](contracts/e4-followup-task-v1.md), and [enterprise boundary](contracts/e5-enterprise-boundary-v1.md) contracts.
+- [Agent](ops/e2-agent.md), [actions](ops/e3-action-control.md), [follow-up Task](ops/e4-followup-task.md), and [single-operator pilot](ops/e5-enterprise-pilot.md) runbooks.
+- [Gateway](ops/auth-gateway.md), [telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md), [navigation access](docs/enterprise/navigation-access.md), and [session-expiry login](docs/enterprise/session-expiry-login.md).
+- [Data storage](data/README.md), [simulated demo data](ops/interview-demo-data.md), and [WWI interview data](ops/interview-wwi-data.md).
+
+Current implementation also includes server-owned ambiguity selection, cross-turn
+candidate validation, and content-free budget diagnostics. The default run allows
+six business calls and eight model requests, with a 60-second deadline. Gateway
+and interview profiles explicitly override some limits; see the Agent API and
+profile configuration. Implementation, historical acceptance, and operational
+release are separate states: E5 actual-user observation, operational evidence,
+and real-data writes remain unapproved.
+
 ## Repository layout
 
 ```text
@@ -147,8 +192,8 @@ Business data and generated reports are excluded from version control by default
 
 Within `src/operion_etl`, `agent_app.py` / `agent_runtime.py` implement the Agent,
 `read_tools.py` / `mcp_server.py` implement the shared query layer,
-`output_guardrails.py` / `answer_claims.py` / `business_facts.py` check answer
-evidence, and `session_store.py` stores conversations. `action_app.py`,
+`answer_evidence.py` / `output_guardrails.py` / `answer_presentation.py`
+validate evidence plans and render answers, and `session_store.py` stores conversations. `action_app.py`,
 `action_store.py`, `action_worker.py`, and `twenty_actions.py` implement the
 separate action lifecycle. `pipeline.py`, pre-import validators, and readback
 modules implement data preparation and reconciliation.
@@ -177,7 +222,7 @@ Offline tests use public sample inputs in tests/fixtures and need no restored WW
 Run the deterministic test suite with:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+scripts/verify.sh offline
 ```
 
 See the [runbook](ops/data-pipeline.md) for pre-import validation, Twenty loading,

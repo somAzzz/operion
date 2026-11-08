@@ -1,41 +1,58 @@
-# 人工功能与 agent 设计对照
+# Human workflows and Agent responsibilities
 
-目的：大概了解人原本需要完成哪些功能，以便设计 agent。**不要求逐项练习、熟悉全部菜单或完成软件培训。**
+Purpose: understand the business work people perform when designing the Agent. This is not a requirement to train in every menu or complete full product training. The table lists possible assistance, not a claim that each capability is currently implemented or authorized.
 
-| 功能 | 人原本做什么 | Agent 可以协助什么 | 人需要保留的判断 | 设计时关注的异常 |
-|---|---|---|---|---|
-| 客户与联系人 | 建档、查重、关联联系人、维护资料 | 搜索、候选查重、信息整理、修改预览 | 是否同一客户，哪些资料可信 | 同名、共享邮箱、多法人、缺字段 |
-| 商机与跟进 | 记录需求、阶段、负责人和下一步 | 总结历史、提示待办、起草跟进任务 | 优先级、成交判断和沟通策略 | 长期无更新、负责人缺失、历史订单误作商机 |
-| 交易客户交接 | 将 CRM 客户建立为 ERP 交易客户 | 校验必填项、生成交接预览、关联 ID | 是否开户、付款条件和信用审批 | ERP 已存在、名称变化、创建部分失败 |
-| 报价与订单 | 选商品、数量、价格、折扣和交期 | 查询价格库存、准备报价或订单草稿 | 折扣例外、承诺交期、正式确认 | 单位错误、价格过期、重复下单 |
-| 采购 | 查看需求、选供应商、确认数量与日期 | 缺货分析、采购建议、草稿准备 | 供应商选择、预算和采购承诺 | 在途重复采购、交期不确定、最小采购量 |
-| 收货与交付 | 核对实物、数量、批次，登记收发 | 显示待处理单据、核对录入差异 | 实物是否到位、质量是否可接受 | 部分到货、损坏、错批次、部分交付 |
-| 发票与收付款 | 核对交易、开票、登记与匹配支付 | 汇总待开票、应收应付和匹配候选 | 税费例外、过账、实际付款确认 | 重复发票、部分支付、币种不符 |
-| 退货与修正 | 查原单、确认原因、选择修正方式 | 追踪关联影响、提出处理步骤 | 是否批准退货、冲销或库存调整 | 已结账、已交付、关联单据不可直接修改 |
-| 客户经营查询 | 在多个页面整理订单、跟进和欠款 | 跨系统摘要、证据链接和待办建议 | 下一步行动和客户沟通 | 数据过期、金额口径不一致、无权限 |
-| 数据质量 | 查看导入错误、确认映射和重复记录 | 定位错误、分类、提出修复预览 | 缺失信息的真实含义、合并和规则变更 | 重复执行、孤立明细、错误单位 |
-| 权限管理 | 分配角色、公司和操作范围 | 解释现有权限、提示申请路径 | 授权及权限变更 | 跨公司读取、敏感字段泄露 |
+| Function | Human workflow | Possible Agent assistance | Judgment retained by people | Important exceptions |
+| --- | --- | --- | --- | --- |
+| Customers/contacts | Create, deduplicate, link, maintain | Search, candidate comparison, organize, preview | Identity and trusted sources | Duplicate names, shared email, multiple legal entities, missing fields |
+| Opportunities/follow-up | Record need, stage, owner, next step | Summarize history, reminders, Task draft | Priority, likelihood, communication | Stale opportunity, missing owner, historical order mistaken for opportunity |
+| CRM-to-ERP handoff | Establish trading customer | Validate required fields, preview, ID linking | Account opening, terms, credit | Existing ERP party, changed name, partial creation |
+| Quotations/orders | Select goods, quantities, prices, discount, dates | Query, prepare draft | Exceptions, committed dates, confirmation | UOM errors, stale price, duplicate order |
+| Purchasing | Review demand, supplier, quantity, date | Shortfall analysis, suggestions, draft | Supplier, budget, purchase commitment | Duplicate inbound, uncertain lead time, MOQ |
+| Receiving/delivery | Count/inspect goods, batches, receipts/issues | Pending documents, entry discrepancies | Physical arrival and quality | Partial receipt, damage, wrong batch, partial delivery |
+| Invoices/payments | Reconcile trade, invoice, match payment | Open invoice/receivable/payable summaries, candidates | Tax exceptions, posting, actual payment | Duplicate invoice, fees/FX, payment mismatch |
+| Inventory | Count, transfer, adjust, trace batch | Explain quantity differences, suggest count | Actual stock and adjustment approval | Reservations, multiple warehouses, negative stock, expiry |
+| Returns/corrections | Find original document, cause, correction path | Trace related effects and propose steps | Return/reversal/stock-adjustment approval | Closed periods, delivered records, immutable related documents |
+| Customer operations | Consolidate orders, follow-up, debt across pages | Cross-system summary, links, next-step suggestions | Customer communication and next action | Staleness, incompatible amount definitions, forbidden data |
+| Data quality | Inspect import errors, mappings, duplicates | Locate/classify errors, correction preview | Meaning of missing data, merges, rule changes | Duplicate execution, orphan lines, wrong units |
+| Permission management | Assign role/company/operation scope | Explain existing permission/application path | All authorization changes | Cross-company reads, sensitive-field disclosure |
 
-## 理解到什么程度即可
+## Enough business understanding
 
-对每个优先用例，能够说清楚：
+For each priority task, explain what the user wants and whether input is sufficient;
+which system supplies facts; whether output is a query, recommendation, draft, or
+formal action; which decisions remain human; and how empty/conflicting/forbidden/
+failed results are communicated. A sample document or short walkthrough is enough
+for uncertainty; full end-to-end operator training is not a prerequisite.
 
-1. 用户想完成什么，输入是否足够。
-2. 信息来自 Twenty、ERPNext 还是外部资料。
-3. 输出是查询结果、建议、草稿，还是正式业务动作。
-4. 哪些决定必须由人做。
-5. 无数据、数据冲突、权限不足或操作失败时怎么反馈。
+| Request | Tool evidence | Expected result | Initial writes |
+| --- | --- | --- | --- |
+| Related customer orders and follow-up owner | CRM contacts/owner, ERP orders/delivery | Facts, links, times | None |
+| Fulfillment at the pinned demo date | Remaining demand, stock/reservation, inbound/date, transport/shipment rules | Satisfiable, shortfall, or insufficient information with evidence | None |
+| Why an import failed | Source row, batch, rule version, validation/target error | Later error explanation and repair suggestion | None |
 
-不确定处可以查看一张示例单据或进行一次简短演示，不将全流程实操设为前提。
+People confirm rule scope and missing-information handling, not learn the full
+inventory algorithm. Tools calculate pinned stock/inbound allocation; the model
+selects evidence. Develop business understanding and data preparation in parallel,
+with acceptance cases from initial task design. Accounting summaries and complete
+opportunity analysis are not minimum-demo prerequisites.
 
-## 最小演示与后续设计
+## Design principles
 
-| 用户请求 | 工具所需数据 | 预期输出 | 初期是否写入 |
-|---|---|---|---|
-| 这个客户有哪些相关订单、由谁跟进？ | CRM 联系和负责人、ERP 订单与交付 | 最小演示：事实清单、链接和数据时间 | 否 |
-| 在演示日期下，这张订单能否按期履约？ | 未交付明细、仓库和占用、采购未收货明细与日期、运输或出库口径 | 最小演示：可满足、存在缺口或信息不足，附依据 | 否 |
-| 这批导入为什么失败？ | 原始记录、批次、规则版本、校验和目标报错 | 后续：解释已有错误和修复建议 | 否 |
+Start with one clear read-only task and a deterministic contract. Keep identity resolution, business calculations, state interpretation, permission, and execution in domain/server code. The model routes requests and selects evidence for server-rendered answers; it does not invent accounting facts or hold write credentials.
 
-首次写入仅创建一个经过预览和人工批准的内部跟进任务；其他草稿写入后置。账务摘要和完整商机分析也不作为最小演示前提。
+The original demonstration focuses on customer overview and fulfillment rules; current query capabilities also cover suppliers, contacts, orders, and aggregates. The first write remains one independently approved internal follow-up Task. Additional functions in the table need separate business scope/contracts/acceptance.
 
-人工只需确认履约规则的范围和缺失信息如何处理；不需要学习完整库存算法或完成 ERP 培训。固定演示日期、库存和在途分配由工具计算，模型解释结果。功能理解与数据准备并行，验收案例从用例设计阶段开始。详见 [最小演示与评估](minimum-demo.md)。
+Use source-backed facts, provenance/time, explicit missing information, and distinct error meanings. Duplicate names require clarification, not automatic merging. Frozen fulfillment is not a live delivery promise.
+
+## Useful business understanding
+
+Understand the distinction between Twenty Company and ERPNext Company/customer, customer versus supplier, draft versus confirmed/posted state, ordered/picked/delivered quantities, warehouse stock versus allocatable stock, and tax-exclusive amounts/currency/UOM.
+
+Learn the normal business path and a small set of exceptions relevant to the chosen task. Use read-only queries and a few supported isolated operations rather than preparing every business document type.
+
+## What remains human-controlled
+
+Formal orders, posting, payment, inventory changes, customer identity/credit decisions, external communications, and permissions remain human business-system responsibilities unless a new controlled capability is separately released. Approval refers to exact persisted content; the server rechecks authority and state, executes idempotently, and verifies by readback.
+
+See [Agent / MCP boundaries](agent-boundaries.md), the [minimum demo](minimum-demo.md), and the [current implementation queue](enterprise/improvement-plan.md).

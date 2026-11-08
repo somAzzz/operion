@@ -53,6 +53,21 @@ run starts, model, tool, limit, and timeout failures are emitted as AG-UI
 codes such as `ambiguous_customer`, `scope_denied`, `source_unavailable`, and
 `invalid_business_input`.
 
+## Answer and evidence boundary
+
+Business answers use `ToolOutput(present_answer)` and a closed `AnswerPlan`.
+The model selects only current-run fact/table references and allowed projections;
+`EvidenceRegistry` validates run/scope/entity/field/provenance and renders the final
+text deterministically. Free-form business prose, custom row values, and old-run
+references are not fallback paths. Output-tool arguments and unverified model text
+are not published to SSE or successful history. Failed/cancelled runs retain no
+new unverified answer. See the [structured answer contract](../docs/enterprise/structured-answer-evidence.md).
+
+Evidence support is distinct from task completion. Routing, correct parameters,
+required-fact selection, omissions, and legitimate user-task success still require
+independent evaluation. English-only repository documentation does not remove
+supported application answer languages or alter multilingual test fixtures.
+
 The SGLang compatibility adapter changes only a non-stream response metadata
 field (`metadata.weight_versions`) from an array to its JSON-string form. It
 does not alter messages, tool calls, stream chunks, status codes, or retries;

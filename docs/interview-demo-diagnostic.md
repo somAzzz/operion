@@ -4,6 +4,10 @@ Inspection baseline: branch `main`, commit
 `47199c28a0b7aae225b867168bd992662d1f71fe`. The worktree already contained
 uncommitted changes, which were preserved and extended.
 
+This historical diagnostic describes that inspection only. Its then-new capability
+and scope changes are not a current missing-feature list; use the
+[current improvement plan](enterprise/improvement-plan.md) for remaining work.
+
 ## Read-only source check
 
 The configured local read-only connections were reachable during this check:

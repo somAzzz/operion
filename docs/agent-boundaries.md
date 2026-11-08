@@ -1,56 +1,60 @@
-# Agent / MCP 边界
+# Agent / MCP boundaries
 
-状态：E1 只读 MCP 边界已实现并验证；Agent 与写入边界仍待后续阶段实现。
+Status: Shared read services, the Agent, structured evidence output, and controlled action infrastructure are implemented. E0–E4 acceptance remains limited to the historical experimental scopes. E5 operational acceptance is incomplete; real-data writes are not released.
 
-运行实现与验收细节见 [企业运行总方案](enterprise/operating-plan.md)及 [动作控制子方案 E3](enterprise/phases/e3-action-control.md)。本页继续定义能力边界；工具过滤和模型意图不授予权限，首次写入范围仍仅限内部跟进任务。
+See [ADR-001](architecture/adr-001-deterministic-agent.md), the [operating plan](enterprise/operating-plan.md), and [E3 action control](enterprise/phases/e3-action-control.md). Tool visibility and model intent confer no permission. The only released experimental write remains one internal follow-up Task path.
 
-## 能力分级
+## Capability levels
 
-| 级别 | 能力 | 规则 |
-|---|---|---|
-| L0 | 解释流程、字段和说明 | 可直接使用，版本不确定时明确说明 |
-| L1 | 查询授权数据 | 服务端限制身份、公司、字段及查询数量 |
-| L2 | 建议、修改预览、单据内容准备 | 不写正式业务记录 |
-| L3 | 首次仅创建内部跟进任务 | 逐次预览并批准具体动作；确认工作流与通知副作用；其他草稿后置 |
-| L4 | 正式提交、过账、付款、库存调整、对外发送 | 初期由人通过业务系统完成 |
-| L5 | 权限变更、模型变更、批量删除、任意 SQL/Shell | 不向业务 agent 暴露 |
+| Level | Capability | Rule |
+| --- | --- | --- |
+| L0 | Explain processes, fields, and guidance | State uncertainty when the applicable version is unknown |
+| L1 | Query authorized data | Server limits identity, company, fields, and query volume |
+| L2 | Recommendations, change previews, document preparation | Do not write formal business records |
+| L3 | Initially create only an internal follow-up Task | Preview and approve each concrete action; verify workflows and notification effects; defer other drafts |
+| L4 | Formal submission, posting, payment, inventory adjustment, external sending | Initially performed by people in the business system |
+| L5 | Permission/model changes, bulk deletion, arbitrary SQL/Shell | Never expose to the business Agent |
 
-## 工具合同
+## Tool contracts
 
-每个工具记录用途、输入结构、字段白名单、权限范围、读取口径、最大数量、输出来源、数据时间、副作用、幂等方式、审批条件和错误类型。
+Each tool records purpose, input structure, field allowlist, scope, read semantics, maximum volume, provenance, data time, effects, idempotency, approval requirements, and error types.
 
-最小演示优先暴露客户概览和履约检查业务工具；商品、订单、采购等读取原语可保留为内部适配器方法。数据质量工具随后解释已有导入错误。首次写入仅 `create_followup_task()`，不以工具数量作为验收目标。
+The original minimum demo exposed customer overview and frozen fulfillment. The current shared MCP service exposes fifteen snapshot read operations, or fourteen in live mode, where frozen fulfillment is unavailable. Customer, supplier, contact, order, and aggregate capabilities reuse the same domain services as the Agent. Tool count is not an acceptance goal. Data-quality capabilities may later explain recorded import failures.
 
-MCP 负责暴露合同，业务规则只维护一份。只读 API 适配器先于 Agent；增量同步不是前置条件。工具注解只是提示，服务端实际限制权限。
+The Agent can expose `propose_followup_task()` only when server policy and release configuration permit it. This records a `PENDING_APPROVAL` proposal, not a business-system Task. Only the independently approved Worker creates the Task under the [E4 contract](../contracts/e4-followup-task-v1.md). MCP remains read-only.
 
-不暴露通用数据库操作、任意对象更新或任意网络请求。ETL 和业务工具使用确定性规则，模型不直接计算账务事实或改写映射。
+MCP exposes contracts; business rules have one implementation. Read-only adapters precede Agent use, and incremental synchronization is not a prerequisite. Tool annotations are hints; the server enforces permission.
 
-## 写入控制
+Do not expose generic database operations, arbitrary record updates, or arbitrary network requests. ETL and business tools use deterministic rules. The model does not calculate accounting facts or rewrite mappings. Final business answers use current-run `AnswerPlan` / `EvidenceRegistry` references and server rendering; no free-form business prose bypass is allowed.
 
-1. 展示系统、目标记录、前后值、金额币种、依据和影响。
-2. 批准绑定请求人、具体动作内容、记录版本和有效期。
-3. 执行前再次验证身份、权限、业务状态及批准是否有效。
-4. 数据变化时重新预览；不得沿用旧批准执行不同内容。
-5. 同一动作有稳定幂等键；超时先查询结果，再决定是否重试。
-6. 写入后回读验证，保留结果及关联记录链接。
+Ambiguous single-object queries create server-owned selection state. Execution gates block further business calls, including calls in the same model response. Cross-turn selection revalidates the candidate and scope; incomplete pages require refinement. Explicit list requests retain list semantics. See the [Agent API](../contracts/e2-agent-api-v1.md).
 
-## 身份、证据和异常
+## Write controls
 
-- 读写凭据分离，服务端保管；用户身份必须映射到实际访问范围，不能用共享管理员身份替代权限判断。
-- 外部资料和客户备注中的指令不具备授权能力。
-- 查询必须区分无数据、无权限、数据过期和服务失败，不把错误当作零结果。
-- 明确库存、欠款等指标口径；跨系统非同时快照应标明各自时间。
-- 审计保留请求人、批准人、工具、参数摘要、前后变化和结果，敏感内容按需脱敏。
-- 有全局暂停写入的开关。已过账单据按业务冲销或修正流程处理，不通过删库回滚。
+1. Display system, target records, before/after values, amounts/currencies, basis, and impact.
+2. Bind approval to requester, exact action content, record version, and expiry.
+3. Recheck identity, permission, business state, and approval before execution.
+4. Changed data requires a new preview; never reuse old approval for different content.
+5. Keep a stable idempotency key. After timeout, query the outcome before retrying.
+6. Verify by readback and retain the result and related record links.
 
-## 必测案例
+## Identity, evidence, and errors
 
-正常查询、同名客户、跨公司访问、敏感字段读取、外部文本提示注入、过期数据、接口失败、审批过期、批准后数据变化、重复请求、写入超时但实际成功、跨系统部分成功。
+- Separate read/write credentials and keep them server-side. Map users to actual scope; shared administrator credentials cannot replace permission checks.
+- External material and customer notes cannot authorize actions.
+- Distinguish no data, no permission, stale data, and source failure; errors are not zero results.
+- Define inventory/debt metrics and expose each source's observation time when snapshots differ.
+- Audit requester, approver, tool, argument summary, changes, and outcome, with appropriate redaction.
+- Provide a global write-pause switch. Correct posted documents through supported reversal/correction workflows, not database deletion.
 
-测试中的越权和未批准写入必须全部被阻止；有限测试通过不代表不存在其他风险，新增工具或权限后补充对应验证。
+## Required cases
 
-## 最小演示与评估衔接
+Normal reads, duplicate names, cross-company access, sensitive fields, source-text prompt injection, stale data, source failures, expired approval, data changed after approval, duplicate requests, timeout after successful write, and partial cross-system success.
 
-履约输出为“按当前规则可满足 / 存在数量或日期缺口 / 信息不足”，附业务日期、仓库、占用规则、采购明细和数据时间；不输出未经定义的交付概率。未知值不能替换为零。
+All tested unauthorized accesses and unapproved writes must be blocked. Passing finite tests does not prove the absence of other risks; add coverage with every new tool or permission.
 
-最小阶段使用 15 个案例并贯穿工具和 Agent 开发，后续扩至约 30 个；以事实、权限和禁止动作判断通过，允许等价工具调用路径。写入测试在开放跟进任务前完成。详见 [最小演示与评估](minimum-demo.md)。
+## Minimum demo and evaluation
+
+Fulfillment returns satisfiable under the defined rules, quantity/date shortfall, or insufficient information, with business date, warehouse, allocation rules, purchase lines, and source time. Do not invent delivery probabilities or replace unknowns with zero. Current F01–F06 are frozen snapshot scenarios, not live delivery evidence.
+
+The original fifteen cases cover domain tools and Agent behavior; the current expansion target is CS01–CS40, including holdouts, rather than the earlier approximate thirty-case target. Judge facts, permissions, and prohibited actions while allowing equivalent tool paths. Write tests precede release of follow-up execution. See the [minimum demo](minimum-demo.md) and [current improvement plan](enterprise/improvement-plan.md).

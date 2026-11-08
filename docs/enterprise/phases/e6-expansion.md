@@ -1,37 +1,35 @@
-# E6：持续同步与能力扩展
+# E6: Synchronization and capability expansion
 
-状态：按需启动。责任：业务负责人提出价值；开发、系统和运维负责人对适用子项负责。
+Status: Start only when needed. Business owner establishes value; developer/system/operator own applicable items. Current selection/status follows the [improvement plan](../improvement-plan.md).
 
-## 目标与入口
+## Goal and entry
 
-在已验证闭环上按真实业务需求扩展，不把扩展项目全部启动。每项独立立项、合同、验证与放行。原则上复用 M4 的企业运行控制；只读/同步扩展按其实际风险满足 E0/E1/E5 对应门槛，不能因无模型而跳过数据写入安全。
+Expand verified loops for actual demand, one independently scoped/contracted/tested/released capability at a time. Normally reuse M4 controls; read/sync expansion satisfies its actual E0/E1/E5 risks. Lack of a model does not exempt integration writes from data safety.
 
-## 可独立实施的子方案
+| ID | Entry and deliverables | Core tests/exit |
+| --- | --- | --- |
+| E6.1 | Real update demand; field authority, stable maps, watermarks/overlap, recovery/reconciliation | X01 duplicates/out-of-order do not duplicate creation; X02 preserve non-authoritative human fields/no loops; X03 explain partial success/deletes/watermark recovery |
+| E6.2 | More reads/companies; business definitions, company/currency/UOM/scope/budgets | X04 isolation; X05 duplicate names, currency/unit/time gaps; legitimate aggregation and denials |
+| E6.3 | Controlled customer updates; fixed fields, diff/preview, target CAS, compensation | X06 no lost concurrent update after approval; X07 null/absence/protected fields; no automatic update without backend CAS |
+| E6.4 | CRM→ERP handoff/composite actions; per-step action/dependency/partial state/compensation/manual review | X08 recover failure after any commit; X09 restart does not repeat completed steps; people handle irreversible effects |
+| E6.5 | Manufacturing/pharma data, domain contracts, license/simulation labels | X10 BOM/UOM/effective-date gold; X11 insufficient drug-match evidence returns candidates, no invented risk conclusion |
 
-| ID | 子目标与入口 | 必须交付 | 核心验证与退出条件 |
-|---|---|---|---|
-| E6.1 | 持续同步：存在真实更新需求 | 权威字段合同、稳定映射、水位/重叠窗口、失败恢复与定期对账 | X01 重复/乱序事件不重复创建；X02 不覆盖人工非权威字段、不回写成环；X03 部分成功、删除事件和水位恢复可解释 |
-| E6.2 | 更多读取与多主体 | 新业务口径、主体/币种/单位合同、字段范围和预算 | X04 跨主体隔离；X05 同名、多币种/单位及时间差正确；合法聚合与越权拒绝均通过 |
-| E6.3 | 受控客户资料更新 | 固定可改字段、差异预览、原子条件更新探针、补偿规则 | X06 批准后并发更新不覆盖他人；X07 null/缺省和受保护字段拒绝；无后端 CAS 则不放行自动更新 |
-| E6.4 | CRM→ERP 客户交接等跨系统动作 | 每步 action、依赖、部分成功、补偿、人工接管和对账 | X08 任一步提交后失败可识别和恢复；X09 重启后不重复已成功步骤；不可逆影响由人处理 |
-| E6.5 | 制造/医药等行业场景 | 独立数据来源、领域合同、来源许可与模拟标记、领域案例 | X10 制造 BOM/单位/生效期符合固定预期；X11 药品匹配证据不足返回候选，不输出无依据风险结论 |
+X01–X11 are seeds, not executed passes. Define input/expected/faults before implementation. Unselected items stay PLANNED without blocking other accepted capabilities.
 
-X01–X11 是扩展案例种子；每次选定子项后细化可执行输入、expected 和故障点，再实施。未选择子项保持 PLANNED，不阻挡其他已验证能力运行。
+## Synchronization-specific design
 
-## 同步专项设计
+Separate sync and Agent identities. Sync cannot modify schema/permissions. Define directional field ownership/conflicts with source/event/batch/mapping/target state. Initially do not propagate physical deletion; choose explicit review/deactivation policy.
 
-同步身份与 Agent 读写身份分离；同步不得修改字段结构或权限。按字段所有权定义单向更新和冲突规则，记录来源、事件/批次、映射版本和目标状态。首次不传播物理删除，使用待核查/停用等明确策略。
+Advance watermarks only after target commit is confirmed or errors are durably recoverable. Stable deduplication covers pages/overlap/reruns. Reconcile identity, key fields, and native state, not counts alone. Sync and Agent writes share business conflict rules, not model approval conversations.
 
-水位仅在相应目标已确认提交或错误已持久化可恢复后推进；分页、重叠窗口与重跑需稳定去重。定期对账不能仅比总记录数，应比身份关联、关键字段和业务状态。同步写入与 Agent 写入共享业务冲突规则，但不共用模型审批会话。
+## Admission for new write tools
 
-## 新写工具准入清单
+Business value → fixed object/field/scope/effects → target permission/deduplication/concurrency probes → proposal/approval/compensation → W regressions → isolated readback → limited pilot → independent release.
 
-明确业务价值 → 定义对象/字段/范围/副作用 → 验证目标端权限、去重与并发能力 → 定义提案/审批/补偿 → 扩充 W 类测试 → 隔离环境回读 → 小范围试运行 → 单独放行。
+Internal Task authority does not permit arbitrary creation or reuse of old approval for another type. Posting, payment, stock adjustments, and external sending need independent business design/responsibility even after another E6 item passes. Permission/schema changes and arbitrary SQL/Shell remain unavailable to the business Agent.
 
-不能将已有 `create_followup_task` 权限扩展成任意创建；不能复用旧批准执行新动作类型。正式过账、付款、库存调整、对外发送若未来确有需求，需独立业务设计和责任确认，不因完成 E6 任一项自动开放。权限/字段结构和任意 SQL/Shell 继续不向业务 Agent 开放。
+## Exit
 
-## 交付与退出条件
+Each enabled item has a capability card: owner, scope, contract/policy versions, cases, actual evidence, recovery, metrics, limits, release date. Pause per tool/tenant without unnecessarily stopping stable capabilities.
 
-每个启用子项提交独立能力卡：负责人、范围、合同/策略版本、测试 ID、实际证据、恢复步骤、运营指标、已知限制和放行日期。新能力发生故障时可按工具/租户暂停，原稳定能力保持独立运行。
-
-扩展完成后回写 [总索引](../README.md)及相应工具合同，补充受影响的原 15 例、W 类和 O 类回归。未完成扩展不影响已达成的 M1–M4 状态；相关底层变更破坏旧保证时必须重新验收旧能力。
+Update the [index](../README.md) and contracts; rerun affected original fifteen/W/O cases. Unfinished optional expansion does not revoke M1–M4; underlying changes that break old guarantees do require reacceptance.

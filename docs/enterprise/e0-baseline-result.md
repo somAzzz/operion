@@ -1,33 +1,33 @@
-# E0 实验环境基线验收结果
+# E0 experimental baseline acceptance
 
-验收时间：2026-09-16；运行 ID：`20260916T205333Z`；结论：`PASSED`（实验环境）。
+Acceptance date: 2026-09-16; run `20260916T205333Z`; verdict `PASSED` for the experimental environment. Historical record, including the explicitly dated subsequent permission/readback updates below. Current status lives in the [index](README.md), not this baseline.
 
-本结论只放行 E1 的受控只读建设，不代表 E1 已完成，也不开放任何 Operion 写入。详细证据和含敏感配置的备份保存在本地受控目录 `reports/enterprise/e0/20260916T205333Z/`，不提交 Git。
+This pass allowed controlled E1 read-only development. It did not complete E1 or enable Operion writes. Detailed/sensitive backup evidence stayed in controlled local `reports/enterprise/e0/20260916T205333Z/`, outside Git.
 
-## 子目标结论
+## Subgoal results
 
-| 子目标 | 结论 | 主要证据 |
-|---|---|---|
-| E0.1 现状 | PASS | Twenty 回读 10 个 WWI Company、25 个 People，18 个 People 具备 Company 关联；ERPNext API 审计的 8/2/9/25/8/2 个核心对象与导出一致 |
-| E0.2 版本和拓扑 | PASS | Twenty 2.39.0、ERPNext 16.34.2/Frappe 16.33.1、PostgreSQL 16.15、MariaDB 11.8.9、SQL Server 16.0.4275.2、SGLang 0.5.19；健康探针通过 |
-| E0.3 凭据和权限 | PASS（收窄范围） | Twenty 只读 Key 已通过直接读取及写入负向测试；ERPNext 后续以关键业务 DocType 门禁收窄，详见下方更新 |
-| E0.4 恢复 | PASS | Twenty PostgreSQL＋63 个存储文件、ERPNext 数据库＋文件、WWI 备份均恢复到隔离临时目标并核对；临时目标已清理 |
-| E0.5 演示约定 | PASS | `fulfillment-v1` 固定为 2016-05-31、Europe/Berlin、`AI Demo GmbH`、`WWI Main Warehouse`、`Each`→`Unit`、`ship_by`，F01–F06 预期已版本化 |
-| E0.6 绕行路径 | PASS（当前能力） | Twenty 内置 Helper 无写/删/全工具权限；不存在 Operion Agent、写执行器或其凭据；SGLang 未认证请求被拒绝 |
+| Goal | Verdict | Evidence |
+| --- | --- | --- |
+| E0.1 Status | PASS | Twenty 10 WWI Companies, 25 People, 18 Company links; ERPNext core counts 8/2/9/25/8/2 agreed with exports |
+| E0.2 Versions/topology | PASS | Twenty 2.39.0; ERPNext 16.34.2/Frappe 16.33.1; PostgreSQL 16.15; MariaDB 11.8.9; SQL Server 16.0.4275.2; SGLang 0.5.19; health probes passed |
+| E0.3 Credentials/permission | PASS, narrowed scope | Twenty read key passed reads/negative writes; later ERPNext protected-DocType gate described below |
+| E0.4 Recovery | PASS | Twenty database plus 63 storage files, ERPNext database/files, WWI backup restored/checked in isolated temporary targets, then cleaned up |
+| E0.5 Demo rules | PASS | `fulfillment-v1`: 2016-05-31, Europe/Berlin, `AI Demo GmbH`, `WWI Main Warehouse`, `Each`→`Unit`, `ship_by`; versioned F01–F06 expectations |
+| E0.6 Bypass paths | PASS, then-current scope | Built-in Twenty Helper lacked write/delete/all-tools permissions; no Operion Agent/Worker/credentials yet existed; unauthenticated SGLang denied |
 
-## 已验证基线
+## Verified baseline
 
-- 当前代码提交：`3ac3d946acb86c38727f8ed8311c7b6ef55f0a83`；验收时工作树包含本轮文档清理和状态更新。
-- WWI 原始备份 SHA-256：`e842bad6ce02f74f166947e559dab1b476edd7eaae3da2ab9e3f522f1dd87124`。
-- SGLang 模型：`RadixArk/Qwen3.8-27B-NVFP4`，修订 `554ebba9b5f1b79dc11246341960360e6ef05ef4`；工具调用、严格结构化输出和关闭 thinking 的探针通过。
-- 本地 `.env` 权限已收紧为 `0600`；报告不记录密钥值。
+- Commit `3ac3d946acb86c38727f8ed8311c7b6ef55f0a83`, with the then-current documentation/status worktree changes.
+- WWI raw backup SHA-256: `e842bad6ce02f74f166947e559dab1b476edd7eaae3da2ab9e3f522f1dd87124`.
+- Model `RadixArk/Qwen3.8-27B-NVFP4`, revision `554ebba9b5f1b79dc11246341960360e6ef05ef4`; tool-call, strict structured-output, and thinking-disabled probes passed.
+- Local `.env` restricted to 0600; no secret values in reports.
 
-## 明确限制与后续门槛
+## Recorded limits and later gates
 
-1. Twenty 现有 `test` API key 仍是 Admin，只归类为 ETL/管理凭据，禁止注入 Agent。2026-09-19 复验中，`TWENTY_API_KEY_READ_ONLY` 读取成功，创建、修改和删除均被服务端拒绝，临时测试数据已清理；该凭据可作为 E1 Twenty 只读适配器的候选凭据。
-2. ERPNext 的角色权限是累加式。2026-09-19 最终门禁中，`Operion Read Only` 用户仅保留该角色和自动角色；Customer、Supplier、Item、Sales Order、Purchase Order、Warehouse、Bin、UOM 均可读且关键写动作被拒绝，直接新增请求全部返回 HTTP 403。按业务决定 Contact 与 ToDo 权限保留并作为已知例外，因此该凭据不是“全局只读”；E1 只允许固定 GET 客户端和两个无任意目标参数的 MCP 业务工具使用关键业务范围。
-3. ERPNext 自定义来源键当前不是数据库唯一约束，且订单父 DocType 存在冗余子字段。这不影响本次只读回读，但在 E1 对账和 E3 幂等探针中必须处理。
-4. E1 已通过来源键回读补齐统一 identity map：ERPNext 72/72、Twenty 35/35；不导出的已完结采购记录明确标为 `not_applicable`。
-5. 端口 1433、3000、8080、9443、30000 当前绑定所有主机接口；服务自身鉴权已验证，但本轮无权限读取主机防火墙规则。企业试运行前必须验证网络策略并收窄 SGLang/数据库入口。
+1. Existing Twenty `test` key remained Admin and was classified ETL/admin-only, never Agent. On 2026-09-19, `TWENTY_API_KEY_READ_ONLY` read successfully and denied create/update/delete; temporary records were cleaned. It was an E1 read-adapter credential candidate.
+2. ERPNext roles are additive. The final 2026-09-19 user retained `Operion Read Only` plus automatic roles. Customer/Supplier/Item/Sales Order/Purchase Order/Warehouse/Bin/UOM read succeeded; protected mutations failed and direct creates returned 403. Contact/ToDo were explicit exceptions, so the credential was not globally read-only. Original E1 permitted only fixed GET clients and two business MCP tools with no arbitrary target arguments.
+3. ERPNext custom source keys lacked database uniqueness; order parent DocTypes had redundant child fields. Readback remained usable, but E1 reconciliation/E3 idempotency probes had to handle these limits.
+4. Subsequent E1 source-key reconciliation matched ERPNext 72/72 and Twenty 35/35; unexported completed purchases were `not_applicable`.
+5. Ports 1433, 3000, 8080, 9443, and 30000 then bound all host interfaces. Service authentication was checked, but firewall rules were inaccessible. Enterprise operation required network verification and narrower model/database exposure.
 
-上述限制不会扩大当前能力：E2 通过前不连接 Agent，E3/E4 通过前不存在 Operion 写入路径。
+At this historical gate, no Agent before E2 and no Operion write path before E3/E4. These statements describe release sequencing then, not an assertion that today's Agent/action implementation is absent.

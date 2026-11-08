@@ -4,6 +4,11 @@ Evidence date: 2026-09-22 Europe/Berlin. This report separates current-run
 evidence from older accepted evidence. No WWI business object was written to
 Twenty or ERPNext during this run.
 
+This is a historical acceptance record. Preserve its initial failures, final results,
+blocked imports, and per-check browser scope. Later implementation and remaining
+work are maintained in the [current improvement plan](enterprise/improvement-plan.md);
+none of this report's numbers is a fresh result for the current worktree.
+
 ## Outcome
 
 The WWI snapshot query demo and the original E2 controlled-action demo are both

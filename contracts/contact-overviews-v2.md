@@ -9,9 +9,16 @@ field restrictions and is retained as historical acceptance evidence.
 The service resolves one customer or supplier within the server-defined canonical
 scope before returning contacts. Each contact may include its canonical and target
 IDs, name, relationship or preferred name, email, and phone. Email and phone are
-returned as recorded; an empty value means the selected source has no nonempty
-value. Credit limit, payment terms, notes, and arbitrary source fields remain
-outside the response. Search results, order lists, and errors do not expose contact
+returned as recorded with a `fields` state per communication field:
+
+- `present`: the selected source exposes a nonempty value.
+- `explicit_empty`: the selected source explicitly returns no nonempty value.
+- `not_exposed`: this field is not exposed by the selected result; it does not
+  prove absence in the source or in another system.
+
+Never convert an omitted field, failed source read, or unavailable permission into
+an explicitly empty contact value. Credit limit, payment terms, notes, and
+arbitrary source fields remain outside the response. Search results, order lists, and errors do not expose contact
 details.
 
 Snapshot mode returns email and phone only for contacts classified as

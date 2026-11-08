@@ -1,41 +1,41 @@
-# E5 企业边界合同 v1
+# E5 enterprise-boundary contract v1
 
-状态：技术控制已实现；单人只读试运行尚未完成。只有 `operion-evaluate-e5` 对单人真实环境 v2 证据返回 `passed` 后，才能把 E5 标记为单人只读范围完成。本合同继续定义技术边界；多人企业运行及真实写入需要新的范围验收。
+Status: Technical controls implemented; single-user read-only pilot incomplete. Mark that scope complete only after `operion-evaluate-e5` returns `passed` for actual-environment v2 evidence. Multiple-user enterprise operation and real writes need separate acceptance.
 
-## 身份与授权
+## Identity and authority
 
-- 企业模式只接受 OIDC 非对称签名 Bearer token；固定允许 issuer、audience 和算法，并要求 `exp`、`iat`、`sub` 及可撤销的 `sid`/`jti`。
-- JWT 只证明登录，不授予 Operion 权限。tenant、单一 Company、canonical customer scope 和角色每次请求都从服务端 identity policy 解析。
-- identity policy 修改后按文件版本即时重载；禁用用户、撤销 session 或提高 `valid_after` 会阻断旧 token。
-- 角色仅有 `agent_read`、`followup_proposer`、`action_reader`、`action_approver` 和 `action_operator`。未知角色拒绝加载。
-- 会话 owner key 包含 tenant 与稳定 user ID；跨用户/租户历史、取消和动作查询均拒绝。
+- Enterprise mode accepts only asymmetrically signed OIDC bearer tokens with allowed issuer, audience, and algorithm; require `exp`, `iat`, `sub`, and revocable `sid`/`jti`.
+- JWT proves authentication, not Operion authority. Resolve tenant, single Company, canonical customer scope, and roles from server identity policy on every request.
+- Reload changed policy by file version. Disabled users, revoked sessions, or increased `valid_after` block old tokens.
+- Roles are only `agent_read`, `followup_proposer`, `action_reader`, `action_approver`, and `action_operator`; reject unknown roles.
+- Conversation owner keys include tenant and stable user ID. Deny cross-user/tenant history, cancellation, and action queries.
 
-## 浏览器与服务边界
+## Browser and service boundaries
 
-可信 ingress 完成 OIDC 登录，把 access/refresh token 保存在服务端会话存储中；浏览器仅持有 Secure、HttpOnly、SameSite 的不透明 session cookie。网关清除客户端提供的认证/转发头，从有效会话注入 `x-forwarded-access-token`。Next.js 只在服务端读取并转发，不接受浏览器 token cookie 或企业模式静态服务 token，不得创建 `NEXT_PUBLIC_*` token。企业部署必须让 Next.js 只能经 ingress 到达。
+Trusted ingress performs OIDC login and stores access/refresh tokens in server sessions. Browser holds only an opaque Secure/HttpOnly/SameSite session cookie. Strip client authentication/forwarding headers and inject session-derived `x-forwarded-access-token`. Next.js reads/forwards it only server-side, accepts no browser token cookie or enterprise static-token fallback, and never creates a `NEXT_PUBLIC_*` token. Next.js must be reachable only through trusted ingress.
 
-Next.js 在每次请求通过 `/api/identity` 核验当前身份策略，再按功能检查角色；后端 API 保留独立验签及授权。非只读浏览器请求验证同源 Origin；注销仅允许同源 POST，删除服务端会话并注销 IdP session。已开始请求仍受原有超时控制，不声明注销能自动撤回进行中的工作。本地实现、启动与验收边界见 [认证网关运行手册](../ops/auth-gateway.md)。
+Next.js checks current identity policy through `/api/identity` and checks functional roles on each protected request; backend independently validates JWT/authority. Non-read browser requests require same-origin Origin; sign-out is same-origin POST, deletes server session, and terminates IdP session. Already-running requests keep their timeout; logout does not claim to revoke in-flight work automatically. Public GET/HEAD login/build assets contain no identity or business data; business pages/APIs remain protected. See the [gateway runbook](../ops/auth-gateway.md), [session recovery](../docs/enterprise/session-expiry-login.md), and [navigation access](../docs/enterprise/navigation-access.md).
 
-Agent 和 Action API 都独立验证 token。Agent 按身份动态构造 customer scope 和工具集。Action API 的批准仍要求服务端 CSRF secret；通用提案和通用修订不能绕过 E4 的服务端事实解析。
+Agent and Action API independently validate tokens. Agent derives scope/tools from identity. Action approval also requires the server CSRF secret. Generic proposals/revisions cannot bypass server-owned E4 fact resolution.
 
-## 写入发布锁
+## Write release lock
 
-企业默认 `OPERION_WRITES_ENABLED=0`：Action API 拒绝批准，Agent 不启用跟进提案，Worker 拒绝启动。开放 E4 唯一写路径必须同时设置：
+Enterprise default `OPERION_WRITES_ENABLED=0` rejects approval, disables follow-up proposals, and prevents Worker startup. Opening the one E4 write path requires all of:
 
-- `OPERION_WRITES_ENABLED=1`；
-- 非空 `OPERION_RELEASE_ID`；
-- O01–O08 与 E4 回归通过；
-- 当前业务时段、值班、备份和回退已确认。
+- `OPERION_WRITES_ENABLED=1`
+- Nonempty `OPERION_RELEASE_ID`
+- Applicable O01–O08 and E4 regressions passed
+- Current operating hours, on-call coverage, backup, and rollback confirmed
 
-新工具和新动作类型仍默认拒绝。
+New tools/actions remain default-deny.
 
-## 审计、保留与监控
+## Audit, retention, and monitoring
 
-- Agent 访问事件追加保存并由 SQLite trigger 禁止修改/删除。
-- 原始 conversation 和 tool-call 内容默认最多保留 24 小时，由 `operion-session-purge` 清空内容但保留运行元数据和访问事件。
-- Action 事件仍使用逐 action 哈希链；`/api/operations` 仅 `action_operator` 可读取状态计数、最老 UNKNOWN、过期租约、暂停状态和 Worker 心跳。
-- Worker 心跳包含状态、当前 action 和 release ID。UNKNOWN 超过 5 分钟、Worker 停滞、过期租约、审计异常、备份超 RPO 或磁盘不足必须由外部监控实际投递给操作者。无法值守时写入保持暂停。
+- Agent access events are append-only; SQLite triggers forbid update/delete.
+- Raw conversation/tool content defaults to at most 24 hours. `operion-session-purge` clears content while preserving run metadata/access events.
+- Action events retain per-action hash chains. `/api/operations` is `action_operator` only and reports state counts, oldest UNKNOWN, expired leases, pauses, and Worker heartbeat.
+- Heartbeat contains Worker state, current action, and release. External monitoring must actually deliver UNKNOWN > five minutes, stalled Worker, expired lease, audit anomaly, backup beyond RPO, and disk alerts. Unattended writes remain paused.
 
-## 完成判定
+## Completion criteria
 
-代码测试或本地故障注入不能替代单人实际使用证据。本地环境允许参与验收，但模拟观察流量不算实际使用。E5 单人只读范围完成必须提交 v2 严格 schema 的证据文件，注明公开样本或获准私有数据，并证明一名实际用户的身份/撤销、密钥轮换、网络隔离、本人告警接收、加密异机备份恢复、RPO/RTO、自动化五并发容量、发布回退、数据删除、写入口关闭和至少 10 个业务日的非零合法流量，由操作者自检签名。受控测试身份可验证跨范围拒绝，不计入实际用户数。单人通过不放行 M4 写入，也不将公开样本验收外推到私有数据。
+Code tests/local fault injection cannot replace actual use. Local deployment may qualify; simulated observation traffic does not. Submit strict v2 evidence identifying public-sample or approved private data and one actual user's identity/revocation, secret rotation, network isolation, personally received alerts, encrypted off-host backup/isolated restore, measured RPO/RTO, automated five-session capacity, rollback, deletion, closed write entry points, and at least ten business days of nonzero legitimate traffic. The actual operator self-signs. Controlled cross-scope test identities do not count as real users. Single-user acceptance enables neither M4 writes nor private-data use outside the evidenced scope.

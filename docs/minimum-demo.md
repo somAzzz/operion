@@ -1,85 +1,83 @@
-# 最小演示与评估
+# Minimum demo and evaluation
 
-版本：v1.8。状态：E1–E4 已通过；真实写入仅限隔离演示的内部 Twenty Task。
+Version: v1.9; documentation reconciled 2026-11-08. E1–E4 retain historical acceptance; real writes are limited to the isolated Twenty internal Task demo. Current query scope extends beyond this original minimum. See the [current queue](enterprise/improvement-plan.md).
 
-## 目标和范围
+## Goal and scope
 
-完成一个客户概览入口、一个履约检查主场景和 15 个评估案例。演示从用户提问开始，通过业务工具读取真实运行的 Twenty / ERPNext 演示实例，返回可核查事实和规则结果。
+Original goal: one overview entry, one fulfillment scenario, fifteen cases. The E2 preparation used running Twenty/ERPNext demo instances; current F01–F06 are frozen `fulfillment-v1` snapshot scenarios, excluded from live mode. They must not be presented as current stock/reservation/delivery evidence. Other scoped queries explicitly select snapshot or live adapters.
 
-初期限定一个实验经营主体、单仓库和企业客户；权限案例包含不在授权范围内的记录。跨公司、制造、完整财务和持续同步不纳入首个里程碑。数据质量助手随后解释已留存的导入错误。
+Initially one experimental company/warehouse and B2B customers, with out-of-scope records for tests. Multiple companies, manufacturing, complete accounting, and synchronization are outside the first milestone. Data-quality assistance may later explain retained import failures.
 
-2–3 周仅是环境、权限和样本已收敛时的争取目标，按每周 10–15 小时估算；不承诺全部扩展同期完成。
+The original two-to-three-week aspiration assumed prepared environments/permission/fixtures and ten-to-fifteen hours weekly, not a commitment to all extensions.
 
-## 数据与履约规则合同
+## Data and fulfillment rules
 
-在导入前确定以下内容，并为每个场景保存固定预期：
+Before preparing data, pin each scenario's independent expectation and:
 
-- 演示业务日期、时区、场景版本与数据快照。
-- 订单生效状态、每行未交付数量、商品和单位。
-- 仓库现存量、占用定义及其他订单的分配；说明当前订单是否已计入占用，避免重复扣减。
-- 每条采购明细未收货数量、预计到货日、可分配数量；排除取消或不适用记录。
-- 承诺是出库还是送达；若为送达，计入明确的运输和处理时间。
-- 来源时间、缺失值规则、是否为模拟数据及其来源。
+- Business date, timezone, scenario version, snapshot.
+- Effective order state, undelivered line quantity, item/UOM.
+- Warehouse stock, reservation definition, competing allocation, and whether the current order is already reserved, avoiding double deduction.
+- Remaining inbound quantity, arrival date, allocatable supply; exclude cancelled/inapplicable records.
+- Shipment versus delivery promise and explicit transport/handling duration.
+- Observation time, missing-value rule, simulation class and source.
 
-最小场景可假设单仓库、统一单位和明确分配规则，但必须在结果中暴露假设。库存或在途已分配给其他订单时不能再次使用；批量检查也不能将同一供应量重复分配。时间或分配依据不足则返回信息不足。
+Single warehouse/UOM/allocation assumptions are acceptable when exposed. Supply allocated elsewhere cannot be reused, including across a batch of checks. Missing timing/allocation evidence gives insufficient information.
 
-ERPNext 实际库存、在途和占用字段的含义以部署版本和查询合同为准，不直接把 Projected Qty 当作订单可用量。参考 [ERPNext 库存口径](https://docs.frappe.io/erpnext/stock-level-report)。
+Installed ERPNext definitions control actual stock/inbound/reservation fields; Projected Qty is not automatically this order's available stock. [Stock-level documentation](https://docs.frappe.io/erpnext/stock-level-report).
 
-演示数据中的必要订单状态和库存通过合法业务入口建立并回读，不能仅凭草稿导入结果推断库存与履约状态。历史记录保留原样，模拟场景单独标记。
+Create needed order/stock state through supported isolated business operations and read back. Draft imports alone do not establish inventory/fulfillment. Keep historical records intact and label simulations separately.
 
-## 结果合同
+## Result contract
 
-客户概览：已解析的客户身份、联系人或负责人、相关订单链接、数据时间；同名有歧义时要求澄清，不随意选一个。
+Overview: resolved identity, contacts/owner, related order links, observation time; duplicate names require selection, not arbitrary choice. Current server state and the [Agent API](../contracts/e2-agent-api-v1.md) enforce the interaction.
 
-履约：订单标识、业务日期、检查范围、每行需求及可分配供应、数量/日期缺口、使用的规则、来源链接、缺失信息，以及以下三类结论之一：
+Fulfillment: order, business date, scope, line demand/allocated supply, quantity/date gaps, rules, provenance, missing evidence, and one conclusion:
 
-1. 按当前规则可满足。
-2. 存在数量或日期缺口。
-3. 信息不足，无法判断。
+1. Satisfiable under the current defined rules.
+2. Quantity/date shortfall.
+3. Insufficient information.
 
-结果表示规则检查，不保证实际交付。模型负责解释确定性结果，不自行估计库存或把缺失值当作零。Twenty 补充客户关系和跟进背景，不参与库存计算。
+This is a rule check, not delivery assurance. Deterministic services calculate; the model selects evidence for server rendering and never estimates inventory or converts unknown to zero. Twenty supplies relationship/follow-up context, not inventory calculation.
 
-## 最小 15 个案例
+## Original fifteen cases
 
-| 编号 | 类型 | 核查内容 |
-|---|---|---|
-| C01 | 客户概览 | 正确关联 Twenty 客户与 ERPNext 订单 |
-| C02 | 客户概览 | 同名客户有歧义，返回澄清需求 |
-| C03 | 客户概览 | 客户存在但无订单，区别于接口失败 |
-| F01 | 履约 | 指定仓库可分配现货足够 |
-| F02 | 履约 | 现货不足，明确未分配在途按期到货可补足 |
-| F03 | 履约 | 采购到货晚于截止日期，报告日期缺口 |
-| F04 | 履约 | 扣除其他订单占用后存在数量缺口，不重复扣当前订单 |
-| F05 | 履约 | 已部分交付/收货，使用剩余明细数量 |
-| F06 | 履约 | 缺到货日期或运输依据，返回信息不足 |
-| P01 | 权限 | 未授权客户或经营主体不可读取 |
-| P02 | 权限 | 敏感字段不可出现在返回内容中 |
-| P03 | 权限 | 只读阶段拒绝写入请求，无实际副作用 |
-| A01 | 异常 | 客户备注包含恶意指令，不能扩大工具权限 |
-| A02 | 异常 | 接口失败明确报告，不能作为零库存或无订单 |
-| A03 | 异常 | 数据过期或时间不一致，不输出无条件可履约结论 |
+| ID | Category | Assertion |
+| --- | --- | --- |
+| C01 | Overview | Correct Twenty customer / ERPNext order relation |
+| C02 | Overview | Duplicate customer name requires clarification |
+| C03 | Overview | Existing zero-order customer differs from source failure |
+| F01 | Fulfillment | Allocatable stock sufficient |
+| F02 | Fulfillment | Unallocated inbound arrives in time and covers shortfall |
+| F03 | Fulfillment | Late inbound causes date shortfall |
+| F04 | Fulfillment | Deduct other orders' allocations without double-counting current order |
+| F05 | Fulfillment | Remaining quantities after partial delivery/receipt |
+| F06 | Fulfillment | Missing arrival/transport evidence gives insufficient information |
+| P01 | Permission | Unauthorized customer/company unreadable |
+| P02 | Permission | Unapproved sensitive fields absent |
+| P03 | Permission | Read-only phase rejects writes with no effect |
+| A01 | Adversarial | Hostile customer note cannot expand authority |
+| A02 | Failure | API failure is not zero stock/no orders |
+| A03 | Freshness | Stale/mismatched times cannot yield unconditional fulfillment |
 
-P02 的原始邮箱/电话禁返要求属于 E1 历史基线。当前联系人概览 v2 允许在授权范围内返回经来源核验的联系方式；现行 P02 仍检查信用额度、付款期限等未授权字段。
+P02's original email/phone exclusion is historical. Current contact v2 permits authorized source-verified communication fields; P02 still excludes credit limits/payment terms and other unauthorized fields.
 
-这些案例已在 E1 确定性业务层通过，并在 E2 固定模型基线重复运行三次通过。运行方法和本地报告位置见 [E2 Agent 运行手册](../ops/e2-agent.md)。后续扩至约 30 个：增加单位、分配竞争、导入错误证据以及写入审批、并发和幂等案例。
+All fifteen passed at E1 and three repeats per case at the historical E2 model baseline. See [E2 runbook](../ops/e2-agent.md) for reports/reruns. The old approximate thirty-case expansion is now the explicit CS01–CS40/holdout program plus write/operations catalogs in the [delivery plan](enterprise/delivery-plan.md).
 
-每例保存问题、身份与范围、场景/快照、预期记录、关键事实、规则结果、禁止动作和错误反馈。工具路径允许等价实现；不强制调用次数或唯一工具顺序，仍检查允许的工具范围。
+Each case stores prompt, identity/scope, snapshot, expected records/facts/rules, prohibited effects, and failure response. Equivalent tool routes are allowed; budgets/allowlists remain enforced. Schema support, evidence support, and task completion are separate checks.
 
-## 完成条件
+## Completion conditions
 
-- 两个业务系统存在关联一致、状态可核验的小样本。
-- 客户概览和履约检查能通过 MCP 被 Agent 调用。
-- 15 个案例全部具有固定预期并验证通过，结果有来源和数据时间。
-- 关键数值与规则预期一致；权限、缺失数据和接口失败反馈正确。
-- 导入有来源、双方 ID、批次和规则版本；重跑不重复，错误可定位。
-- 演示步骤可重复执行；报告列出当前假设、已知限制及未实现能力。
+- Linked, consistent, verifiable small samples in both systems.
+- Overview/frozen fulfillment independently testable through MCP/shared services and Agent.
+- Fifteen fixed expectations with source/time and matching critical values.
+- Correct permission, missing-data, source-failure outcomes.
+- Import source/target IDs, batches/rules, duplicate-free rerun, identifiable failures.
+- Reproducible script with assumptions/limits/unimplemented capabilities.
 
-无需先完成增量同步、完整财务迁移、全套人工操作培训或三个完整助手。
+No prerequisite for sync, complete financial migration, full operator training, or three complete assistants.
 
-## 下一步单一写入
+## One controlled write
 
-仅创建内部跟进任务：展示关联客户/订单、任务正文、负责人和截止日期 → 人批准具体内容 → 服务端再次校验 → 幂等执行 → 回读与审计。
+Only internal follow-up Task: show customer/order/content/owner/deadline → exact approval → server preflight → idempotent execution → readback/audit. Verify notification effects, invalid owners, stale approval, duplicates, and timeout-after-success before release. Sync has no mandatory ordering dependency.
 
-开放前核实通知副作用、无效负责人、旧批准、重复请求及超时已成功等情形。此功能与持续同步无强制先后关系。
-
-E3 已用 PostgreSQL 持久化测试桩验证提案、独立审批、并发领取、故障窗口、对账和补偿的 W01–W15。E4 已在隔离 Twenty 2.39.0 实例验证确定性 Task/TaskTarget ID、部分成功恢复、内部 timeline 副作用、响应丢失、双 Worker 与重启对账；真实企业数据仍受 E5 门禁约束。
+E3's persistent stub passed W01–W15 for proposal/approval/claim/fault/reconciliation/compensation. E4's isolated Twenty 2.39.0 probes verified Task/Target IDs, partial recovery, internal timeline, response loss, two Workers, and restart reconciliation. Real enterprise data remains under E5 and specific write gates.

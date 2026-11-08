@@ -1,47 +1,32 @@
-# 总体改进计划：实时跨系统正确性、Agent 评测与按需扩展
+# Improvement plan: Live correctness, Agent evaluation, and justified expansion
 
-版本：v1.5；日期：2026-10-17；状态：I02 已修复对象/字段/币种反例及取消历史路径；I14 生产依赖审计清零，I16 隔离数据库 runner 完成；I15 最小分层案例与证据报告已落地。真实模型重验、完整 CS40、OIDC 浏览器及 E5 仍待完成。证据与边界见 [本轮修复记录](fixes-2026-10-17.md)。
+Version: v1.6; documentation reconciled 2026-11-08. This is the single current I01–I16 implementation and remaining-work queue. It supersedes v1.5 status summaries, not their historical acceptance evidence. No new model, upstream, database, browser, or E5 acceptance is claimed by this documentation revision.
 
-### 2026-10-11 早期 P0 代码检查点（历史记录）
+Current architecture is defined by [ADR-001](../architecture/adr-001-deterministic-agent.md), [structured answers/evidence](structured-answer-evidence.md), and the [Agent API](../../contracts/e2-agent-api-v1.md). The model selects capabilities and current evidence; domain services own facts; the server owns authorization, state, budgets, validation, and rendering. Do not extend the retired natural-language fact parser or introduce a parallel business-prose channel.
 
-- I01：live 订单逐次核验来源键、目标 ID、当前客户/供应商和经营主体，并核对列表与详情；联系人搜索与详情核验当前公司关系。模拟上游覆盖合法销售/采购读取、换属、跨公司、重复键、旧目标 ID 和详情冲突。
-- I02：E2 评分器分别记录工具选择、参数、事实、证据、权限与任务完成率。最终答案的订单数、显式金额、状态和对象 ID 与工具事实对照；零订单却回答“一百张订单”的反例现在失败。语言表达的确定性规则仍需随模型验收集扩展。
-- I03：固定 F01–F06 履约案例只在 snapshot 演示模式注册；live 仓库拒绝案例调用，Web 明示冻结案例和非实时承诺。
-- 复现：离线回归 184 项，其中 161 通过、23 个数据库测试跳过；仅跟踪文件加本批新增文件的副本同样通过。独立 disposable PostgreSQL 数据库执行 23/23。Web TypeScript 检查和 webpack 生产构建通过。CI 配置在仓库中，远端运行结果尚未取得。
-- 本地隔离 API：只读凭据探测 ERPNext 与 Twenty 列表字段；WWI 范围内合法销售/采购列表与详情、客户/供应商联系人读取成功，错误公司范围被拒绝。此结果不是完整真实 API 变更矩阵。
-- 未重验：真实模型的 E2 重复评测、实际浏览器及企业试运行；完整 API 变更、分页漂移和故障矩阵仍未执行。该检查点不构成 E5 放行。
+## 1. Decisions and stage relationship
 
-### 2026-10-11 模型与可观测性补充验收
+The next operational goal is an E5 single-operator read-only pilot. The immediate engineering goal is to prove that data changes, relationship conflicts, source failures, ambiguity, and model mistakes still produce correct, authorized, traceable outcomes and useful task completion.
 
-后续还有本地 HTTP 浏览器及选定 snapshot/live 各 4 例验收；范围和本轮复核结果见本文顶部链接。
+Sequence: **P0 ingress/authorization/correctness revalidation → P1 live cross-system acceptance and one complete WWI import → P2 operational readiness and justified domain depth → P3 scale and other extensions**. Prepare backup/monitoring work in parallel; actual-user access still requires applicable read-only gates.
 
-在上述代码检查点之后，完整 E2 实模评估以最终评分器重新执行 15 例 × 3 次，45/45 通过。评分器新增反例覆盖“订单数：0”“共 7 笔”“缺口 0”、被否定的履约候选结论；“上游不可用”用例现在返回受控工具错误。OpenTelemetry 与 Langfuse 的分步证据见[验收记录](opentelemetry-langfuse-acceptance.md)。这不替代 I07 实际浏览器验收、I04 真实 API 变更矩阵或 E5 放行。
+This plan orders implementation under the [delivery plan](delivery-plan.md); it does not replace E0–E6 contracts, approval, or release gates. E0–E4 passes retain their original experimental scopes. A cross-system Agent is one Agent using Twenty and ERPNext; multiple LLM agents are not required. New WWI imports and Agent writes are accepted separately. Read-only progress never enables writes automatically.
 
-## 1. 总体决策与阶段关系
+## 2. Historical baselines and evidence limits
 
-下一阶段主目标：验证业务系统数据变化、关联冲突和服务故障时，Agent 仍能给出正确、受权限约束且可追溯的回答。
+### 2026-09-29 review
 
-推进顺序：**P0 认证网关、授权与正确性修复 → P1 实时跨系统验收及 WWI 首批闭环 → P2 运行能力与按需工具完善 → P3 数据扩量及其他扩展**。认证网关与端到端身份验证是实际用户接入前的 P0 门槛；备份和监控准备可并行开展，实际观察须通过适用的只读前置门槛。
+This subsection preserves the original findings, not an unresolved defect list. The review covered source, tests, stage documents, old reports, and offline simulated probes. It did not modify real systems or rerun real-model acceptance.
 
-本计划是 [阶段计划](delivery-plan.md) 的当前实施排序，不替代 E0–E6 合同、审批或放行规则。E0–E4 历史通过记录保留其原有实验范围；本次发现涉及的 E1/E2 实时读取、回答准确性与履约边界需重新验证，不能引用旧报告宣称这些新增范围已经通过。
+| Item | Observation at that review | Limit |
+| --- | --- | --- |
+| Deterministic regression | 164 tests; 141 passed, 23 PostgreSQL tests skipped, no failures | Test DSN removed; skips were not passes |
+| Read-only MCP | Fifteen registered snapshot tools | Tool count was not the next success measure |
+| Agent | Historical fifteen cases × three repeats plus five complex Web/Agent scenarios | Fixed data does not establish live correctness or generalization |
+| WWI | Snapshot customer/supplier/order queries existed; new batch not fully imported | Do not describe WWI as not integrated; see [interview readiness](../interview-readiness.md) |
+| E5 | Technical controls existed, actual operational evidence incomplete | Read-only prerequisites still apply; M4 writes not released |
 
-“跨系统 Agent”首先指一个 Agent 使用 Twenty 和 ERPNext 完成业务任务，不要求引入多 Agent。新增 WWI 导入与 Agent 写工具分别验收；完成只读改进不自动开放写入。
-
-## 2. 历史基线与证据限制（2026-09-29）
-
-本节保留问题来源，不代表当前未修复清单。D01–D03 原始反例已有修复和回归；10 月 11 日新增的 I02 反例现已修复，见顶部最新记录。当日测试共 204 项：180 通过、24 跳过；跟踪文件副本结果相同。
-
-2026-09-29 检查覆盖源代码、现有测试、阶段文档和历史报告，并执行离线模拟探针。未访问或修改真实业务系统，未重跑真实模型验收。
-
-| 项目 | 当前情况 | 解释与限制 |
-|---|---|---|
-| 确定性回归 | 本次运行 164 项，141 通过，23 跳过，0 失败 | 主动移除测试数据库环境变量；23 项 PostgreSQL 测试未执行，不计为本次通过 |
-| 只读 MCP | 当前注册 15 个工具 | 工具数量不是下一阶段成功指标；见 [注册实现](../../src/operion_etl/mcp_server.py) |
-| Agent 基线 | 历史 E2 为 15 例 × 3 次通过；另有五个复杂 Web/Agent 场景 | 主要围绕固定样例，不能外推实时正确性和未知问题泛化能力 |
-| WWI | 快照已支持客户、供应商和订单查询；新增批次尚未完成双系统导入 | 不应表述为“尚未接入 WWI”；详见 [面试验收记录](../interview-readiness.md) |
-| E5 | 技术控制已实现，真实运行证据未齐 | 单人只读试运行仍受前置条件约束，M4 写入不放行 |
-
-本次回归命令：
+Original safe regression command:
 
 ```bash
 env -u OPERION_TEST_ACTION_DATABASE_URL \
@@ -49,145 +34,157 @@ env -u OPERION_TEST_ACTION_DATABASE_URL \
   .venv/bin/python -m unittest discover -s tests -q
 ```
 
-### 历史发现（原始反例已修复）
+| ID | Original finding | Reproduction | Required invariant |
+| --- | --- | --- | --- |
+| D01 | Live orders reused snapshot party ownership | Simulated ERPNext changed an order to an out-of-scope customer; the old scope still received it | Revalidate current customer/supplier/company relations; reject conflicts or unverifiable identity |
+| D02 | Correct tools plus an incorrect final answer passed grading | Correct zero-order payload plus an answer claiming one hundred orders produced no grading failures | Independently verify final required facts and task outcome |
+| D03 | Live fulfillment used frozen scenarios | `LiveReadRepository.fulfillment_case('F01')` returned `satisfiable` with no upstream call | Frozen F scenarios cannot prove live delivery; reject or report insufficient evidence |
 
-| ID | 发现 | 复现方法与结果 | 影响与处理 |
-|---|---|---|---|
-| D01 | 实时订单沿用快照客户归属 | 模拟 ERPNext 返回同一来源订单但客户改为范围外客户；使用原客户 scope 仍返回该订单 | 关联与授权存在风险。必须根据实时目标关联重新校验客户/供应商及经营主体，冲突时拒绝或明确不可验证 |
-| D02 | 工具结果正确但最终回答错误仍可过评测 | 向 `grade_case` 输入客户零订单的正确工具结果和“一百张订单”的错误回答；失败列表为空 | 旧评分不能证明最终事实准确；增加独立最终答案断言 |
-| D03 | 实时仓库的履约检查仍使用固定场景 | 调用 `LiveReadRepository.fulfillment_case('F01')`，模拟上游调用为零，返回 `satisfiable` | 必须明确固定场景边界；在接入真实证据前，不得把该结果作为实时订单履约结论 |
+These were simulated reproductions, not production incidents or proven actual disclosure. The original one-off probes were not saved as complete acceptance packages. Their defects have since been repaired and regression-tested. Source: [read services](../../src/operion_etl/read_tools.py), [E2 grading](../../src/operion_etl/e2_evaluation.py).
 
-这些是模拟上游条件下的复现，不是实际泄露或生产事故报告。一次性探针未保存为验收包；P0 首先将其转换为可复现回归，并保存 expected、actual、版本与限制。实现参考：[读取服务](../../src/operion_etl/read_tools.py)、[E2 评分器](../../src/operion_etl/e2_evaluation.py)。
+### 2026-10-11 implementation checkpoint
 
-## 3. 总体优先级与任务队列
+- I01 revalidated source keys, target IDs, current party/company, and list/detail consistency on live reads; contact reads revalidated organization relationships. Simulated tests covered legal sales/purchase reads, reassignment, company mismatch, duplicate keys, obsolete IDs, and conflicting details.
+- I02 decomposed tool choice, arguments, facts, evidence, permission, and task scoring. Its original zero-versus-one-hundred counterexample failed after repair. This checkpoint still used a limited text parser, now retired.
+- I03 registered F01–F06 only in snapshot mode, rejected live calls, and labeled frozen scenarios in Web.
+- Recorded regression: 184 tests, 161 passed, 23 database tests skipped; the tracked-file copy matched. Disposable PostgreSQL passed 23/23. Web TypeScript/webpack build passed. Remote CI evidence was not obtained.
+- GET-only isolated checks verified selected live sales/purchase lists/details and customer/supplier contacts; wrong-company scope was denied. This was not the complete real-API mutation matrix.
+- Later E2 real-model acceptance reran fifteen cases three times, 45/45. Scorer counterexamples included zero orders, seven orders, zero shortfall, negated fulfillment conclusions, and controlled upstream failure. [Tracing acceptance](opentelemetry-langfuse-acceptance.md) preserves its evidence.
+- Selected snapshot/live scenarios and local HTTP browser checks followed. None replaced full HTTPS/OIDC acceptance, I04, or E5.
 
-优先级表示实施顺序；依赖表示何时可以验收。当前状态如下，后续任务表列出完整验收合同，不表示所有内容都尚未实施。
+The later 2026-10-11 review recorded 204 tests: 180 passed and 24 skipped, including a tracked-file-copy check. These counts belong to distinct checkpoints; do not combine them into one current result.
 
-| ID | 当前状态 | 剩余重点 |
-|---|---|---|
-| I01 / I03 | 原始修复和离线回归完成，局部真实读取已验 | 完整实时变更矩阵纳入 I04；不新增真实履约能力 |
-| I02 | 显式事实绑定及反例回归已修复 | 真实模型误拒绝率、更多语言改写、独立语义评分 |
-| I04 | 固定 E2 45/45、选定快照/live 各 4 例有记录 | CS01–CS40、留出集和真实故障矩阵 |
-| I06 / I07 | 本地 HTTP 浏览器部分通过 / 网关协议通过 | 真实 HTTPS/OIDC 浏览器、撤销、隔离与恢复 |
-| I08 | tracing 已实施，性能/容量未完成 | 首次已验证文本延迟、五并发、健康检查噪声和回退 |
-| I05 / I09–I13 | 尚无本轮完成证据 | 按原业务与 E5 依赖推进 |
-| I14 | 本地完成：生产审计 0 告警，构建通过 | 持续复核新告警及实际部署适用性 |
-| I15 | 最小 case runner、真实 stdio MCP、JSON/JUnit/HTML 完成 | 完整参数/结果/span 事件关联、真实模型及浏览器层 |
-| I16 | 本地完成：offline 移除 DSN，独立容器及归属检查 | 远端 CI 运行结果仍需取得 |
+### 2026-10-17 and 2026-10-21 follow-up
 
-默认由项目操作者实施并自检；写入审批仍使用独立审批人。
+The [2026-10-17 fix record](fixes-2026-10-17.md) preserves the intermediate `business-facts-v2` repair and its evidence. [Structured evidence](structured-answer-evidence.md) subsequently replaced that parser with a closed answer plan and server rendering. Recorded selected structured snapshot/model acceptance was 4/4; its offline group was 237 tests, 213 passed and 24 skipped. It did not rerun online ERPNext/Twenty, PostgreSQL, or the full repeated E2 set.
 
-| 优先级 / ID | 工作包 | 依赖 | 完成标准 |
-|---|---|---|---|
-| P0 / I07 | 认证网关与端到端身份验证 | 明确实际 OIDC 提供方及部署入口；可立即准备 | 登录、失效/撤销、可信令牌转发、入口不可绕过、后端独立验签与 scope/角色解析通过；见第 3.1 节 |
-| P0 / I01 | 实时身份、关系与授权核验 | 无；使用模拟上游和已有数据 | D01 回归通过；客户/供应商换属、主体不符、重复来源键、删除/重建等均能正确处理；合法读取继续成功 |
-| P0 / I02 | 评测评分与事实断言 | 无，可与 I01 交错推进 | 保留 D02 回归；补齐对象/字段/币种绑定；互换事实、错误币种失败，合法对照通过；独立 gold 防止共同漏判 |
-| P0 / I03 | 固定履约场景与 live 边界 | 无 | D03 有回归；固定场景明确标记且不冒充实时证明；缺真实证据时拒绝实时履约结论或返回信息不足 |
-| P0 / I16 | 测试数据库生命周期 | 无 | offline 即使继承 DSN 也不连库；错误目标拒绝；隔离实例/库归属验证与清理通过 |
-| P1 / I14 | 依赖风险及升级回归 | 可立即复核；实际入口前处理适用阻断项 | 现有高危告警有版本/适用性结论；修复后构建及受影响流程通过 |
-| P1 / I15 | 开发者分层测试和统一证据 | 复用现有 fixture/tracing/评分；与 I04 共用案例 | 五个最小场景有 expected/actual、失败层、版本、重跑命令；真实 stdio MCP 和中断证据可复现 |
-| P1 / I04 | 实时跨系统 Agent 验收集 | I01–I03；真实用户入口依赖 I07 | 首批 40 例按第 4 节验收；真实 API、工具、Agent 和 Web 层的执行范围分别记录 |
-| P1 / I05 | WWI 首批依赖完整导入 | 明确币种与 Item 冲突政策；live 切换依赖 I01 | 两张完整订单及依赖导入、独立回读、幂等重跑通过；在 I04 框架内通过对应 live 场景 |
-| P1 / I06 | 浏览器流程与会话恢复 | I02；实际登录链路依赖 I07，可先用现有数据 | 真浏览器完成正常问答、超限、断流、后续追问、刷新恢复、跨会话隔离；不能以 HTTP 或构建通过替代点击验收 |
-| P1 / I13 | E5 告警与备份准备 | 可立即准备；受限范围内实施 | 告警实际接收、独立备份及隔离恢复具备对应 O 类证据 |
-| P2 / I08 | 容量、读取效率及发布回退 | I01；优化前先测量 | 五并发资源/延迟/API 调用有实测；隔离、超时和恢复正确；发布回退后受影响评测通过 |
-| P2 / I09 | 跨系统一致性和履约证据能力 | I04 基线；实际可用数据和字段合同 | 每次仅增加一个有业务收益的能力；确定性事实、权限与 Agent 解释均验收，见第 6 节 |
-| P2 / I10 | E5 单人只读持续观察 | P0、选定范围的 I04/I06，以及 E5 适用身份/恢复/容量/发布门槛 | 至少 10 个业务日非零实际使用，记录收益、错误、事实质量和延迟；写入口关闭 |
-| P3 / I11 | WWI 场景扩充与规模递增 | I05；扩量前 I08 有基线 | 先多样性后数量；各规模独立对账、性能和 Agent 验收，达到边界则停止扩量 |
-| P3 / I12 | 持续同步、多主体、多步骤写入或行业数据 | 实际业务需求及对应 E6 门槛 | 单独立项、合同、评测和恢复方案；不自动复用现有写入授权 |
+The [ADR implementation record](../architecture/adr-001-deterministic-agent.md) describes subsequent server-owned ambiguity state, persisted candidates, execution-time gates, and cross-turn revalidation. Their existence does not prove natural-language routing quality. The original session and failure codes remain in the ADR.
 
-I04 可先用已导入的既有记录实施，不必等待 WWI 新批次；模拟用例先执行，真实关联变化在隔离环境验证。I05 的映射分析和 dry-run 可在 P0 期间准备，但不提前切换有已知缺陷的 live 能力。
+[Development telemetry](telemetry-development-acceptance-2026-10-17.md) records first-class release/environment labels, content opt-in, suppressed health/ASGI noise, and bounded protocol/cloud acceptance. [Session recovery](session-expiry-login.md) and [navigation access](navigation-access.md) record bounded browser checks. Original browser/CA failures remain historical evidence; neither the failures nor later successes establish the complete E5 matrix.
 
-I10 不要求先完成 I09/I11 或全部 WWI 导入，可以在已验证的固定范围开始观察。新能力在隔离环境验证后再纳入试运行，并记录版本变化和受影响的重验结果。
+## 3. Current status and task queue
 
-### 3.1 P0 认证网关与授权验收
+The status table is authoritative for current implementation. The work-package table below retains acceptance obligations, including obligations whose original code repair is already complete.
 
-目标路径：用户 → 可信登录网关 / OIDC 身份提供方 → Next.js → Agent / Action API → 受权限约束的业务工具 → Twenty / ERPNext。复用现有 OIDC 校验与服务端身份策略，不把网关当作唯一授权点。
+| ID | Implemented / recorded evidence | Remaining work |
+| --- | --- | --- |
+| I01 / I03 | Original live-relation defects repaired; offline and selected live checks recorded; frozen fulfillment excluded from live | Full real-API change, deletion/recreation, pagination, and fault matrix in I04; no new live fulfillment claim |
+| I02 | Closed `AnswerPlan`, current-run evidence binding, deterministic rendering, conflict/projection guards, and ambiguity clarification support | Full repeated real-model acceptance after contract changes; independent task-completion gold, omission tests, holdouts, false-refusal measurement, and paraphrases |
+| I04 | Historical E2 45/45 and selected snapshot/live 4-case records; later structured snapshot 4/4 | Define/execute CS01–CS40, at least ten holdouts, and the live failure matrix; report versions and layers separately |
+| I06 / I07 | Local OIDC/HTTPS protocol controls; bounded session-expiry/relogin and role-navigation browser records | Complete supported-browser login/logout/revocation/history/disconnect matrix, current CA trust, actual-user identity, network isolation, and recovery evidence |
+| I08 | Tracing, first-verified-text metric, health/ASGI noise suppression, release/environment labels, content opt-in, and budget diagnostics | Measure p50/p95, five-concurrent-session capacity, resource/API usage, queue behavior, and release rollback; validate shared repository consistency |
+| I05 / I09–I13 | No complete acceptance package for these work packages | WWI policy/import closure, justified domain capabilities, operational alert/backup evidence, actual observation, and demand-driven scale |
+| I14 | 2026-10-17 production audit recorded zero findings; dependency/build repair complete | Reassess future advisories and deployed applicability; old audit is not a current security guarantee |
+| I15 | Minimal case runner, real stdio MCP, scripted Agent/API, JSON/JUnit/HTML reports | Full input/output/span/request correlation, incremental timeline, real-model and browser layers |
+| I16 | Offline DSN removal, owned disposable PostgreSQL container runner, and ownership guards | Obtain remote CI evidence for the applicable revision; retain isolation controls |
 
-- 实际登录用户可访问其允许的功能；未登录、伪造签名、错误 issuer/audience、过期 token 必须拒绝。验证退出后的会话失效行为，并验证禁用用户、撤销 session 在规定时效内阻断访问。
-- 网关清除客户端提供的身份/令牌转发头，只注入已验证身份对应的令牌；令牌仅在服务端处理，浏览器脚本不可读取。若采用 cookie，验证 HttpOnly、Secure、SameSite 及适用的 CSRF 防护。
-- 外部客户端不能绕过网关直连 Next.js 或内部 Agent/Action 服务；模型、数据库和执行器不暴露为用户入口。网络约束使用实际可达性测试验证。
-- Agent 和 Action API 继续独立校验 token，并从服务端策略解析 tenant、company、客户/供应商 scope 与角色。客户端或模型传入的范围不能扩大授权。
-- 工具层继续核验实时记录归属；I01 不能由登录成功替代。验证合法用户的越权查询、跨会话历史访问，以及无批准角色的动作请求均被拒绝。
-- 本项涵盖用户入口及身份链路验收，不能用离线 JWT 单测代替网关部署证据。隔离的离线测试可继续；I07 未通过前不开放实际用户入口。
+Default implementation and self-review belong to the project operator. Actual write approval still requires an independent approver.
 
-## 4. 跨系统验收集与评分改进
+| Priority / ID | Work package | Dependencies | Acceptance criteria |
+| --- | --- | --- | --- |
+| P0 / I07 | Identity ingress and end-to-end authority | Actual IdP and ingress; extend implemented controls | Login, expiry/revocation, trusted forwarding, no ingress bypass, backend verification, scope/roles; section 3.1 |
+| P0 / I01 | Live identity/relationship authorization | Existing fixtures and simulated upstreams | Preserve D01 regression and valid controls; reassignment, company mismatch, duplicate keys, deletion/recreation fail safely |
+| P0 / I02 | Evidence-backed answers and task evaluation | Existing evidence contract and independent gold | Preserve D02; wrong entity/field/currency/reference fails; valid plans work; independently measure required facts and task completion |
+| P0 / I03 | Frozen/live fulfillment boundary | Existing mode gate | Preserve D03; no frozen result as live proof; absent live evidence gives refusal/insufficient information |
+| P0 / I16 | Test database lifecycle | Existing runner | Inherited DSNs never connect in offline mode; wrong targets rejected; owned instance checked and cleaned |
+| P1 / I14 | Dependency risk and upgrade regressions | Review applicable blockers before user access | Version/applicability conclusion and affected build/flow evidence |
+| P1 / I15 | Layered developer evidence | Reuse fixtures/tracing/scoring; share cases with I04 | Minimum normal/denied/failure/wrong-answer/interrupted cases show expected/actual, layer, versions, and rerun; actual stdio evidence |
+| P1 / I04 | Cross-system Agent suite | I01–I03; actual-user ingress requires I07 | Forty cases under section 4; distinguish API, domain, model, and Web execution |
+| P1 / I05 | First dependency-complete WWI import | Currency and Item policies; live switch requires I01 | Two full orders/dependencies imported, independently read back, idempotently rerun, and checked by corresponding live cases |
+| P1 / I06 | Browser flow/history recovery | I02; real login requires I07 | Browser asks, exceeds limits, disconnects, follows up, refreshes, and verifies isolation; HTTP/build alone is insufficient |
+| P1 / I13 | E5 alert/backup preparation | May prepare now in restricted scope | Alerts actually received; independent encrypted backup and isolated recovery with applicable O evidence |
+| P2 / I08 | Capacity, read efficiency, rollback | I01; measure before optimizing | Five concurrent sessions, resource/latency/API counts, isolation/timeouts/recovery, and affected rollback regressions |
+| P2 / I09 | Cross-system consistency/live fulfillment evidence | I04 baseline and real field/source contracts | Add one useful domain capability at a time with deterministic facts, permission, and task evaluation |
+| P2 / I10 | Actual single-user read-only observation | P0, selected I04/I06 scope, applicable E5 gates | At least ten business days of nonzero actual use; benefit/errors/fact quality/latency recorded; writes closed |
+| P3 / I11 | WWI diversity and gradual scale | I05; I08 baseline before scale | Separate reconciliation/performance/Agent acceptance per scale; stop at measured boundaries |
+| P3 / I12 | Sync, multiple companies, multi-step writes, industry data | Actual demand and relevant E6 gates | Independent scope/contracts/evaluation/recovery; existing write permission is not inherited |
 
-首批定义 40 个独立案例，使用新前缀 `CS01–CS40`，不覆盖既有 C/F/P/A/W/O/X 案例。下表是案例分组和名额，逐条输入、gold、故障点与清理方法须在实现前写入评测定义。
+I04 can start with existing imported records without waiting for I05. Prepare mapping/dry-run during P0 without switching to known-defective live capabilities. Simulated cases precede isolated real relationship mutations. I10 need not await I09/I11 or all WWI expansion: use a validated fixed scope, then accept each addition and revalidate affected behavior.
 
-| 案例范围 | 数量 | 重点 |
-|---|---:|---|
-| CS01–CS06 | 6 | 客户/供应商搜索、订单、明细链路；同名消歧；完整列表与零结果 |
-| CS07–CS14 | 8 | 客户/供应商换属、联系人换公司、主体不符、重复来源键、记录删除/重建及映射缺失 |
-| CS15–CS20 | 6 | 两系统字段冲突、来源权威、读取时间差、金额/单位、部分数据与交付未知 |
-| CS21–CS26 | 6 | 单系统超时、限流、异常响应、明细读取失败、分页期间变化和恢复 |
-| CS27–CS32 | 6 | 跨用户/范围、权限撤销、会话切换、备注注入及历史上下文误导 |
-| CS33–CS36 | 4 | 最终答案的错误数量/金额/状态、无依据关联、证据遗漏及不确定性表达 |
-| CS37–CS40 | 4 | 多轮追问、预算耗尽、流式中断和后续恢复；覆盖 Web 可见行为 |
+### 3.1 P0 identity ingress and authorization acceptance
 
-评测要求：
+Path: user → trusted login gateway/OIDC → Next.js → Agent/Action API → scoped domain tools → Twenty/ERPNext. The gateway is not the sole authorization point.
 
-- 每个案例明确运行层：确定性服务、模拟适配器、真实只读 API、真实模型或浏览器；某层通过不能替代其他层。直接绕过模型验证所有受保护入口。
-- gold 由独立预期常量或独立源数据核对产生，不调用待测计算 helper 生成“标准答案”。关键金额、数量、单位、状态和对象归属精确匹配。
-- 评分拆为工具选择/参数、工具结果、最终事实、证据和不确定性、权限结果。允许业务等价的调用路径；保留工具预算和禁止调用约束。
-- 明确区分“数据不存在”“当前范围无结果”“尚未导入”“无权限”“读取失败”，缺少证据时不能编造原因。
-- 至少保留 10 个未用于提示词调整的留出案例，并增加自然语言改写。使用过的失败案例进入回归集后补充新的留出案例。
-- 模型案例固定模型、提示词、工具 schema 和数据版本，每例至少重复 3 次，报告每次结果及样本量。保留失败运行，不能只展示修复后的最好结果。
-- 强制验收集的权限/泄露、错误对象关联、关键业务数值、快照冒充实时和副作用不变量必须全部通过；其他必测项也按阶段规则逐项通过。扩展探索集另报成功率，不用整体平均掩盖阻断项。
-- 分别记录合法任务完成率、错误拒绝率、事实错误率、证据完整性、p50/p95 延迟、token 和工具/API 调用数。性能目标在基线后冻结，未测量不宣称达标。
+- Legitimate users reach allowed functions; missing/forged/expired identity or wrong issuer/audience fails. Verify logout behavior and the defined user/session revocation window.
+- Strip client-supplied identity/forwarding headers. Inject only session-derived tokens; keep them server-side. Verify HttpOnly, Secure, SameSite, and CSRF as applicable.
+- External clients cannot bypass ingress to reach Next.js or internal APIs. Model/database/executor are not user entry points. Prove reachability constraints in the actual topology.
+- Both APIs independently validate identity and resolve tenant/company/customer/supplier scope and roles from server policy. Client/model scope cannot expand it.
+- Domain tools recheck current relations. Test an authenticated user's out-of-scope queries, another conversation's history, and action requests without approval authority.
+- Offline JWT tests do not replace deployed ingress evidence. Isolated tests may continue, but actual-user ingress remains gated by I07.
 
-通过标准须验证评分器本身：正确工具结果配错误答案、错误工具结果配流畅答案、否定句中出现禁用词、等价正确答案等都应有反例。不能只依赖关键词命中或另一个模型的主观判断。
+## 4. Cross-system acceptance and scoring
 
-## 5. WWI 数据策略
+Define forty independent cases, `CS01–CS40`, without replacing existing C/F/P/A/W/O/X IDs. Write each input, gold, fault, and cleanup before implementation.
 
-首批复用 [既定选择计划](../../config/interview/wwi-first-batch-selection.json)：销售订单 66823、采购订单 2044，加上客户、供应商、联系人、全部引用商品和完整明细。不得为了增加记录数截断订单或省略依赖。
+| Cases | Count | Focus |
+| --- | ---: | --- |
+| CS01–CS06 | 6 | Customer/supplier search, orders/details, duplicate-name selection, complete lists, zero results |
+| CS07–CS14 | 8 | Party/contact reassignment, company mismatch, duplicate source keys, deletion/recreation, missing mapping |
+| CS15–CS20 | 6 | Source conflicts/authority, observation gaps, amounts/units, partial data, unknown delivery |
+| CS21–CS26 | 6 | Timeout, rate limit, malformed response, detail failure, pagination drift, recovery |
+| CS27–CS32 | 6 | Cross-user/scope, revocation, conversation changes, note injection, misleading history |
+| CS33–CS36 | 4 | Wrong quantity/amount/state, unsupported association, omitted evidence, uncertainty |
+| CS37–CS40 | 4 | Follow-up, budget exhaustion, stream interruption/recovery, visible Web behavior |
 
-导入前待决策：
+Requirements:
 
-1. WWI 原始订单没有币种码，USD 是数据集假设；目标公司和价目表为 EUR。明确采用的币种/换算政策与必要的历史汇率来源，不虚构汇率、不静默改标币种。
-2. Items 184、193、204 的既有库存属性与拟导入内容冲突。确认正确业务语义与复用/隔离策略，不为导入成功覆盖既有对象。
-3. 复核目标环境、权限、备份和通知等副作用，按既有 [WWI 运行手册](../../ops/interview-wwi-data.md) 执行。
+- Declare the layer: deterministic service, simulated adapter, real GET-only API, real model, or browser. Test protected entry points directly without the model.
+- Independent constants or source reconciliation produce gold, never the helper under test. Match amount, quantity, unit, state, and ownership exactly.
+- Score tool choice/arguments, results, final facts, evidence/uncertainty, permission, and task completion separately. Allow equivalent routes while enforcing budgets/prohibited calls.
+- Keep nonexistent, no in-scope result, not imported, forbidden, and failed read distinct; do not invent an explanation without evidence or disclose out-of-scope existence.
+- Reserve at least ten cases not used for prompt tuning. Add paraphrases; replace holdouts that become regression/tuning data.
+- Pin model, prompt, tool schema, data, and scorer versions. Repeat each model case at least three times, retaining every failure and sample count.
+- All mandatory scope/disclosure, relationship, critical value, snapshot/live, and effect invariants pass individually. Report exploratory success separately; averages cannot hide blockers.
+- Report legal task completion, false refusal, factual errors, evidence completeness, p50/p95, tokens, and tool/API counts. Freeze performance targets after baseline measurement.
 
-验收顺序：映射规则与计划版本确定 → dry-run → 按既有规则批准 apply → 小批量导入 → 独立回读身份、关系、单位、数量、金额和原生状态 → 第二次运行不产生重复 → 对应 Agent live 案例通过。失败要保留部分成功记录及恢复路径。
+Test the scorer with correct tools/wrong answer, wrong tools/fluent answer, negation, and equivalent correct answers. For the current runtime, force malformed/forged/omitted evidence plans and wrong selections rather than restoring a prose parser. A keyword hit or another model's subjective rating is insufficient.
 
-首批通过后先扩充场景多样性：当前 15 张采购订单集中于供应商 7，完整订单主要使用三个包装商品，尚不足以覆盖多供应商和多单位业务。优先增加不同供应商、商品/UOM、日期、同名客户及零订单情形。部分交付、取消、缺失关联等仅使用有真实源证据的记录；否则进入独立标记的模拟数据集。
+## 5. WWI data strategy
 
-WWI 没有提供的销售订单与采购订单补货关系不能靠名称或商品相同推定。真实库存、预留和交付能力需要对应证据。规模测试在多样性通过后分档递增，记录订单/明细数、授权范围、每请求读取量、延迟和资源；不预设“全量导入即完成”。
+Reuse the [first-batch selection](../../config/interview/wwi-first-batch-selection.json): sales order 66823, purchase order 2044, customer/supplier/contacts, every referenced item, and full lines. Do not truncate dependencies to increase record counts.
 
-## 6. 工具、架构与运行完善
+Resolve before import:
 
-### 6.1 工具按业务缺口扩展
+1. WWI orders have no currency code. USD is a dataset assumption; target company/price lists use EUR. Decide currency/conversion policy and reviewed historical exchange-rate source. Never invent rates or silently relabel currencies.
+2. Existing stock attributes for Items 184, 193, and 204 conflict with proposed imports. Decide correct semantics and reuse/isolation without overwriting for convenience.
+3. Recheck target, permission, backup, notification, and other effects under the [WWI runbook](../../ops/interview-wwi-data.md).
 
-- **跨系统一致性**：身份是否对应、字段差异、权威来源、时间和缺失证据。先决定是否作为现有工具的结构化字段/内部服务；只有独立用户任务需要时再增加模型可见工具。
-- **真实订单履约证据**：订单剩余量、已交付、库存、其他订单占用及可用入库；定义仓库、日期、单位和分配口径。证据不全返回信息不足，不以固定 F 场景代替实时计算。
-- 每项增加合同、scope、数据来源、完整性、预算和故障行为；MCP 与 Agent 对同一业务能力的授权及结果语义保持一致。原始计算在确定性服务完成，模型负责解释。
-- 暂缓通用 SQL/Shell、任意业务写入、发票/付款/库存调整和对外消息工具。新写入使用 E6 独立准入，不扩张内部跟进 Task 的授权。
+Sequence: mapping/plan version → dry-run → concrete approved apply under existing rules → small import → independent identity/relation/unit/quantity/amount/native-state readback → duplicate-free rerun → corresponding live Agent cases. Preserve partial success and recovery evidence.
 
-### 6.2 实时读取与性能
+After the first batch, expand diversity before volume. Current fifteen purchase orders all belong to supplier 7; complete orders mostly use three packaging products. Add suppliers, items/UOM, dates, duplicate names, and zero-order cases. Partial delivery, cancellation, or missing relationships need actual source evidence or a separately labeled simulated dataset.
 
-当前适配器存在多对象列表扫描和逐订单明细请求。先记录真实 API 调用数及延迟，再按瓶颈实现按需读取、服务端过滤、分页或缓存，避免扩量后每个工具调用重复加载整批数据。
+WWI does not prove sales/purchase replenishment links from shared names/items. Live inventory, reservation, and delivery need explicit evidence. Scale in measured steps after diversity, recording line counts, scope, records read/request, latency, and resources. Full import is not itself completion.
 
-同时验证共享可变仓库在五并发下的请求一致性、缓存范围隔离、部分刷新失败后状态、删除对象的旧 ID 清理和来源时间更新。这里属于待测风险，不宣称已复现并发泄露。缓存和批量读取不能牺牲实时关联核验、撤销时效或权限边界。
+## 6. Tools, architecture, and operations
 
-### 6.3 浏览器与 E5
+### 6.1 Extend tools for business gaps
 
-I06 保存实际浏览器步骤、页面结果及关联请求：工具卡片均终止、错误可理解、排队消息可见且可移除、失败后继续追问、刷新后历史恢复、不同会话不串数据。浏览器不可用时标 BLOCKED，不以生产构建或 SSE 脚本冒充通过。
+- Cross-system consistency: identity correspondence, field differences, authority, time, and missing evidence. Extend existing structured fields/internal services first; expose a tool only for an independent user task.
+- Live order fulfillment: remaining/delivered quantities, stock, competing reservations, inbound allocation, warehouse/date/unit rules. Return insufficient information when evidence is incomplete; F cases are not live calculations.
+- Every addition needs a contract, scope, provenance, completeness, budget, and fault semantics. MCP/Agent share authorization and business rules. Deterministic services calculate; the model routes and selects evidence.
+- Defer generic SQL/Shell, arbitrary writes, invoices/payments/inventory adjustments, and external messaging. New writes require E6, not reuse of internal Task authorization.
 
-I07/I13/I08/I10 复用 [E5 子方案](phases/e5-enterprise-pilot.md) 的 O01–O08，不新设冲突标准：实际用户撤销、告警实际接收、加密独立备份与隔离恢复、五并发容量、发布回退、保留清理以及至少 10 个业务日实际使用。RPO/RTO 和服务限制使用实测证据；模拟流量不充当真实使用收益。
+### 6.2 Live reads and performance
 
-## 7. 首个执行批次、证据与状态维护
+Adapters currently scan multiple object lists and request per-order details. Measure real API calls and latency before adding on-demand reads, filtering, pagination, or caching. Avoid repeated full-batch loads as data grows.
 
-**下一批优先验证修改后门禁的真实模型表现，并补齐 I07/I04/I06。**
+Verify shared mutable repository consistency under five concurrent sessions, scope-isolated caches, partial refresh failure, obsolete-ID cleanup, and source-time updates. These are risks to test, not proven concurrent disclosures. Optimizations must preserve live relation checks, revocation timing, and scope.
 
-1. 保留三个原始反例及合法对照；针对多对象、跨句及格式改写扩充 gold，重跑真实模型，分别统计事实错误与误拒绝。
-2. 用已落地的 `scripts/verify.sh case` 保存最小验收包，再增加真实模型和浏览器层；补全工具输入输出、trace/request ID 与证据指针。
-3. 完成受支持浏览器的 HTTPS/OIDC 登录、撤销和会话恢复验收。
-4. 实施 CS40 和留出集；I05 仍以币种/Item 政策及目标环境为前提，随后完成一个业务闭环及容量/恢复测量。
+### 6.3 Browser and E5
 
-I14/I16 不重复列为待实施；本轮详细验证及限制见 [修复记录](fixes-2026-10-17.md)。
+I06 retains actual steps, visible results, and request links: tool cards terminate; errors are understandable; queued messages can be seen/removed; follow-up succeeds after failure; refresh/history/isolation work. An unavailable browser is BLOCKED, not passed by build or SSE scripts.
 
-后续证据建议保存到 `reports/enterprise/improvements/<run-id>/`，复用 [统一验收包](delivery-plan.md#2-状态与证据)：版本、工作树差异、环境/数据模式、输入、独立预期、实际结果、复现命令和限制。案例对应原 E1/E2/E5/E6 子目标，保留旧报告，不以新摘要覆盖历史失败。
+I07/I13/I08/I10 reuse [E5 O01–O08](phases/e5-enterprise-pilot.md): actual-user revocation, received alerts, encrypted independent backups/recovery, five-session capacity, rollback, retention/deletion, and at least ten business days of actual use. RPO/RTO are measured; synthetic traffic does not prove user benefit.
 
-每完成一个工作包，更新本文件任务状态、证据位置和剩余限制，并同步阶段索引。敏感证据不提交 Git，仓库保存脱敏摘要；本地忽略目录不能作为其他人可访问的唯一证据。
+## 7. Next batch and status maintenance
 
-原始计划交付仅更新文档。后续 I07 已新增并启动 loopback HTTPS / Keycloak / OAuth2 Proxy / Redis / Web / 只读 Agent 独立栈，使用合成账号和公开快照完成协议验证；不计为实际用户试运行。没有导入业务系统数据、启动 Worker、开放新业务工具或完成 E5 观察。I01–I03 原始反例已修复；新增事实绑定缺口和未执行的验收范围按 v1.5 队列推进。
+1. Run full repeated model evaluation against the current structured evidence and ambiguity contracts; score legal completion, omissions, false refusal, and language variants independently.
+2. Extend implemented `scripts/verify.sh case` evidence with real-model/browser layers and request/tool/trace/evidence correlation.
+3. Complete the HTTPS/OIDC/browser matrix beyond the bounded login/navigation records; recheck current certificate trust and actual identity/network controls.
+4. Define/run CS40 and holdouts, then complete one WWI business loop after currency/Item policy. Measure capacity/recovery and finish applicable E5 operations before observation.
+
+Do not list the retired parser, DSN isolation, initial tracing, first-verified-text metric, or health-span suppression as unimplemented. Their remaining task acceptance, capacity, or remote-CI evidence is separate.
+
+Store evidence under `reports/enterprise/improvements/<run-id>/`, using the [acceptance package](delivery-plan.md#2-status-and-evidence): versions, worktree diff, environment/data mode, input, independent expected/actual, rerun, and limits. Keep old failures; do not overwrite them with a new success summary. Sensitive evidence stays out of Git; ignored local files cannot be the only team-accessible long-term evidence.
+
+Update this status table and the enterprise index after each accepted work package. Nothing in this plan imports target data, launches a Worker, opens a new business tool, or completes E5 by itself. The local loopback HTTPS stack remains a public-snapshot/synthetic-identity development environment until the applicable actual-user gates pass.

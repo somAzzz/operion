@@ -1,43 +1,37 @@
-# 数据保存规则
+# Data storage rules
 
-WWI 下载与最小 ETL 已落地；实际快照和生成物按 `.gitignore` 仅保存在本地。
-可复现命令与重跑约束见 `ops/data-pipeline.md`。
+WWI download and minimum ETL are implemented. Actual snapshots and generated artifacts remain local under `.gitignore`. See `ops/data-pipeline.md` for reproducible commands and rerun constraints.
 
-| 目录 | 用途 |
-|---|---|
-| raw/wwi | WWI 原始备份、来源清单 |
-| raw/adventureworks | AdventureWorks 原始备份、来源清单 |
-| raw/ema | EMA JSON 快照 |
-| raw/openfda | 限定查询的原始响应及查询信息 |
-| staging | 可选中间结果，第一版无需单独落盘 |
-| canonical | 通过标准业务模型整理的数据 |
-| exports/erpnext | ERPNext 导入批次文件 |
-| exports/twenty | Twenty 导入批次文件 |
-| quarantine | 简单错误文件即可，完整复核流程后置 |
+| Directory | Purpose |
+| --- | --- |
+| raw/wwi | WWI backup and source manifest |
+| raw/adventureworks | AdventureWorks backup and source manifest |
+| raw/ema | EMA JSON snapshots |
+| raw/openfda | Bounded responses and query metadata |
+| staging | Optional intermediates; not required initially |
+| canonical | Unified business records |
+| exports/erpnext | ERPNext import batches |
+| exports/twenty | Twenty import batches |
+| quarantine | Simple error artifacts; full review workflow deferred |
 
-每次获取建立独立快照目录，建议采用 `来源/UTC时间或批次号/`，原始快照不覆盖。
+Use a separate snapshot directory per acquisition, such as `source/UTC-time-or-batch/`. Never overwrite raw snapshots.
 
-来源清单至少记录：来源链接、获取时间、数据版本、覆盖时期、许可或使用条件、文件大小和校验值。API 快照另外记录端点、无凭据的查询参数、分页范围及数据更新时间。
+Source manifests record URL, retrieval time, version, coverage period, license/terms, size, and checksum. API manifests also retain credential-free endpoint/query parameters, pagination scope, and data-update time.
 
-每批加载保留来源批次、模型与映射版本、目标系统版本、记录数、失败原因及对账结果。真实、公开样例、模拟数据必须有明确类型标记。
+Each load records source batch, model/mapping and target versions, counts, failures, and reconciliation. Explicitly classify real, public-sample, and simulated data.
 
-数据和运行结果默认不纳入版本管理。可复用且不含敏感数据的模型、映射、合同及评估案例分别存入项目对应目录。
+Data and run results normally stay outside version control. Reusable nonsensitive models, mappings, contracts, and evaluation cases belong in their corresponding repository directories.
 
-`canonical/interview-demo-v1/` 是明确的例外：它是固定 seed 生成、仅含虚构
-`DEMO` 对象的版本化面试数据集，因此与其空 target ID 的初始 identity map 一同
-纳入版本管理；任何实际回读 ID 和运行报告仍留在独立运行目录，不提交。
+`canonical/interview-demo-v1/` is an exception: the fixed-seed fictional `DEMO` dataset and initial empty-target-ID map are versioned. Actual readback IDs/reports stay in separate ignored run directories.
 
-`canonical/interview-wwi-v1/` 是第二个明确例外：它从 SHA-256 固定的 WWI v1
-公开样例快照按版本化 ID 和完整订单规则确定性抽取，保留 `wwi:*` 来源键和
-`data_class=public_sample`。提交的 identity map 仍只有空 target ID；实际目标回读
-结果不得提交。
+`canonical/interview-wwi-v1/` is another exception: deterministic versioned IDs and complete-order selection derive from a SHA-256-pinned WWI v1 public sample. Preserve `wwi:*` source keys and `data_class=public_sample`. Its committed map has empty target IDs; actual target readback is not committed.
 
-## 第一版最小要求
+## Minimum first-version requirements
 
-流程可以直接采用 Raw → Canonical → Target Mapping → Load；校验与回读嵌入其中。现有目录是归档位置，不代表需要实现多个服务。
+Raw → Canonical → Target Mapping → Load is sufficient, with validation/readback embedded. Directories are archive locations, not a requirement for multiple services.
 
-保留实体类型、来源系统/ID、双方目标 ID 对照；每个目标记录单独保存加载状态和报错。运行清单记录批次、时间、规则版本及数量，错误能关联回具体来源记录。确认目标已有结果后再重跑，避免重复创建。
+Preserve entity type, source system/ID, both target IDs, per-target load state, and errors. Run manifests record batch, time, rule version, and counts, with errors linked to source records. Confirm existing effects before rerunning to avoid duplicates.
 
-履约演示固定业务日期和场景快照，保留订单未交付量、采购明细未收货量及预计日期、仓库库存及占用口径、承诺与运输口径。模拟数据保留其派生来源和模拟标记，不能覆盖历史原始数据。不得混用历史订单、不同时间的库存与今天的日期。
+Fulfillment demos pin business date/scenario and retain remaining sales/purchase quantities, inbound dates, warehouse stock/reservation definitions, promise, and transport rules. Simulations preserve derivation and labels without overwriting historical inputs. Never mix historical orders, differently timed inventory, and today's date.
 
-实际查询状态必须支持演示结论：草稿订单不冒充有效未结订单，导入商品不等于已有可用库存。必要状态通过隔离环境内业务操作准备并回读确认。
+Actual native state must support the conclusion: draft orders are not active open orders, and imported Items do not establish available stock. Prepare needed states through supported isolated business operations and verify by readback.

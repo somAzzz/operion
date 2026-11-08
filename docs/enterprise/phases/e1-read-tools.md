@@ -1,55 +1,46 @@
-# E1：数据与只读业务工具
+# E1: Data and read-only business tools
 
-状态：PASSED（实验范围；2026-09-19）。责任：开发维护者、系统/数据负责人；业务负责人确认履约口径。
+Status: PASSED, experimental scope, 2026-09-19. Owners: developer and system/data owner; business owner defines fulfillment semantics. Historical acceptance does not limit the current interface to two tools.
 
-验收结果：新 identity map 将没有未完成数量、不会导入目标的订单和明细明确标为 `not_applicable`。真实 GET-only 回读中 ERPNext 72/72、Twenty 35/35 命中，缺失和额外来源键均为 0。客户概览、履约判断与仅包含这两个入口的 MCP 已实现，C01–C03、F01–F06、P01–P03、A01–A03 共 15 个固定案例全部通过。
+## Historical acceptance
 
-ERPNext 门禁按关键业务对象而非整枚 token 的全局权限判定：Customer、Supplier、Item、Sales Order、Purchase Order、Warehouse、Bin、UOM 均可读且 create/update/delete/submit/cancel/amend 被拒绝；直接新增请求均返回 HTTP 403。按业务决定，Contact 和 ToDo 是明确记录的例外，不阻断 E1，因此不得声称该 token “全局只读”。MCP 不接收 token、角色、范围或任意 URL，调用者范围由服务端配置。
+The identity map marked orders/lines with no remaining quantity and no target import as `not_applicable`. GET-only readback matched ERPNext 72/72 and Twenty 35/35, with zero missing/extra source keys. Customer overview, frozen fulfillment, and the original two-entry MCP passed all fifteen C01–C03/F01–F06/P01–P03/A01–A03 cases.
 
-本地验收包位于 `reports/enterprise/e1/20260919T-e1-complete/`（按仓库策略不提交），工具合同见 [E1 只读工具合同](../../../contracts/e1-read-tools-v1.md)。
+ERPNext gates cover protected business DocTypes rather than claiming the entire token is globally read-only: Customer, Supplier, Item, Sales Order, Purchase Order, Warehouse, Bin, UOM were readable and denied create/update/delete/submit/cancel/amend; direct create probes returned 403. Contact and ToDo were explicit business-approved exceptions. MCP accepts no token/role/scope/URL argument; server configuration owns caller scope.
 
-## 后续访谈样本修订（2026-09-22）
+Local ignored package: `reports/enterprise/e1/20260919T-e1-complete/`. See the [read contract](../../../contracts/e1-read-tools-v1.md).
 
-原 P02 验收和 v1 工具合同有意排除了联系人邮箱与电话；这保留为
-E1 的历史验收记录，不再定义当前接口。现行[联系人概览 v2 合同](../../../contracts/contact-overviews-v2.md)在授权的客户或供应商范围内
-返回联系人邮箱与电话：快照仅使用 `public_sample`/`simulated` 数据；
-实时模式分别读取 Twenty Person 和 ERPNext Contact，并核对组织关联。
-信用额度、付款期限、任意备注等字段仍不在该合同内；正式真实数据
-的字段授权仍须按 E5.1 单独确定。
+## Later interview contract revision (2026-09-22)
 
-## 目标与入口
+Original P02/v1 excluded email/phone. That is historical acceptance, not the current field interface. [Contact overviews v2](../../../contracts/contact-overviews-v2.md) returns source-verified communication fields for authorized organizations: snapshots only for `public_sample`/`simulated` data, live customer fields from Twenty Person and supplier fields from ERPNext Contact with relation checks. Credit limits, payment terms, and arbitrary notes remain excluded. Real-data field authorization needs E5.1.
 
-入口：E0 通过，使用只读凭据；样本准备使用独立 ETL/人工业务权限。目标：无需模型即可查询客户概览、计算履约结果并核对证据。既有 ETL 尽量复用，不将持续同步作为前提。
+Current MCP exposes fifteen snapshot or fourteen live domain reads. Agent and MCP share domain rules. The [current queue](../improvement-plan.md) owns later live/task acceptance.
 
-## 子目标与实施顺序
+## Goal and entry
 
-| ID | 子目标 | 实施与交付物 | 验证方法和通过条件 |
-|---|---|---|---|
-| E1.1 | 补齐最小关联样本 | 按现有实际导入状态补齐客户、联系人、订单/采购明细、库存等必要数据 | 目标 API 回读与 identity map 一致；同名不自动合并；历史/模拟标记明确 |
-| E1.2 | 建立只读适配器 | 固定字段、分页、超时、限额和归一错误；不暴露通用 GraphQL | 超过一页、接口失败、无数据、权限不足分别验证；无写凭据依赖 |
-| E1.3 | 固化履约规则 | 单位、剩余量、库存/在途分配、日期与缺失值规则 | F01–F06 对固定输入得到固定结果；多人订单检查不重复分配同一供应 |
-| E1.4 | 客户概览合同 | 解析跨系统身份，返回负责人/联系人、订单、来源和时间 | C01–C03 正确；歧义返回候选澄清而非随意选客户 |
-| E1.5 | 权限与数据隔离 | 检索、详情、关联、聚合、链接、缓存和错误均受范围限制 | 直接调用服务端验证 P01/P02；跨用户复用缓存不泄露数据 |
-| E1.6 | 暴露业务 MCP | 注册客户概览、履约检查，内部读取原语不全部开放 | MCP 与应用入口结果/策略一致；伪造角色和任意目标地址被拒绝 |
+E0 permission baseline plus read credentials; preparation uses separate ETL/human authority. Without a model, resolve overview, calculate frozen fulfillment, and verify evidence. Reuse ETL without requiring continuous synchronization.
 
-## 工具合同最小内容
+| ID | Subgoal/deliverable | Verification |
+| --- | --- | --- |
+| E1.1 | Complete linked customers, contacts, orders, purchase lines, stock fixtures | API readback agrees with map; no same-name merge; historical/simulated labels |
+| E1.2 | Bounded read adapters, fields, pagination, timeout, normalized errors | Multiple pages, failure, empty, and forbidden remain distinct; no write credential dependency |
+| E1.3 | Units, remaining quantity, allocation, dates, missing-value rules | F01–F06 fixed expectations; no double allocation across orders |
+| E1.4 | Overview identity, contacts/owner, orders, sources/time | C01–C03; ambiguity returns candidates |
+| E1.5 | Scope on search/detail/relations/aggregates/links/cache/errors | Direct P01/P02; no cross-user cache leak |
+| E1.6 | MCP over business services; initially overview/fulfillment | Same rules/results as application; forged role/arbitrary address rejected |
 
-每个工具记录名称/版本、业务用途、输入与额外字段拒绝规则、用户范围、输出 schema、最大记录数/字节数、时限、来源时间、缺失项、错误类型和副作用声明。副作用声明由测试验证，不能只依赖 read-only 注解。
+## Minimum tool contract
 
-库存等计算输出保留需求、供应分配、规则版本和逐行依据。无法得到可信占用或日期时返回信息不足。ERPNext 草稿不能当成已经生效的订单或库存事实。
+Name/version, business purpose, strict input/extra-field handling, scope, result schema, row/byte/time limits, source time, missing fields, errors, effects. Test effects instead of relying only on read-only annotations. Stock calculations preserve inputs, allocations, rules, and per-line evidence. Missing reservations/dates yield insufficient information; draft documents are not effective orders/stock.
 
-## 验证任务
+## Verification tasks
 
-- 固定 C01–C03、F01–F06 的输入和 expected，不由模型生成预期结果。
-- P01/P02 直接覆盖未授权经营主体与敏感字段；P03 验证服务端无写能力。
-- A02/A03 验证接口失败、过期与非同时快照；A01 的备注此时仅按数据返回，后续在 E2 验证模型处理。
-- 核对查询数量上限、分页完整性、部分结果标识、非法 ID、空值和单位换算。
-- 用真实隔离 API 做关键集成检查，mock 通过不能代替权限和数据回读。
+- Pin C/F inputs and independent expectations, never model-generated gold.
+- Direct P01/P02 scope/field checks; P03 proves no write capability.
+- A02/A03 distinguish failure, staleness, and observation gaps; A01 source notes remain data and are exercised with the model in E2.
+- Test bounds, pagination/completeness, partial markers, invalid IDs, nulls, and unit semantics.
+- Real isolated APIs verify target permission/readback; mocks do not replace them.
 
-## 交付与退出条件
+## Exit and failure
 
-已交付工具合同、样本清单、规则测试、API 集成证据和阶段验收包。数值预期全部一致、身份无歧义或明确澄清、来源和数据时间完整、无越权结果。E1 通过不代表模型演示通过。
-
-## 失败处理与下一步
-
-缺业务数据或口径时保留“信息不足”，补齐固定场景后重新验证；禁止用模型估计替代。失败样本进入明确错误报告，不自动改字段映射。通过后进入 [E2](e2-read-agent.md)。
+Deliver contracts, fixtures, rules, API evidence, and acceptance package. Values/identities/provenance/time/scope must agree. E1 does not prove Agent behavior. Keep insufficient information when facts/rules are missing; repair inputs and retest, never estimate with the model or silently rewrite mappings. Continue to [E2](e2-read-agent.md).

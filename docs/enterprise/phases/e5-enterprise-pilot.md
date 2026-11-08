@@ -1,64 +1,64 @@
-# E5：单人只读试运行与运维
+# E5: Single-operator read-only pilot and operations
 
-状态：TECHNICAL CONTROLS IMPLEMENTED / PILOT BLOCKED（2026-09-29）。责任：单人操作者执行并自检；记录本人、日期、环境和证据位置。
+Status: TECHNICAL CONTROLS IMPLEMENTED / PILOT BLOCKED. Original scope revision: 2026-09-29; current status follows the [improvement plan](../improvement-plan.md). The actual operator implements and self-checks, recording their name, date, environment, and evidence.
 
-## 目标与入口
+## Goal and entry
 
-目标：由一名实际使用者在限定范围内验证只读服务可运行、可恢复、可升级。入口为 M1，写入口始终关闭。单机和单人环境不宣称高可用或有人缺席时的值守能力。单人 E5 通过仅证明该只读范围，不代表多人企业部署或真实写入已验收。
+One actual user validates a scoped read-only service's operation, recovery, and upgrades. Entry is M1; writes stay closed. A single user/host does not establish high availability or unattended coverage. Passing E5 here establishes only this read-only scope, not multiple users or real writes.
 
-本阶段的运营准备可以提前实施。以下 E5.1–E5.6 适用于单人只读试运行，可在本地或托管环境使用公开样本或获准私有数据；证据必须标明数据模式和实际环境。写相关故障场景可在隔离环境演练，实际试运行必须验证写入口关闭且不可调用。写入验收留待有独立审批人时另行进行。
+Preparation can begin early. E5.1–E5.6 apply locally or hosted, using labeled public sample or approved private data. Write fault drills stay isolated; actual observation proves all write entry points closed. Writes require an independent approver and separate release.
 
-## 子目标与实施顺序
+| ID | Deliverable | Acceptance |
+| --- | --- | --- |
+| E5.1 | One actual identity/company/role, sensitive fields, source scope | Actual authorization/revocation; controlled test identities verify cache/history/field/relation isolation |
+| E5.2 | Isolated deployment, pinned images/locks, private network, secrets/rotation/recovery | Clients cannot reach model/database/executor; no secrets in logs/repository |
+| E5.3 | Metrics, thresholds, real receiving channel, fault runbook | Triggered alerts personally received/handled; unattended automatic pause/degradation defined |
+| E5.4 | Encrypted independent backup, retention/deletion, RPO/RTO, reconciliation | Timed isolated restoration, measured loss window, no action replay |
+| E5.5 | Automated five-session load, budgets, dependency failures, rollback | Measured targets or explicit pilot limits; safety unchanged; write performance remains isolated |
+| E5.6 | One actual user/company, defined hours, observation | At least ten business days of service/errors/fact quality/benefit/incidents; no unresolved blocker |
 
-| ID | 子目标 | 实施与交付物 | 验证方法和通过条件 |
-|---|---|---|---|
-| E5.1 | 真实身份与数据范围 | 确定一名实际用户、经营主体、角色、敏感字段和数据来源 | 实际用户授权与撤销通过；用受控测试身份验证跨用户/范围缓存、历史、字段和关联查询隔离 |
-| E5.2 | 运行配置与秘密管理 | 隔离环境、固定镜像/依赖、受限网络、密钥注入/轮换/恢复 | 普通客户端不可达模型/数据库/执行器；无明文凭据入日志或仓库 |
-| E5.3 | 监控与值守 | 仪表/指标、告警阈值、操作者接收通道、故障手册 | 人工触发告警并由本人实际接收和处置；记录无人值守时段及自动暂停/降级边界 |
-| E5.4 | 恢复与数据生命周期 | 加密独立备份、保留/删除策略、RPO/RTO 和联合对账 | 从备份恢复到隔离环境，实测时长和缺失窗口；恢复后无动作误重放 |
-| E5.5 | 容量与发布 | 自动化产生五个并发只读会话，记录资源预算、依赖故障、发布/回退演练；写动作性能仅在隔离演示环境复测 | 达成目标或由操作者记录试运行限制；安全门槛不降级 |
-| E5.6 | 单人试运行 | 一名实际使用者、单主体、明确使用时段，完成连续观察 | 至少 10 个业务日记录服务、错误、事实质量、操作收益和事故；无未解决阻断缺陷 |
+## Required O01–O08
 
-## 必测 O01–O08
+| ID | Test | Required outcome |
+| --- | --- | --- |
+| O01 | Actual-user revocation; test cross-user/scope/cache | Block within defined window; no leakage; test identities do not count as actual users |
+| O02 | Secret rotation, invalid credentials, network/configuration | Valid recovery, old secrets fail, no disclosure |
+| O03 | Model or source outage | Truthful partial/unknown outcome; no fabricated facts or unknown-write retries |
+| O04 | Ledger/audit failure, stalled Worker, full disk | New writes stop; alerts delivered; recovery retains work without duplicates |
+| O05 | Independent restore/remote partial success | Measured RPO/RTO; Worker disabled until reconciled; no old approval replay |
+| O06 | Automated concurrency/limits/queue/timeout | Five-session resource/latency statistics; controlled overload; recovery not starved |
+| O07 | Failed model/template/application release and rollback | Prior combination runs; affected evaluations pass; migration limits explicit |
+| O08 | Retention/deletion/access audit/incident drill | Content expires, backup retention explained, events linked, actual owner can operate |
 
-| ID | 测试 | 通过条件 |
-|---|---|---|
-| O01 | 实际用户权限撤销、受控测试身份跨范围请求与缓存 | 在定义的撤销时效内阻断；执行前权限检查有效；无跨范围泄露；测试身份不计入试运行人数 |
-| O02 | 密钥轮换、错误凭据、配置/网络隔离 | 合法服务恢复连接；旧凭据失效；敏感值不泄露 |
-| O03 | SGLang 或业务系统中断 | 正确降级/部分结果；不编造数据或重试不明写入 |
-| O04 | PostgreSQL/审计不可用、Worker 卡住、磁盘不足 | 新写入停止，告警可达，恢复任务不丢失或重复 |
-| O05 | 独立备份恢复与远端部分成功 | RPO/RTO 有实测；先禁用 Worker，对账后恢复；旧批准不自动重放 |
-| O06 | 自动化并发、限流、队列和超时 | 五个模拟会话的延迟/资源有统计，超限可控；恢复任务不被读流量饿死 |
-| O07 | 模型/模板/应用升级失败并回退 | 上一组合可运行，相关评估重过，迁移兼容性和限制明确 |
-| O08 | 日志保留、删除、访问审计与事件演练 | 原始内容到期清理、备份期限可解释；事件可关联，实际负责人能操作 |
+## Observation
 
-## 试运行观察内容
+Daily check unknown/failed/pending actions, sources, and backups; weekly sample facts/Task outcomes. Record legitimate volume, completion, human time, p95, model resources, API load, and sample counts. Zero traffic or universal refusal is not service quality.
 
-每天核对未知动作、失败与审批积压、上游健康和备份新鲜度；每周抽查客户事实与任务效果。记录合法请求数、完成率、人工处理时间、p95 延迟、模型资源和业务 API 负载，注明样本量。零流量或全部拒绝不算服务质量达标。
+Ten business days cannot establish 99.5% monthly availability; report the measured window and continue monthly measurement. Narrow load/scope or explicitly revise performance targets when needed; never relax permission/approval/idempotency.
 
-99.5% 月度可用性不能通过 10 日观察证明；试运行报告仅报告实际窗口，转持续运行后继续按月统计。性能目标不足时降低并发/服务范围或调整经确认的目标；不得放宽权限、审批和重复副作用要求。
+## Exit and handoff
 
-## 交付、退出条件与交接
+Deliver actual-user/scope/data policy, deployment, operations manual, O01–O08, restore/upgrade evidence, and observation report. Operator self-signs actual capability/hours/unattended limits and unverified multiple-user scenarios.
 
-交付单人身份/范围清单、数据策略、部署清单、运营手册、O01–O08、恢复和升级证据、观察报告。由操作者在记录中自检签名并写明开放能力、无人值守限制和未验证的多人场景。
+- M3: all applicable read-only requirements pass and writes are disabled.
+- M4: not released by single-user E5. Self-approval is forbidden; real writes need another approver and specific acceptance. New tools remain default-deny.
 
-- M3：单人只读相关要求全部通过，写入口禁用，明确标注单人试运行范围。
-- M4：单人 E5 不放行。动作服务拒绝提案人批准自己的动作；真实写入需要独立审批人和单独的写入验收。新工具仍默认拒绝。
+## Implementation and remaining evidence
 
-## 当前实施结果（2026-09-20）
+The 2026-09-20 implementation added OIDC verification, server user/tenant/company/customer/role mappings, revocation, server token forwarding, write release gates, access audit/24-hour purge, operations snapshots, Worker heartbeat/release, and strict O01–O08/observation evidence validation. See [contract](../../../contracts/e5-enterprise-boundary-v1.md) and [runbook](../../../ops/e5-enterprise-pilot.md).
 
-已实现企业 OIDC token 校验、服务端用户/tenant/company/customer/role 映射、用户与 session 撤销、Web 服务端令牌转发、企业写入 release gate、会话访问审计与 24 小时内容清理、Action 运维快照、Worker heartbeat/release ID，以及严格的 O01–O08/10 日试运行证据校验器。合同见 [E5 企业边界](../../../contracts/e5-enterprise-boundary-v1.md)，部署与取证见 [E5 运行手册](../../../ops/e5-enterprise-pilot.md)。
+I07 local Keycloak/HTTPS and synthetic protocol acceptance were added later. Bounded [session recovery](../session-expiry-login.md) and [navigation](../navigation-access.md) browser checks now exist, but do not complete the actual-user/revocation/network matrix. Preserve original CA/browser blockers in their dated reports instead of treating them as the current universal state.
 
-仅有本地确定性测试和构建不能完成以下实际运行条件，因此当前不得标为 PASSED，也不得由此开放私有数据或写入：
+Still missing a complete actual-environment package:
 
-- I07 已实现本地 Keycloak issuer/audience/JWKS 与 loopback HTTPS 受限入口，使用合成账号完成协议验证；实际试运行用户、浏览器点击和实际环境网络隔离仍待验收，见 [网关摘要](../gateway-acceptance.md)；
-- 尚未由操作者实际接收 PostgreSQL、Worker stall、磁盘不足告警并验证无人值守时的自动暂停/降级；
-- 尚未配置加密异机 backup/WAL 归档并完成隔离恢复，无法证明 RPO ≤ 15 分钟、RTO ≤ 4 小时；
-- 尚未完成自动化五并发容量与发布回退演练；
-- 尚未完成至少 10 个业务日的非零真实流量观察和操作者自检签名。
+- Actual pilot identity, full supported-browser/revocation/network/recovery matrix.
+- Personally received PostgreSQL/Worker/disk alerts and verified unattended behavior.
+- Encrypted off-host backup/WAL and isolated restore establishing RPO ≤ 15 minutes/RTO ≤ 4 hours.
+- Automated five-session capacity and release rollback.
+- At least ten business days of nonzero actual use and operator signature.
 
-`operion-evaluate-e5` 对缺失、虚构观察、含占位符或未达到上述门槛的 evidence 返回 `blocked` 和非零退出码。本地运行可以是真实单人观察；仅有模拟请求不算合法使用流量。2026-09-20 的 v1 报告保留为历史证据，不能按 v2 单人标准沿用。
+`operion-evaluate-e5` returns `blocked`/nonzero for missing, fabricated, placeholder, or insufficient v2 evidence. Local actual use may qualify; simulated traffic does not. The 2026-09-20 v1 report remains historical and cannot satisfy v2.
 
-## 停止与恢复条件
+## Stop and recovery
 
-发现越权、未批准写入、重复副作用、审计断裂或不明数据损坏，暂停受影响能力并执行总方案事故流程。备份不满足承诺或出现长期未知动作时收窄服务，不能继续无条件扩量。修复和回归后由责任人依据证据决定恢复；后续扩展进入 [E6](e6-expansion.md)。
+Pause affected capabilities on unauthorized/unapproved/duplicate effects, broken audit, or unknown corruption. Narrow service when backups/unknown outcomes breach agreed limits. Repair/retest and release on evidence; extensions follow [E6](e6-expansion.md).

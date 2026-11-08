@@ -1,65 +1,59 @@
-# E3：动作控制与故障恢复
+# E3: Action control and fault recovery
 
-状态：PASSED（E3 持久化测试桩，2026-09-20）。责任：开发维护者、系统负责人；业务负责人确认审批策略。
+Historical status: PASSED, persistent E3 stub, 2026-09-20. Owners: developer/system owner; business owner approves policy. This stage did not itself release target writes; later E4 acceptance is separate.
 
-## 目标与入口
+## Goal and entry
 
-目标：在开放真实写入前，完成可持久化的提案、可信审批、执行状态机、幂等和未知结果恢复。可先使用故障注入测试桩实现；目标 API 能力探针仅在隔离测试对象上进行，不开放给普通用户。
+Before real writes, persist proposals, trusted approval, execution state, idempotency, and unknown-outcome recovery. Use fault-injection stubs; target probes are isolated and not ordinary-user tools. E0 defines permissions and E1 supplies identity contracts; final E4 release also requires E2.
 
-入口：E0 权限边界明确，E1 业务身份合同可用。最终放行 E4 仍要求 E2 已通过。
+| ID | Deliverable | Verification |
+| --- | --- | --- |
+| E3.1 | Target identity/deduplication/lookup/effects/failure probes; update CAS matrix | Actual API/config evidence; exclude unsupported capabilities or accept manual unknown handling |
+| E3.2 | PostgreSQL migrations, action IDs, immutable revisions/events | Reject extras; concurrent retries yield one corresponding proposal; restart recovery |
+| E3.3 | Trusted server preview/approval and REST | Bind identity/scope/digest/version/expiry; forged/replayed/replaced input fails; legitimate approval works |
+| E3.4 | Deterministic separate Worker, atomic claim, lease/heartbeat/pause/preflight | No duplicate consumer effect; expired lease reconciles before resending |
+| E3.5 | UNKNOWN/RECONCILING/readback/manual review with stable ID | Crash every remote commit window; events agree with effects |
+| E3.6 | Append-only audit, digests, error attribution, linked compensation | No secrets; runtime cannot rewrite history; original success retained |
 
-## 子目标与实施顺序
+## Required W01–W15
 
-| ID | 子目标 | 实施与交付物 | 验证方法和通过条件 |
-|---|---|---|---|
-| E3.1 | 后端能力探针 | 验证任务唯一关联、精确查找、通知副作用、失败语义；记录更新 CAS 能力 | 有实际 API/配置证据；不支持的能力明确禁止或采用人工未知结果处理 |
-| E3.2 | 提案与动作持久化 | PostgreSQL schema、迁移、action_id、不可变修订和事件 | 额外字段拒绝；并发重复提交只生成一个对应提案；重启可恢复 |
-| E3.3 | 可信审批接口 | 服务端预览、身份/范围检查、摘要/版本/有效期绑定、拒绝与撤销；供独立审批页使用的 REST 合同 | 客户端替换参数、伪造批准、跨用户重放全部失败；合法批准可进入执行资格 |
-| E3.4 | 确定性执行调度 | 原子领取、租约/心跳、发送前复核、独立写进程和暂停开关 | 并发领取不会双重执行；租约到期先对账，不盲目重投 |
-| E3.5 | 结果未知与恢复 | 同一 action_id 重试、UNKNOWN/RECONCILING、回读和人工接管 | 在每个远端提交窗口注入崩溃，最终事件与副作用一致 |
-| E3.6 | 审计和受限补偿 | 追加事件、内容摘要、错误归因、补偿关联 | 日志无密钥；普通应用账号不能改历史；补偿保留原成功事实 |
+| ID | Scenario | Required result |
+| --- | --- | --- |
+| W01 | Missing/forged approval | No remote write; denial event |
+| W02 | Changed approved parameters/target/revision/effects | Old approval invalid; new preview |
+| W03 | Expired/revoked/cross-user/company approval replay | No execution/disclosure |
+| W04 | Permission revoked or owner invalid after approval | Pre-send conflict/cancellation |
+| W05 | Concurrent duplicate request/delivery/two Workers | Stable ID; at most one intended effect |
+| W06 | Response lost after target commit | UNKNOWN, exact success readback, no blind resend |
+| W07 | Crash after target success before local recording | Restart reconciles without duplicate creation |
+| W08 | Proven no-submission transient failure | Retry only with proof of safety or reliable deduplication, same ID |
+| W09 | Expired lease while remote request continues | No potentially duplicate write; query/manual review |
+| W10 | Related data/version changed | Reject/re-preview; updates without target CAS excluded |
+| W11 | Pause before queue/send; cancel after send | Unsent writes stop; in-flight outcomes tracked, no false cancellation |
+| W12 | Unknown fields, illegal owner, cross-company/null/absence confusion | Reject without accidental clearing or cross-scope effects |
+| W13 | Ledger/audit unavailable | Stop new writes; preserve in-flight reconciliation path |
+| W14 | Unprovable target outcome or multiple matches | MANUAL_REVIEW, no arbitrary selection/retry |
+| W15 | Legitimate approval/execution/readback and compensation | Success; separate compensation with irreversible effects explicit |
 
-## 必测 W01–W15
+Directly test the server without model cooperation. Inject faults before send, after remote commit, after response, and before local success persistence. Restart application/Worker at least once; use two consumers. E4 repeats applicable checks against its real API.
 
-| ID | 情形 | 必须观察到的结果 |
-|---|---|---|
-| W01 | 未批准或客户端自造批准请求 | 无远端写入；拒绝事件可查 |
-| W02 | 批准后改参数、目标、修订或副作用 | 旧批准无效，需要新预览 |
-| W03 | 批准过期、撤销或换用户/经营主体重放 | 不执行，无信息泄露 |
-| W04 | 批准后用户权限撤销、负责人失效 | 发送前阻止并记录冲突/取消 |
-| W05 | 相同请求并发提交、队列重复投递、双 Worker | 稳定 action_id，最多一个预期业务副作用 |
-| W06 | 目标提交成功后响应丢失 | UNKNOWN 后回读成功；无盲重试 |
-| W07 | 目标成功后、本地记账前进程崩溃 | 重启按关联对账，恢复成功证据，不重复创建 |
-| W08 | 请求未送达或确认无提交的暂时失败 | 仅在能证明安全或可靠下游去重时重试，复用动作标识 |
-| W09 | Worker 租约到期但远端仍在运行 | 不启动可能重复的写入；查询或转人工 |
-| W10 | 批准后关联数据或更新版本改变 | 按合同拒绝/重新预览；更新 CAS 不支持则该工具不放行 |
-| W11 | 队列前/发送前暂停，或发送后取消 | 未发送动作不执行；在途结果继续追踪，不虚报已取消 |
-| W12 | 未知字段、非法负责人、跨公司引用、null/缺省混淆 | 校验/授权拒绝；无意外清空或跨范围写入 |
-| W13 | 动作数据库或审计持久化不可用 | 新写入停止；已在途结果保留可对账路径 |
-| W14 | 下游无法确认是否提交或关联查到多个结果 | MANUAL_REVIEW，不自动重试或任选一个结果 |
-| W15 | 合法批准、执行、回读；随后按业务流程补偿 | 正常动作成功；补偿另记，通知等不可逆影响明确 |
+Approval/action pages may use stubs under the [frontend plan](../frontend-plan.md). Chat closure/refresh/device changes do not affect server actions. Decisions reference server action/revision/decision plus idempotent request ID; they cannot upload replacement parameters.
 
-安全用例直接测试服务端，不依赖模型配合。测试桩支持在“发送前、远端提交后、收到响应后、本地成功持久化前”分别故障；真实 API 适用验证在 E4 重跑。运行期间至少一次重启应用和 Worker，并使用两个并发消费者验证领取逻辑。
+## Exit conditions
 
-`/approvals` 与 `/actions` 可在本阶段按 [assistant-ui 前端方案](../frontend-plan.md) 接入测试桩。UI 与 Agent 对话分离：关闭聊天、刷新或换设备不改变服务端动作；批准请求只引用 `action_id + revision + decision`，不能重新上传待执行参数。
+Deliver contracts, migrations/state machine, isolated deployment, target matrix, W01–W15, and recovery report. Every applicable safety item passes; unverified real-API properties become E4 blockers, not implicit release. Without reliable deduplication, implement/test a no-auto-retry/manual-confirmation path or block writing. Generic updates/cross-system transactions are excluded.
 
-## 交付与退出条件
+## Historical implementation and acceptance (2026-09-20)
 
-交付动作/审批合同、迁移与状态机、隔离执行部署方式、下游能力矩阵、W01–W15 结果及故障恢复报告。所有适用安全项通过；实际 API 尚待验证的项明确转为 E4 阻断项，不能直接启用写工具。
+- PostgreSQL ledger, immutable revisions/decisions/events, hash chain, idempotent proposals, trusted approval, atomic claim, leases, pauses, preflight, and recovery implemented.
+- Action Service and Worker were separate processes; runtime could not update/delete history; self-approval rejected.
+- Persistent `stub.followup_task` covered pre-send, response loss, post-commit crash, and pre-local-success crash without writing Twenty/ERPNext.
+- W01–W15 passed; complete Python suite 81/81 and Ruff passed.
+- `/approvals`, `/actions`, `/actions/{id}` passed production build and local REST integration; decisions referenced server content.
+- Twenty 2.39.0 GET probes verified Task/TaskTarget schema and Task read. Client IDs, association atomicity, notifications, and connection loss were then E4 blockers.
 
-若后端没有可靠去重，必须实现“未知结果不自动重试＋人工查询确认”的受限路径并验证，清楚声明保证范围；业务不接受这个限制则阻塞写入。通用更新和跨系统事务不在本阶段范围。
+See [E3 contract](../../../contracts/e3-action-control-v1.md) and [runbook](../../../ops/e3-action-control.md). Local package: `reports/enterprise/e3/20260920T-action-control/`. At this checkpoint real writes stayed closed until E4 probes/applicable W cases passed.
 
-## 实施与验收结果（2026-09-20）
+## Failure and next step
 
-- 已实现 PostgreSQL 动作账本、不可变修订/决定/事件、摘要链、幂等提案、受信审批、原子领取、租约、暂停、发送前复核和恢复状态机。
-- Action Service 与 Worker 分进程；数据库日常角色不能更新或删除修订、决定和事件。提案人不能审批自己的动作。
-- 持久化 `stub.followup_task` 故障桩覆盖发送前、响应丢失、远端提交后崩溃和本地成功持久化前崩溃；不写 Twenty 或 ERPNext。
-- W01–W15 全部通过；完整 Python 测试 81 项通过，Ruff 检查通过。
-- `/approvals`、`/actions`、`/actions/{id}` 已通过 Next.js production build 和本地 REST 联调；审批请求只引用动作、修订和决定。
-- Twenty 2.39.0 只读探针确认 Task schema、TaskTarget schema 和 Task GET 可访问；客户端 ID 行为、关联原子性、通知副作用及连接丢失语义仍是 E4 阻断项。
-
-合同见 [E3 动作控制合同](../../../contracts/e3-action-control-v1.md)，运行和复验步骤见 [E3 运行手册](../../../ops/e3-action-control.md)。本地证据写入 `reports/enterprise/e3/20260920T-action-control/`。E3 已完成，但真实写入仍关闭；只有完成 E4 隔离能力探针和 W01–W15 真实适配器复验后才可放行。
-
-## 失败处理与下一步
-
-任一重复副作用或审批绕过先关闭执行器。修复后重跑相应故障窗口及正常路径。通过后进入 [E4](e4-followup-task.md)。
+Pause executor on duplicate effects/approval bypass, repair, and rerun relevant fault windows plus valid controls. Continue to [E4](e4-followup-task.md).

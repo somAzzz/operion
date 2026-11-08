@@ -1,10 +1,10 @@
-# E3 动作控制运行手册
+# E3 action-control runbook
 
-E3 运行 Action Service、PostgreSQL 动作账本和独立 Worker。Worker 只调用持久化测试桩，不写 Twenty 或 ERPNext。
+E3 runs Action Service, the PostgreSQL ledger, and a separate Worker using only the persistent stub, never Twenty/ERPNext writes. This runbook describes that profile; later E4 acceptance is separate.
 
-## 环境与迁移
+## Environment and migration
 
-使用 PostgreSQL 16 或兼容版本。迁移身份与日常服务身份必须分开：迁移身份能创建/授予无登录角色 `operion_action_app`；日常 DSN 只能继承或切换到该受限角色，不拥有 schema/table，也没有迁移权限。托管数据库若禁止 `CREATE ROLE`，由平台管理员预建同名角色后再运行迁移。
+Use PostgreSQL 16 or compatible. Separate migration/runtime identities. Migration authority creates/grants the non-login `operion_action_app` role; runtime DSN only inherits or switches to that restricted role, owns no schema/table, and cannot migrate. If managed PostgreSQL forbids `CREATE ROLE`, a platform administrator must precreate the role.
 
 ```bash
 uv sync --extra dev
@@ -12,7 +12,7 @@ export OPERION_ACTION_MIGRATION_DATABASE_URL='postgresql://migration-admin@...'
 uv run operion-action-migrate
 
 export OPERION_ACTION_DATABASE_URL='postgresql://restricted-action-login@...'
-# 仅当受限登录需要显式 SET ROLE 时设置：
+# Only if the restricted login requires explicit SET ROLE:
 # export OPERION_ACTION_DATABASE_ROLE='operion_action_app'
 export OPERION_ACTION_TOKEN='replace-with-secret'
 export OPERION_ACTION_CSRF_TOKEN='replace-with-separate-secret'
@@ -23,33 +23,33 @@ export OPERION_ACTION_CAN_APPROVE='0'
 uv run operion-action-api
 ```
 
-Action API 和 Worker 不自动迁移数据库。审批服务应使用独立用户与凭据，并显式设置 `OPERION_ACTION_CAN_APPROVE=1`；默认值为 `0`。生产凭据不得写入仓库或浏览器环境变量。当前 E3 单凭据环境入口用于本地验收；多用户认证应由接入层构造服务端 `Principal`。
+API/Worker never auto-migrate. The approval service uses a separate identity/credential and explicit `OPERION_ACTION_CAN_APPROVE=1`; default is `0`. Never commit credentials or expose them in browser variables. This static local E3 profile is for isolated acceptance; enterprise identity uses the [E5 boundary](../contracts/e5-enterprise-boundary-v1.md) and server `Principal`.
 
-健康检查必须返回 `mode=e3_stub_only` 和 `writes_enabled=false`：
+Health must report `mode=e3_stub_only`, `writes_enabled=false`:
 
 ```bash
 curl http://127.0.0.1:8001/health
 ```
 
-## Worker、暂停与恢复
+## Worker, pause, and recovery
 
-运行一个领取周期：
+One claim cycle:
 
 ```bash
 uv run operion-action-worker --once --worker-id e3-worker-1
 ```
 
-恢复所有租约过期的在途动作：
+Reconcile all expired in-flight leases:
 
 ```bash
 uv run operion-action-worker --recover --worker-id e3-recovery-1
 ```
 
-恢复命令只做对账，不把过期租约当作未提交证据。`UNKNOWN`、`RECONCILING` 或 `MANUAL_REVIEW` 不能由操作员直接重置为待执行。暂停通过 `POST /api/action-pauses` 设置 `global` 或 `stub.followup_task` scope；恢复前记录原因并确认没有未完成对账。
+Recovery reconciles; lease expiry is not proof of no submission. Never directly reset UNKNOWN/RECONCILING/MANUAL_REVIEW to executable. Set `global` or `stub.followup_task` pause through `POST /api/action-pauses`; record reason and finish reconciliation before resuming.
 
-## 验收
+## Acceptance
 
-单元/集成测试使用 runner 自建容器；下列 evaluate/probe 命令仍需单独准备的隔离评估数据库，不能指向业务库：
+Unit/integration tests use runner-owned containers. The evaluator/probe below needs a separately prepared isolated evaluation database, never a business database. Prefer a new report directory per rerun; these paths retain the original package names.
 
 ```bash
 export OPERION_TEST_ACTION_DATABASE_URL='postgresql://...'
@@ -65,24 +65,24 @@ uv run operion-probe-e3 \
   --output reports/enterprise/e3/20260920T-action-control/capability-matrix.json
 ```
 
-能力探针读取本地 `.env` 中的 Twenty 只读凭据，只执行 GraphQL schema introspection 和 `GET /rest/tasks`。它不会创建 Task。`capability-matrix.json` 必须保持 `e4_release_allowed=false`，直到 E4 的隔离写入探针全部通过。
+The probe reads explicitly read-only Twenty credentials from local `.env`, performs schema introspection and `GET /rest/tasks`, and creates no Task. Its E3 `e4_release_allowed=false` report remains historical until separately accepted E4 probes establish a different capability scope.
 
-Web 验收：
+Web verification:
 
 ```bash
+scripts/verify.sh web
 cd apps/web
-npm run build
 npm run dev
 ```
 
-确认 `/approvals`、`/actions` 和 `/actions/{id}` 的状态均来自 Action Service；刷新页面后状态不丢失；`UNKNOWN/RECONCILING` 不提供重新创建捷径。
+Verify `/approvals`, `/actions`, and `/actions/{id}` derive state from Action Service; refresh retains it; UNKNOWN/RECONCILING offers no recreate shortcut.
 
-## 故障处置
+## Fault handling
 
-- 数据库或审计写入失败：停止新动作，不绕过动作账本。
-- 发现重复效果：立即启用全局暂停，保留动作、尝试、事件和下游记录证据。
-- Worker 崩溃或租约过期：运行 recovery 对账，不启动第二次提交。
-- 多个下游匹配或内容摘要不一致：维持 `MANUAL_REVIEW`，由系统负责人调查。
-- 事件链校验失败：停止写入，保全数据库和应用日志，由独立管理员核查。
+- Database/audit failure: stop new actions; never bypass the ledger.
+- Duplicate effects: global pause; preserve action/attempt/event/target evidence.
+- Crash/expired lease: recover by reconciliation, not another submission.
+- Multiple matches/digest mismatch: retain MANUAL_REVIEW for investigation.
+- Broken event chain: stop writing, preserve database/logs, request independent admin investigation.
 
-E4 之前仍需验证 Twenty Task 的 ID 唯一性、关联原子性、通知副作用、失败/超时语义以及精确回读；任一项未证明都不能开放真实写入。
+A deployment not covered by E4 still needs Task ID uniqueness, relation/partial-write behavior, notification effects, timeout/failure semantics, and exact readback probes before real writes. The existing E4 isolated pass does not release a changed environment automatically.

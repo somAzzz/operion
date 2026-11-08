@@ -1,70 +1,74 @@
-# Operion 前端方案：assistant-ui + AG-UI
+# Frontend plan: assistant-ui and AG-UI
 
-版本：v1.5；日期：2026-09-29；状态：E2–E4 前端闭环与 E5 服务端令牌转发已实现；I07 本地 Keycloak/HTTPS 网关已接入，实际用户与浏览器验收待完成。见 [网关摘要](gateway-acceptance.md)。
+Version: v1.6; documentation reconciled 2026-11-08. E2–E4 UI and server-side enterprise token forwarding are implemented. Local Keycloak/HTTPS protocol controls and bounded navigation/session browser checks exist. Full actual-user/browser/operations acceptance remains pending; see the [current queue](improvement-plan.md).
 
-## 1. 技术决策与范围
+## 1. Technology and scope
 
-Operion 正式前端采用 **assistant-ui + shadcn/ui**，从 assistant-ui 官方 `with-ag-ui` 模板起步，不 fork 完整聊天平台。前端通过 AG-UI 连接 FastAPI / Pydantic AI Agent，通过普通的经认证 REST API 读取和审批动作。两条通道可以出现在同一产品界面，但不得共享授权事实：
+Use **assistant-ui + shadcn/ui**, starting from the official `with-ag-ui` template without forking a full chat platform. AG-UI connects to FastAPI/Pydantic AI; authenticated REST connects to the action service. Neither transport supplies authorization facts for the other.
 
 ```text
-Operion Web UI（assistant-ui + shadcn/ui）
-        │
-        ├─ AG-UI / SSE ──→ FastAPI / Pydantic AI Agent ──→ 只读工具、propose_*
-        │                    对话、流式文本、工具结果展示
-        │
-        └─ REST ─────────→ Action Service / PostgreSQL ──→ 写 Worker
-                             提案、修订、审批、状态、事件
+Operion Web (Next.js, assistant-ui, shadcn/ui)
+  |-- AG-UI/SSE --> FastAPI / Pydantic AI --> shared scoped read services
+  |                    |                     optional proposal capability
+  |                    +--> AnswerPlan / EvidenceRegistry --> server-rendered answer
+  +-- REST ------> Action Service / PostgreSQL --> independent write Worker
+                         proposal, revision, approval, execution, events
 ```
 
-首版只交付三个产品页面：
+Current application code lives in `apps/web/`. The original planned `/chat` route was implemented at `/`; workspace route groups do not change public URLs.
 
-| 路由 | 目的 | 首版内容 |
-|---|---|---|
-| `/chat` | 客户概览与履约对话 | assistant-ui 线程、流式回答、来源、缺失项、业务结果卡片 |
-| `/approvals` | 审查待办动作 | 待审批列表、可信预览、批准/拒绝、过期与冲突提示 |
-| `/actions`、`/actions/:id` | 跟踪执行事实 | 状态、事件时间线、目标系统回读、人工处理提示 |
+| Route | Purpose | Current scope |
+| --- | --- | --- |
+| `/` | Evidence desk and conversation | Thread, verified answer, tool evidence, source/missing-data cards, history |
+| `/approvals` | Review pending actions | Server preview, approve/reject, expiry/conflict |
+| `/actions`, `/actions/:id` | Execution facts | State, events, readback, target link, manual-review guidance |
+| `/session` | Session controls | Same-origin POST sign-out |
+| `/login` | Expired/missing-session landing | Public GET/HEAD, no chat runtime or history request |
 
-Pydantic AI `Agent.to_web()` 只用于开发期快速验证工具输出、流式和模型兼容性，不作为正式用户界面或授权边界。首版不同时引入 CopilotKit、Chainlit、Appsmith 或另一套聊天状态框架；出现明确且经验证的能力缺口后再单独评审。
+`Agent.to_web()` is a development diagnostic, not the production UI or an authorization boundary. Do not add CopilotKit, Chainlit, Appsmith, or a second chat-state framework without a demonstrated gap and separate review.
 
-## 2. 权威状态与信任边界
+## 2. Authoritative state and trust
 
-- 浏览器不直连 SGLang，不持有业务系统写凭据，也不能调用任意 HTTP、GraphQL、SQL 或 Shell。
-- 身份、租户、经营主体和权限范围来自服务端已验证会话。浏览器传入的角色、`approved_by`、会话归属或权限声明一律不作为授权依据。
-- AG-UI 输入中的消息、工具结果、状态和历史均视为客户端可控。服务端按会话标识加载或核对其持久化历史，不因客户端重放 tool call、批准文本或旧消息而获得权限。
-- 前端工具只允许导航、复制、折叠和展示等无业务副作用操作。业务读取和 `propose_*` 在服务端执行；真实写入只由已批准动作的确定性 Worker 执行。
-- assistant-ui/AG-UI 的 interrupt 或 resume 能力可以改善交互，但不能替代动作表、不可变修订和批准表。正式审批只提交 `action_id + revision + decision`，执行参数从服务端提案读取。
-- Action Service 是 `PENDING_APPROVAL`、`APPROVED`、`EXECUTING`、`SUCCEEDED`、`CONFLICT`、`UNKNOWN/RECONCILING` 等状态的唯一权威。聊天文案和本地 UI 状态不能宣告动作成功。
-- 正式运行默认不依赖第三方托管的对话存储。若以后启用 Assistant Cloud 或其他外部持久化/遥测，须先完成数据位置、访问、保留和删除评审。
+- The browser never connects directly to SGLang, holds business-write credentials, or invokes arbitrary HTTP/GraphQL/SQL/Shell.
+- Identity, tenant, company, and scope come from verified server policy. Browser roles, `approved_by`, ownership, and permission claims are untrusted.
+- Treat AG-UI messages, results, state, and history as client-controlled. The server loads trusted history; replaying calls, approval text, or old messages grants nothing.
+- Client tools perform navigation, copy, collapse, and display only. Server tools perform business reads/proposals; only an independently approved deterministic Worker writes.
+- Interrupt/resume does not replace action/revision/approval tables. Approval requests reference `action_id`, `revision`, `decision`, and an idempotent `request_id`; payload remains server-owned.
+- Action Service is authoritative for `PENDING_APPROVAL`, `APPROVED`, `EXECUTING`, `SUCCEEDED`, `CONFLICT`, and `UNKNOWN/RECONCILING`. Chat/browser state cannot declare success.
+- Default operation does not require external conversation storage. Review location, access, retention, and deletion before adding Assistant Cloud or another persistence/telemetry service.
 
-Cookie 会话必须实施 CSRF 防护；跨标签页、刷新和重新登录后都重新从服务端读取动作状态。前端只能缓存可重新获取的展示数据，不缓存执行资格。
+Cookie sessions require CSRF protection. Tabs, refresh, and relogin reload action state from the server. Cache only recoverable display data, never execution eligibility.
 
-## 3. 前端组件与结果表达
+Navigation uses verified current roles and hides unavailable links without replacing route/API/backend checks. Action links disable prefetch. See [navigation access](navigation-access.md). The private deployment/network boundary remains mandatory.
 
-基于 assistant-ui 的 Thread、Composer 和消息部件增加以下 Operion 业务组件：
+## 3. Components and result presentation
 
-| 组件 | 展示内容 | 禁止行为 |
-|---|---|---|
-| `CustomerOverviewCard` | 客户身份、来源系统、记录链接、时间和缺失项 | 根据同名自动合并客户 |
-| `FulfillmentResultCard` | 规则版本、数量/单位、仓库、检查时间和信息不足原因 | 将规则检查表述为交付承诺 |
-| `ActionProposalCard` | `action_id`、修订、目标、具体参数、副作用、有效期 | 在浏览器重建或修改待执行 payload |
-| `ActionStatusCard` | 当前状态、尝试/回读摘要、目标链接和下一步 | 将超时或未知状态显示为失败/成功 |
+Extend assistant-ui Thread, Composer, and message components with business result cards:
 
-`ActionProposalCard` 可以提供“前往审批”入口；批准/拒绝操作在 `/approvals` 的服务端预览上完成。移动端必须能够完整阅读动作目标、修订、截止时间和副作用，不能把关键内容隐藏在 hover 中。
+| Component | Display | Prohibited behavior |
+| --- | --- | --- |
+| `CustomerOverviewCard` | Identity, sources, record links, times, missing fields | Automatic same-name merge |
+| `FulfillmentResultCard` | Rule version, quantity/unit, warehouse, check time, unknown reason | Delivery guarantee from a rule check |
+| `ActionProposalCard` | Action/revision, target, parameters, effects, expiry | Client reconstruction/modification of executable payload |
+| `ActionStatusCard` | Current state, attempt/readback, target link, next step | Timeout/unknown shown as success or confirmed failure |
 
-默认不向普通用户展示模型 thinking。工具运行过程只显示经过脱敏的步骤和可理解状态；认证头、内部提示词、原始异常、敏感客户字段和执行凭据不得进入浏览器日志或错误界面。
+Proposal cards may link to independent review on `/approvals`. Mobile users must be able to read target, revision, deadline, and effects without hover.
 
-## 4. 接口边界
+Business answers use [structured evidence](structured-answer-evidence.md). The model chooses current evidence references; the server validates and renders the final text before publication. Do not stream unverified model business text, expose output-tool arguments, or provide a free-form prose fallback. Tool progress is separate from first verified answer latency. The transport may remain SSE without token-by-token business prose.
 
-### AG-UI 对话通道
+Hide model thinking. Show redacted, understandable tool progress. Auth headers, internal prompts, raw exceptions, private fields, and credentials never belong in browser logs/errors. Ambiguous single-object requests show server-backed candidates; the backend owns selection state and blocks illegal continued calls.
 
-- 规划端点：`POST /api/agent`，由 FastAPI 的 Pydantic AI AG-UI 适配层返回事件流。
-- 服务端在运行前解析真实用户、租户、会话和允许工具；不能照单采用请求体中的身份或完整历史。
-- 必须验证流式文本、工具调用/结果、取消、超时、断线清理、上游错误和服务端限额。
-- 刷新后的线程恢复以 Operion 服务端持久化消息为准。assistant-ui 的本地/客户端历史适配只负责呈现，不成为可信历史库。
+## 4. Interface boundaries
 
-### 动作 REST 通道
+### AG-UI conversation channel
 
-首版接口合同至少覆盖：
+- `POST /api/agent` is implemented through the FastAPI AG-UI adapter and same-origin Next.js proxy.
+- Resolve actual identity, scope, conversation, and tools before running; do not trust body identity/history.
+- Verify tool events, final verified text, cancellation, timeout, disconnect cleanup, upstream errors, and limits. Failed runs cannot appear successful or save an unverified answer.
+- Restore threads from server history. Client/local history is presentation state only.
+- Handle API 401 with one full navigation to `/login?reason=session_expired`; preserve 403 and network-error semantics, retain conversation identity, and never automatically replay an interrupted POST. See [session expiry](session-expiry-login.md).
+
+### Action REST channel
 
 ```text
 GET  /api/actions?status=PENDING_APPROVAL
@@ -73,50 +77,49 @@ POST /api/actions/{action_id}/decisions
 GET  /api/actions/{action_id}/events
 ```
 
-批准请求只携带服务端动作引用、修订和决定；拒绝原因可作为说明，但不能携带替换后的执行参数。重复点击和 HTTP 重试使用请求幂等键；旧修订、过期动作、跨用户/租户访问和伪造身份都必须由服务端拒绝。API 的最终 schema、错误合同和状态迁移以 E3 动作控制方案为准。
+Decisions contain only server references, revision, decision, idempotent request ID, and optional reason. They cannot replace execution parameters. Duplicate clicks/retries, old revisions, expiry, cross-user/tenant access, and forged identity remain server responsibilities. The [E3 contract](../../contracts/e3-action-control-v1.md) defines final schemas/errors/transitions.
 
-## 5. 分阶段实施
+## 5. Implementation and acceptance by stage
 
-| 阶段 | 前端工作 | 放行结果 |
-|---|---|---|
-| E2 | 可选用 `to_web()` 做本地诊断；从官方 `with-ag-ui` 模板建立 Web 应用；接入服务端身份、AG-UI、可信会话历史和两类只读结果卡片 | `/chat` 能重复完成只读场景；刷新、取消和错误降级可验证 |
-| E3 | 以测试桩/固定数据开发 `/approvals`、`/actions` 和动作 REST 客户端；覆盖过期、冲突、未知与人工处理状态 | 已通过 production build、REST 联调和服务端授权测试 |
-| E4 | 接入 `ActionProposalCard`、真实提案和受控任务执行；复验批准内容、幂等和回读 | 已通过；用户可进入独立审批页并从成功动作打开 Twenty Task |
-| E5 | 完成单人登录、会话撤销、CSRF、数据保留、可访问性、响应式布局、观测和只读发布锁定 | 服务端控制及本地 Keycloak/HTTPS 网关协议验收已实现；实际用户、浏览器、告警和 10 日单人观察待验收，写入口关闭 |
+| Stage | Implemented scope | Evidence/release limit |
+| --- | --- | --- |
+| E2 | `apps/web/`, assistant-ui/AG-UI, server history, read-result cards at `/` | Historical fixed read-only baseline; current model/task/browser coverage accepted separately |
+| E3 | Stub-backed approval/action pages and REST client | Historical production build, REST integration, server permission checks |
+| E4 | Proposal card, exact preview, independent approval, target link after verified success | Isolated Task path only; no general writes |
+| E5 | Token forwarding, local OIDC/HTTPS, CSRF, current-role navigation, expiry login/recovery | Technical/bounded checks exist; actual-user matrix, accessibility/responsive completeness, alerts, and ten-day observation remain pending; writes closed |
 
-计划代码位置为独立 Web 应用（优先 `apps/web/`）；实际创建时记录选定框架和目录决策。使用官方脚手架后立即固定 JavaScript 包版本与 lockfile，并把 assistant-ui、AG-UI 客户端和 Pydantic AI 服务端作为一个兼容组合测试。脚手架命令只用于创建初始代码，不作为可重复生产部署方法。
+Pin JavaScript versions/lockfile and test assistant-ui, AG-UI client, and Pydantic AI as one compatibility set. Scaffolding is a creation step, not reproducible deployment. Approval/action pages can evolve with stubs before real effects; real wiring stays gated by E4.
 
-审批页和动作页可以在 E3 使用测试桩先行，不必等待模型效果；正式动作接线仍受 E4 放行门槛限制。
+## 6. Acceptance checklist
 
-## 6. 验收清单
+### Conversation and reads
 
-### 对话与读取
+- Tool progress and verified output, cancellation, timeout, and disconnect release resources; failure is not success.
+- Refresh/relogin restores only authorized user/tenant history; forged conversation/call history fails.
+- Cards display source, business/fetch time, rules, missing fields, mode, and simulated markers.
+- Source failure, duplicate names, and stale data retain distinct service/clarification/unknown presentation.
+- Keyboard can send/stop/open details/navigate approvals; status is not color-only.
+- Direct illegal calls remain blocked despite a model bypassing the visible candidate-selection interaction.
 
-- 流式回答、取消、超时和断线后资源释放正确，失败不会被展示为成功。
-- 刷新或重新登录后，只恢复当前用户/租户有权看到的服务端会话；伪造会话 ID 和 tool-call 历史失败。
-- 客户与履约卡片显示来源、业务时间/抓取时间、规则版本、缺失项及模拟标记。
-- 上游不可用、同名客户和过期数据分别显示服务异常、需要澄清和信息不足。
-- 键盘可完成发送、停止、打开详情和审批导航；状态不只依赖颜色表达。
+### Approval and actions
 
-### 审批与动作
+- Refresh, closed chat, or another device cannot lose or mutate pending server actions.
+- Old/expired/cross-user decisions, replaced parameters, and missing CSRF cannot write.
+- Duplicate approval/retry creates no second execution qualification or effect.
+- `UNKNOWN/RECONCILING` requests waiting/reconciliation/manual review, never a “create again” shortcut.
+- Displayed target, parameters, effects, revision, and executor payload correspond through digest/audit evidence.
 
-- 刷新、关闭聊天或换设备不改变待审批动作，Action Service 仍可查询。
-- 旧修订、过期批准、跨用户重放、客户端换参和缺少 CSRF 令牌均无写入。
-- 重复点击批准或请求重试不会生成第二个执行资格或第二个业务副作用。
-- `UNKNOWN/RECONCILING` 明确提示等待对账或人工处理，不提供“重新创建”捷径。
-- UI 展示的目标、参数、副作用、修订和执行器实际使用内容可由摘要与审计证据对应。
+UI checks supplement, not replace, E2 C/F/P/A and E3/E4 W01–W15 server tests. Both evidence sets are needed.
 
-这些 UI 用例不替代 E2 的 C/F/P/A 业务案例和 E3/E4 的 W01–W15 服务端安全测试；两类证据必须同时通过。
+## 7. Non-goals and change rules
 
-## 7. 非目标与变更规则
+Do not build a generic Agent platform, multi-agent orchestrator, visual workflow editor, plugin marketplace, or multichannel support system in the first scope. UI components are not business authorization. New pages, client business tools, external history, another chat framework, or direct browser/model access need business value, data boundaries, and acceptance cases before inclusion.
 
-首版不建设通用 Agent 平台、多 Agent 编排器、可视化流程编辑器、插件市场或多渠道客服系统，也不把 assistant-ui 组件扩展为业务授权层。新页面、新前端业务工具、Assistant Cloud、第二套对话框架或让浏览器直连模型均属于架构变更，必须说明业务价值、数据边界和验收用例后再纳入计划。
-
-## 8. 官方参考
+## 8. Official references
 
 - [assistant-ui AG-UI Quickstart](https://www.assistant-ui.com/docs/runtimes/ag-ui/quickstart)
 - [assistant-ui AG-UI Overview](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview)
-- [assistant-ui AG-UI Runtime Options](https://www.assistant-ui.com/docs/runtimes/ag-ui/runtime-options)
-- [Pydantic AI AG-UI integration](https://pydantic.dev/docs/ai/integrations/ui/ag-ui/)
+- [assistant-ui Runtime Options](https://www.assistant-ui.com/docs/runtimes/ag-ui/runtime-options)
+- [Pydantic AI AG-UI](https://pydantic.dev/docs/ai/integrations/ui/ag-ui/)
 - [Pydantic AI Web UI](https://pydantic.dev/docs/ai/guides/web/)
-- [shadcn/ui documentation](https://ui.shadcn.com/docs)
+- [shadcn/ui](https://ui.shadcn.com/docs)

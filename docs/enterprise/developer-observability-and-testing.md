@@ -1,6 +1,6 @@
 # Operion developer observability and testing
 
-Date: 2026-10-07; updated 2026-10-17. OTel/Langfuse, bound explicit-fact checks and the minimal developer case runner are implemented. `scripts/verify.sh case` writes JSON, JUnit and HTML evidence for domain, scripted Agent/API and real stdio MCP checks. `offline` removes inherited test DSNs; `postgres` creates and removes an isolated Docker container. See [implementation and validation](fixes-2026-10-17.md). The full content/event timeline, real-model and browser layers below remain proposals.
+Date: 2026-10-07; current guidance reconciled 2026-11-08. OTel/Langfuse, structured evidence-plan validation/rendering, ambiguity execution gates, budget diagnostics, and the minimal developer case runner are implemented. The former natural-language explicit-fact parser is historical. `scripts/verify.sh case` writes JSON, JUnit and HTML evidence for domain, scripted Agent/API and real stdio MCP checks. `offline` removes inherited test DSNs; `postgres` creates and removes an isolated Docker container. See [current evidence contract](structured-answer-evidence.md), [Agent API](../../contracts/e2-agent-api-v1.md), and the historical [implementation record](fixes-2026-10-17.md). The full content/event timeline, real-model and browser layers below remain proposals.
 
 The target developer experience is **run one case, see every boundary it crossed, compare expected and actual results, and reproduce the failure at the smallest relevant layer**. Use one case definition across domain services, MCP, the Agent, and the browser. Preserve which dependencies were simulated and which were real.
 
@@ -11,12 +11,12 @@ This guide complements the [system assessment](system-assessment-and-roadmap.md)
 | Existing implementation | Reuse it | Add or correct |
 |---|---|---|
 | `AgentDependencies.tool_calls` and `_record_tool` | Arguments and returned results | Invocation IDs, start/end events, duration, exceptions, guard decisions; consolidate manually recorded tools too |
-| SQLite `agent_runs` | Run ID, status, token totals, timestamps | Trace correlation is implemented; add version manifest, evidence references and incomplete/crashed execution classification |
+| SQLite `agent_runs` | Run ID, status, token totals, timestamps, trace/span and internal numeric budget snapshots | Trace/budget correlation is implemented; add a full version manifest, evidence references and incomplete/crashed execution classification |
 | Trusted message history | Model requests/responses from completed or cancelled runs | Per-request evidence for interrupted/error paths; content handling policy |
-| E2 JSON evaluations | Cases, repeated runs, tool payloads, final answers | Decomposed final-fact scoring is implemented; strengthen entity/field/currency binding, independent counterexamples, holdouts and per-layer reports |
-| MCP tests | Tool names, schemas, annotations, in-process calls | Real stdio client/server handshake and calls; malformed requests, lifecycle and correlation |
+| E2 JSON evaluations | Cases, repeated runs, tool payloads, final answers | Structured evidence scoring and entity/field/currency binding are implemented; extend independent task-completion gold, holdouts and per-layer reports |
+| MCP tests | Tool names, schemas, annotations, in-process calls | Real stdio handshake/list/call coverage exists in the minimal runner; extend malformed requests, lifecycle and correlation |
 | Complex interview script | Web → Agent → SGLang → tools, SSE ordering | Persist events, full authorized answer, assertion differences and links to spans |
-| Action ledger and W01–W15 | Approval, revision, leases, UNKNOWN, reconciliation and trace links | Correlate ledger evidence with the same test run; isolate database lifecycle |
+| Action ledger and W01–W15 | Approval, revision, leases, UNKNOWN, reconciliation and trace links | Isolated database lifecycle is implemented; correlate ledger evidence with the same test run |
 
 The current Web Agent uses local `FunctionToolset` wrappers. The MCP server is a separate stdio entry point sharing domain services. A passing Agent test does not prove MCP transport works. An in-process `server.call_tool()` test does not prove client/server protocol compatibility.
 
@@ -53,8 +53,8 @@ case CS33 / repeat 1 / trace 8b…
       domain.customer_overview
         adapter.read                   fixture=mini-trade-v1
       result                           orders=[]
-    model.request 2                    answer="There are 100 orders"
-  answer.check order_count             FAIL expected=0 actual=100
+    model.request 2                    present_answer(forged reference)
+  answer.plan.validate                 DENY unknown_reference
   evidence.finalize                    COMPLETE
 ```
 
@@ -126,6 +126,8 @@ Guardrails belong at the server/domain/action boundary. Prompt wording and MCP r
 | GR08 controlled effects | Action API and worker | Approved unchanged revision executes; self-approval, old revision and failed preflight cannot send |
 | GR09 session isolation | Conversation APIs | Owner can resume; other owner and revoked session cannot read history |
 
+The current runtime records numeric usage/limits/exceeded-dimension diagnostics without prompts, arguments, evidence IDs, raw exceptions, or credentials; see the [Agent API](../../contracts/e2-agent-api-v1.md). The expanded unified event recorder below remains a proposal.
+
 Persist one decision event for each applicable guard: check ID, outcome, reason code, policy version and evidence references. If a guard did not run because an earlier step stopped execution, record NOT_REACHED, not PASS. If observation is missing, report UNKNOWN.
 
 Force negative calls through test doubles, direct tools, MCP and HTTP as applicable. A polite LLM refusal is not proof that the server would block the same request. For identity/allowlist denial, assert zero model/tool/upstream activity where appropriate. For current-relation checks, a minimal upstream read may be necessary: assert no unauthorized data in the returned answer and zero writes, rather than incorrectly requiring zero reads.
@@ -174,7 +176,7 @@ Each layer maps its existing output envelope into comparable facts. Do not compa
 
 For tool selection, permit business-equivalent routes. Exact sequence assertions are appropriate for protocol requirements or mandatory prerequisites, not every harmless model choice. Enforce that evidence is obtained before making the associated factual claim.
 
-For final answers, validate critical claims against the independently authored gold and against the cited tool evidence. The current `output_type=str` has no claim contract: either add a typed answer/claim representation, or render critical facts deterministically and constrain the narrative. A separate valid claims object does not prove free prose agrees with it. Test rendered text for contradictions too, and treat unconstrained prose checks as limited evidence.
+For final answers, validate critical claims against the independently authored gold and against the cited tool evidence. The current Agent uses `ToolOutput(present_answer)` with a closed `AnswerPlan`; `EvidenceRegistry` validates current-run references and renders the final text. There is no free-form business-prose fallback. Test forged/stale/cross-scope references, field/currency/unit binding, and rendered results at this enforcing layer. Independently score whether the model chose the right tools and selected all facts required by the task: a valid plan alone does not establish task completion. Do not reintroduce a parallel prose/claims channel.
 
 Do not require one exact natural-language paragraph. Use deterministic checks for IDs, numbers, units, statuses, evidence and actions. An LLM judge can supplement clarity/relevance scoring, but cannot be the sole authorization or numerical correctness gate.
 
@@ -184,7 +186,7 @@ Version gold changes like code: review changes to expected values, record their 
 
 ## 6 A simple layered runner
 
-The current entry point is `scripts/verify.sh {setup|offline|web|postgres}`. The following layered interface remains a proposal:
+The current entry point is `scripts/verify.sh {setup|offline|case|web|postgres}`. The following layered interface remains a proposal:
 
 ```bash
 operion-check doctor
@@ -313,7 +315,7 @@ For the existing E2 golden set, use its own prepared E2 canonical directory and 
   --output reports/dev/e2-current.json
 ```
 
-Requires the E2 environment and SGLang described in [the E2 runbook](../../ops/e2-agent.md). This command produces current-format tool/answer evidence, but its current scorer can miss final-fact errors. Use a distinct output path for every retained run.
+Requires the E2 environment and SGLang described in [the E2 runbook](../../ops/e2-agent.md). This command produces current-format tool/answer evidence and scores selected structured evidence. Expand independent gold and holdouts to catch omitted facts and incomplete tasks; legal references alone are not a success criterion. Use a distinct output path for every retained run.
 
 For an already-running WWI Web profile:
 

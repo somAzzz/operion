@@ -1,84 +1,83 @@
-# 阶段计划与验收规范
+# Delivery plan and acceptance rules
 
-版本：v1.1；日期：2026-09-29；状态：阶段验收规范；当前范围与进度见阶段索引及总体改进计划。
+Version: v1.2; documentation reconciled 2026-11-08. These are acceptance rules. Current implementation and remaining work live in the [enterprise index](README.md) and [improvement plan](improvement-plan.md); historical passes keep their original scope.
 
-## 1. 依赖与里程碑
+## 1. Dependencies and milestones
 
-主路径：E0 → E1 → E2 → E3 → E4 → E5 → 按需 E6。
+Main path: E0 → E1 → E2 → E3 → E4 → E5 → justified E6.
 
-E3 的状态机与测试桩可以在 E1/E2 期间开发，但真实写入必须等 E3 通过。assistant-ui 对话页在 E2 接入；审批页和动作页可在 E3 先使用测试桩开发，E4 才接入真实提案与写入。E5 的身份、备份与运维准备从 E0 开始；E2 通过且 E5 身份、范围、网络等只读前置检查完成后可开始单人只读观察，写入口始终关闭。E6 的同步有实际需要时可提前准备，但不能替代当前阶段的验收，也不能使用 Agent 写凭据执行 ETL。
+E3 state-machine/stub development may overlap E1/E2, but real writes require E3 acceptance. Web conversations enter at E2; approval/action pages may use E3 stubs before E4 connects real proposals/writes. Prepare E5 identity, backup, and operations from E0. After E2 and applicable E5 identity/scope/network gates, begin single-user read-only observation with writes closed. E6 synchronization preparation may start when needed, but cannot substitute for current acceptance or use Agent credentials for ETL.
 
-| 里程碑 | 必须已通过 | 对外能力 |
-|---|---|---|
-| M1 可核查只读演示 | E0、E1、E2 | 公开样本客户概览和履约判断 |
-| M2 可控写入演示 | M1、E3、E4 | 内部跟进任务闭环 |
-| M3 单人只读试运行 | M1、E5 只读门槛 | 一名实际用户、明确公开样本或获准私有数据范围，不开放写入 |
-| M4 受控写入试运行 | M2、E5 只读门槛、独立审批人与写入专项验收 | 指定用户、范围和使用时段的单一写工具；当前单人阶段不放行 |
-| M5 扩展能力 | 对应 E6 子项 | 仅新增已单独通过的能力 |
+| Milestone | Required passes | Exposed capability |
+| --- | --- | --- |
+| M1 Verifiable read-only demo | E0, E1, E2 | Public-sample overview and frozen fulfillment checks |
+| M2 Controlled-write demo | M1, E3, E4 | Internal follow-up Task loop |
+| M3 Single-user read-only pilot | M1 and E5 read-only gates | One actual user, explicit public-sample/approved private-data scope; no writes |
+| M4 Controlled-write pilot | M2, E5 read-only gates, independent approver, write-specific acceptance | One write capability within approved users/scope/hours; not released by the single-user phase |
+| M5 Expansion | Relevant E6 item | Only individually accepted additions |
 
-每阶段按一个可复现子目标交付，不把建目录、启动服务或模型回答“完成”当作验收。开发期间无需反复为普通实现步骤设置人工确认；阶段放行指基于证据的项目状态决定，真实业务动作仍遵循逐动作批准。
+Deliver reproducible subgoals. Creating directories, starting services, or a model saying it is done is not acceptance. Ordinary implementation does not need repeated human confirmation. Stage release is an evidence-based project decision; business actions still require exact approval.
 
-## 2. 状态与证据
+## 2. Status and evidence
 
-子目标状态：`PLANNED` → `IN_PROGRESS` → `READY_FOR_REVIEW` → `PASSED`；阻塞使用 `BLOCKED`，填写原因、负责人和解除条件。已通过目标在相关版本变化后标记 `REVALIDATION_REQUIRED`，不能沿用旧报告。
+Subgoal states: `PLANNED` → `IN_PROGRESS` → `READY_FOR_REVIEW` → `PASSED`. Use `BLOCKED` with cause, owner, and exit condition. Relevant version changes require `REVALIDATION_REQUIRED`; do not silently reuse an old pass.
 
-建议证据保存到 `reports/enterprise/<phase>/<run-id>/`，由实际实施时创建。敏感证据不提交 Git；仓库只保存脱敏摘要和受控位置引用，不把忽略目录中的本地文件当成团队可访问的长期证据。
+Save evidence in `reports/enterprise/<phase>/<run-id>/`. Sensitive artifacts stay out of Git. Commit redacted summaries and controlled references; ignored local files are not a durable shared evidence store.
 
-每次验收包至少包含：
+Each acceptance package contains at least:
 
 ```text
-manifest.json       代码提交、工作树差异摘要、组件版本、配置摘要、时间、环境
-acceptance.md       子目标/用例逐项结论、证据链接、限制、复核人
-results.json        自动检查的 expected / actual / pass / fail
-reproduce.md        实际执行命令、前置数据、复现和清理步骤
-artifacts/          脱敏响应、回读、事件、截图、故障注入和恢复证据
+manifest.json       commit, worktree diff summary, component versions, config, time, environment
+acceptance.md       per-goal/case conclusions, evidence, limits, reviewer
+results.json        automated expected / actual / pass / fail
+reproduce.md        actual commands, data prerequisites, reproduction and cleanup
+artifacts/          redacted responses, readback, events, screenshots, fault/recovery evidence
 ```
 
-报告不得包含密码、认证头或真实客户完整对话。复现清理仅针对可识别测试数据，通过受支持业务操作执行；不能为了重复测试清空共享业务库。
+No passwords, auth headers, or complete private-customer conversations in reports. Cleanup targets identifiable test records through supported business operations; never empty a shared business database merely to repeat a test.
 
-### 单项验收记录模板
+| Per-item field | Requirement |
+| --- | --- |
+| Goal and case ID | For example E3.4 / W06, linked to the contract |
+| Version/environment | Code/model/template/policy/backend versions and isolation |
+| Prerequisites | Permission, snapshot, action state, injected fault |
+| Operation | Exact request/command, not merely “tested” |
+| Expected | Return value, transitions, target effect count |
+| Actual | Observation, readback, events, and errors |
+| Verdict | PASS / FAIL / BLOCKED; no vague “mostly passed” |
+| Ownership/review | Implementer, reviewer, date; disclose self-review |
+| Limits | Uncovered scope, target limitations, next step |
 
-| 字段 | 填写要求 |
-|---|---|
-| 子目标与案例 ID | 如 E3.4 / W06，关联具体合同 |
-| 版本与环境 | 代码/模型/模板/策略/后端版本，是否隔离环境 |
-| 前置条件 | 用户权限、数据快照、动作状态、注入故障 |
-| 操作 | 精确请求或实际命令；不得仅写“已测试” |
-| 预期 | 返回值、状态变化、目标系统副作用数量 |
-| 实际 | 观察值、回读、动作事件和错误 |
-| 结论 | PASS / FAIL / BLOCKED，不用“基本通过”代替 |
-| 责任与复核 | 实施人、复核人、日期；单人项目明确自检 |
-| 限制 | 未覆盖范围、目标系统能力缺口、下一动作 |
+## 3. Unified acceptance rules
 
-## 3. 统一验收规则
+1. Authorization bypass, unapproved writes, duplicate effects, and approval-content substitution block release regardless of user count.
+2. Critical values match independent expectations; facts have provenance and data time. Current answers use the [structured evidence contract](structured-answer-evidence.md), not free-form business prose.
+3. Do not remove cases or refuse every task to obtain a pass. Report legitimate completion and dangerous-path prevention separately.
+4. Writes require readback and agreement between ledger and target effects. Unknown outcome is neither success nor confirmed failure.
+5. Performance, recovery, and retention are targets or explicitly accepted limitations; unmeasured is not achieved.
+6. All mandatory applicable items pass before PASSED. Explain inapplicable items with scope and responsible confirmation; applicable safety requirements cannot be waived.
+7. Narrow scope when backend capabilities are missing; prompts or gateway-local locks do not establish target guarantees.
+8. Schema legality, evidence support, and user-task completion have separate assertions. Force incorrect model calls/output at protected execution entry points.
 
-1. 权限绕过、未批准写入、重复业务副作用、审批内容被替换属于阻断缺陷，不能以“用户少”放行。
-2. 关键业务数值与固定预期一致；所有事实结论可定位来源和数据时间。
-3. 测试失败不能通过删案例或仅让模型拒绝全部任务解决；合法路径和危险路径分别统计。
-4. 写入必须回读，且数据库事件与目标系统副作用一致；结果未知不算成功或确认失败。
-5. 性能、恢复和保留期限属于明确的目标或已批准限制，未测量不写“达标”。
-6. 每阶段必测项全部 PASS 才标记 PASSED；不适用项给出范围理由和责任人确认，不能豁免适用安全要求。
-7. 后端关键能力缺失时按总方案收窄工具范围，不以 Gateway 本地锁或提示词冒充后端保证。
+## 4. Cross-stage verification catalog
 
-## 4. 跨阶段验证目录
+| Category | IDs/scope | First required |
+| --- | --- | --- |
+| Business baseline | C01–C03, F01–F06 | E1 deterministic facts; E2 selection of evidence |
+| Read safety/errors | P01–P03, A01–A03 | E1/E2; preserve original IDs |
+| Execution/fault safety | W01–W15 | E3; repeat applicable cases against E4's real isolated API |
+| Operations/recovery | O01–O08 | E5 |
+| Expansion | X01 onward by synchronization/update/composite action | E6 |
+| Live cross-system/answer quality | [CS01–CS40](improvement-plan.md#4-cross-system-acceptance-and-scoring) | Current E1/E2 revalidation; reuse for new data/capabilities |
 
-| 类别 | 编号与范围 | 首次要求 |
-|---|---|---|
-| 业务基线 | C01–C03、F01–F06 | E1 确定性结果，E2 模型解释 |
-| 读取安全与异常 | P01–P03、A01–A03 | E1/E2；沿用最小演示编号 |
-| 执行安全与故障 | W01–W15 | E3；E4 在真实验收 API 重跑适用项 |
-| 运维与恢复 | O01–O08 | E5 |
-| 扩展 | X01 起，按同步/更新/跨系统动作分别登记 | E6 |
-| 实时跨系统与回答可信度 | CS01–CS40，见 [总体改进计划](improvement-plan.md#4-跨系统验收集与评分改进) | 当前 E1/E2 重验；新增数据与能力复用 |
+The [minimum demo](../minimum-demo.md) defines the original fifteen cases. Do not overwrite old IDs. Repeat model cases at least three times on pinned versions, retaining every result. Server invariants judge dangerous effects; model text alone is insufficient. Directly test every protected entry point without relying on model refusal.
 
-原始 15 个案例定义在 [最小演示与评估](../minimum-demo.md)。新增案例不得覆盖旧 ID。模型非确定性案例在固定版本下至少重复 3 次，记录每次结果；危险副作用由服务端不变量判定，不能只看模型文字评分。每个受保护入口都应有直接绕过模型的测试。
+## 5. Scheduling and work organization
 
-## 5. 排期与工作组织
+Schedule by dependencies and evidence, not unexamined fixed-week promises. Estimate E1/E2 after E0 based on adapters, identity, target deduplication, and GPU capacity. Estimate writes after E3 probes.
 
-按依赖和证据排期，不给未勘查环境承诺固定周数。E0 完成后按适配难度、身份系统、后端去重能力和 GPU 容量估算 E1/E2；E3 技术探针完成后再估算写入时间。
+Each task includes one contract/feature change, relevant checks, actual-diff review, and status updates. Dependency/model/data changes trigger affected checks, not purposeless repetition of all experiments.
 
-每个实施任务限定为：一个合同/功能变化、对应验证、实际 diff 复核、文档状态更新。业务系统 API、模型或数据集更新时只重验受影响层和依赖，不无目的重复全部实验。
+Completion is M1/M2/M3/M4/M5, not completion of every optional E6 item. E0–E4 passes remain experimental. Follow the [current queue](improvement-plan.md): P0 ingress/authorization/evidence/task correctness → P1 live acceptance/WWI closure → P2 operations/domain depth → P3 scale. Prepare backup/alerts in parallel; old reports do not release changed behavior.
 
-项目级完成分为 M1/M2/M3/M4/M5；不把可选 E6 全部完成作为 M4 的前置条件。E0–E4 历史通过限于各自实验范围。当前实施按 [总体改进计划](improvement-plan.md) 排序：P0 认证网关与端到端身份验证、实时关联/授权、最终答案评分和履约模式边界 → P1 跨系统验收及 WWI 首批闭环 → P2 运行与按需工具完善 → P3 扩量。认证入口是实际用户接入前的 P0 门槛；备份和告警准备可以并行，但受影响只读能力修复重验前不能以旧报告放行。
-
-[E5 单人只读试运行](phases/e5-enterprise-pilot.md) 仍是下一运营里程碑，以一名实际用户自测只读能力为验收范围；不要求先完成全部 WWI 扩量或可选新工具。多人企业部署、无人值守和 M4 写入须另行验收，不能从单人 M3 推定通过。
+[E5 single-user read-only](phases/e5-enterprise-pilot.md) remains the next operational milestone. It does not require all WWI expansion or optional tools. Multiple users, unattended operation, and M4 writes require independent acceptance.

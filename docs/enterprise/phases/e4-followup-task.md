@@ -1,58 +1,52 @@
-# E4：单一受控写入——内部跟进任务
+# E4: One controlled write — internal follow-up Task
 
-状态：PASSED（隔离公开/模拟数据，2026-09-20）。责任：开发维护者与 Twenty 系统负责人；业务负责人确认实际效果。
+Historical status: PASSED, isolated public/simulated data, 2026-09-20. Developer and Twenty owner implement; business owner confirms effects. No real-data release follows from this pass.
 
-## 目标与入口
+## Goal and subgoals
 
-入口：E0–E3 通过。目标：在真实运行的隔离 Twenty 验收实例完成一个跟进任务闭环，仍不扩大为客户资料更新、对外消息或订单写入。
+Entry: E0–E3 passed. Complete one Task loop in a running isolated Twenty instance, without customer updates, external messages, or order writes.
 
-## 子目标与实施顺序
+| ID | Deliverable | Acceptance |
+| --- | --- | --- |
+| E4.1 | Fixed customer/order/title/body/owner/deadline/timezone/effects/unique-reference contract | Installed-version fields; no arbitrary model object/field selection |
+| E4.2 | `propose_followup_task` records a normalized proposal | Target Task count unchanged before approval; proposal traceable |
+| E4.3 | Proposal card → independent `/approvals`; `/actions` events | Exact target/content/revision/time/effects; rejection creates no Task; chat closure does not lose action |
+| E4.4 | Limited Worker API adapter with Task credential/readback | One exact Task/association; mismatch requires review |
+| E4.5 | Applicable W01–W15 API/UI integration | No duplicates on response loss, restart, concurrency, pause |
+| E4.6 | Shortfall → suggestion → approval → creation → links/events → compensation | Visible pending/executing/unknown/success; operator can reconcile |
 
-| ID | 子目标 | 实施与交付物 | 验证方法和通过条件 |
-|---|---|---|---|
-| E4.1 | 固定任务合同 | 关联客户/订单、标题/正文、负责人、截止时间/时区、通知影响和唯一关联方式 | 与部署版本字段一致；不由模型选择任意对象或字段 |
-| E4.2 | 提案工具 | Agent 仅注册 propose_followup_task；服务端保存规范化提案 | 模型提出任务后目标系统任务数不变；提案记录可追踪 |
-| E4.3 | 审批界面闭环 | assistant-ui 业务卡片导航到 shadcn/ui `/approvals`；展示服务端真实目标、具体内容、修订、时间与副作用；`/actions` 展示执行事件 | 用户批准的修订与执行内容一致；拒绝不创建任务；聊天关闭或刷新不丢动作 |
-| E4.4 | 受限执行适配器 | 写 Worker 只持任务所需权限，经业务 API 创建并回读 | 创建一条且字段/关联正确；回读不符进入人工检查而非宣告成功 |
-| E4.5 | 故障与安全集成 | W01–W15 的适用项在目标 API 和真实 UI 复验 | 成功后断连、重启、并发及暂停均无重复业务副作用 |
-| E4.6 | 端到端演示与运营交接 | 查询履约缺口 → 建议 → 批准 → 创建 → 链接/事件 → 受限补偿 | 用户可区分待批准/执行中/未知/成功；负责人可按手册处理未知结果 |
+## Target probe release rules
 
-## API 探针放行规则
+Any unique-reference field/extension is an administrator maintenance change with compatibility/upgrade ownership, never an Agent capability. Record unavoidable excess credential rights and seek target restrictions; broad authority plus a prompt is not least privilege. Worker paths/fields remain fixed with no model URL/GraphQL.
 
-若需要新增唯一外部关联字段或目标端扩展，作为管理员维护变更实施和验证，不开放给 Agent。该变更必须确认数据兼容性和升级维护责任。
+Actually create isolated Tasks to check notifications, assignment, and workflows. External-contact sending exceeds scope: disable the effect or block release; renaming the tool “internal” does not fix it.
 
-实际账号若不能限制到所需对象/字段，记录额外权限并优先寻找后端限制；不能用宽权限加提示词冒充最小权限。独立执行器仍需固定路径与字段校验，不接受模型提供的 URL 或 GraphQL。
+## Business cases
 
-任务的通知、自动分配或后续工作流必须通过实际创建验证。若会向外部联系人发送内容，超出首个内部任务范围，应关闭副作用或暂停放行，不能仅把工具名称改成“内部”解决。
+- Correct shortfall customer/order produces one internal Task.
+- Unresolved duplicate names cannot produce executable targets; invalid/out-of-scope owner fails.
+- Duplicate approval, HTTP retry, and restored model conversation do not duplicate the effect.
+- A deliberate second identical Task has a new action ID; duplicate-candidate prompting remains a UI design requirement, not an asserted current implementation.
+- No business-system write before approval. Unknown outcome is not presented as failure with encouragement to recreate.
+- Read back body, relationships, owner, deadline, state; audit links request and approval.
+- Client payload replacement, repeated clicks, old revision, and cross-user replay are rejected/idempotent.
+- Cards/action pages preserve `UNKNOWN/RECONCILING` without a recreate shortcut.
 
-## 业务验收场景
+## Exit
 
-- 履约存在缺口，针对正确客户和订单创建一条内部跟进任务。
-- 同名客户尚未澄清，不生成可执行目标；负责人无效或越权则拒绝。
-- 同一提案重复批准、HTTP 重试、模型恢复对话不会重复创建。
-- 用户确实需要第二条相同任务时形成新 action，并有重复候选提示。
-- 批准前不写业务系统；结果未知时不向用户声称失败并鼓励重新创建。
-- 写入后回读正文、关联、负责人、截止时间和状态；审计能找到申请和批准依据。
-- 浏览器替换提案 payload、重复点击批准、提交旧修订或跨用户重放均被服务端拒绝或幂等处理。
-- `UNKNOWN/RECONCILING` 在聊天卡片和动作页均不显示为成功/失败，也不鼓励用户重新创建。
+Deliver Task contract, real-API fault evidence, UI flow under the [frontend plan](../frontend-plan.md), exact action lookup, and recovery instructions. Original fifteen plus W01–W15 provide at least thirty case IDs; state inapplicability by version, and record model variants separately. M2 is isolated public/simulated demonstration, not enterprise write approval; remain isolated before [E5](e5-enterprise-pilot.md).
 
-## 交付与退出条件
+## Historical implementation and acceptance (2026-09-20)
 
-交付任务工具合同、真实验收 API 故障报告、按 [assistant-ui 前端方案](../frontend-plan.md) 形成的 UI 流程证据、按 action_id 查询结果的方法及异常处置手册。原始 15 例与 W01–W15 共同构成至少 30 个案例 ID；按版本能力注明不适用项，模型变体另行记录。
+- Only `propose_followup_task` was added; server-rechecked shortfall yields `PENDING_APPROVAL`. Server fixes customer, ERPNext order, owner, effects, precondition, expiry.
+- Different proposer/approver; Worker rechecks current Company, Workspace Member, and ERPNext order versions.
+- Task ID equals action ID; deterministic UUIDv5 TaskTarget; no upsert-induced timeline replay.
+- Twenty 2.39.0: zero Tasks before approval; lost response recovered from UNKNOWN; two Workers had one claim; post-commit crash recovered through lease/reconciliation; exact unique Task/Target readback.
+- One-member workspace had no Notification object/table; one `recordCreated` timeline/Task and no outbound message. Reprobe after membership/email/workflow/notification changes.
+- W01–W15, Python 89/89, Ruff, and production Web build passed. Probe/test Tasks were marked `DONE` normally; successful demo Tasks remained `TODO` evidence.
 
-M2 通过表示公开/模拟数据的受控写入演示完成，不代表真实企业写入已批准运行。进入 [E5](e5-enterprise-pilot.md)前默认继续限制为验收环境。
+See [E4 contract](../../../contracts/e4-followup-task-v1.md) and [runbook](../../../ops/e4-followup-task.md). Local package: `reports/enterprise/e4/20260920T-followup-task/`. Next operational gate is E5; enterprise-data writes remain unapproved.
 
-## 实施与验收结果（2026-09-20）
+## Failure
 
-- Agent 新增唯一的 `propose_followup_task`，只对服务端复核的 shortfall 生成 `PENDING_APPROVAL`；客户、ERPNext order、负责人、副作用、precondition 和有效期均由服务端决定。
-- 提案人和审批人分离；批准后 Worker 再核对 Twenty Company、Workspace Member 和 ERPNext Sales Order 当前版本。
-- Twenty Task 使用 `action_id` 作为确定性 ID；TaskTarget 使用确定性 UUIDv5。正式执行不使用 `upsert`，避免相同内容重放产生额外 timeline update。
-- 真实 Twenty 2.39.0 演练通过：批准前零 Task；响应丢失进入 `UNKNOWN` 后精确对账成功；双 Worker 仅一个领取；远端提交后崩溃由租约恢复；Task/TaskTarget 各唯一且逐字段回读一致。
-- 当前隔离 workspace 只有一个成员，没有 Notification GraphQL 对象或数据库表；每个真实 Task 观察到一条内部 `recordCreated` timeline activity，没有 outbound message。新增成员、邮件、workflow 或通知组件时必须重跑该探针。
-- W01–W15 全部通过；完整 Python 测试 89 项通过，Ruff 和 Next.js production build 通过。测试/probe Task 已按正常业务方式标记 `DONE`，成功演练 Task 保留为 `TODO` 证据。
-
-固定合同见 [E4 跟进任务合同](../../../contracts/e4-followup-task-v1.md)，部署、恢复和补偿步骤见 [E4 运行手册](../../../ops/e4-followup-task.md)。本地报告位于 `reports/enterprise/e4/20260920T-followup-task/`。E4 只放行隔离演示，不放行真实企业数据；下一门禁为 [E5](e5-enterprise-pilot.md)。
-
-## 失败处理
-
-出现重复创建、错误目标或未知外部通知，立即暂停该工具并核对受影响任务。通过正常业务取消/关闭操作处理测试任务，保留补偿关联，不用数据库删除掩盖证据。
+Pause the tool on duplicate creation, wrong target, or unknown external notification. Reconcile affected Tasks and close/cancel through supported workflows with compensation links. Never delete database records to hide evidence.

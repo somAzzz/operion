@@ -1,50 +1,52 @@
-# I07 本地认证网关验收摘要
+# I07 local authentication gateway acceptance
 
-日期：2026-09-29。状态：**LOCAL_PROTOCOL_PASSED / BROWSER_NOT_RUN**。用户选择使用本地 Keycloak；本次实施与验证限于独立 loopback 部署、合成身份和公开 WWI 快照。
+Date: 2026-09-29. Historical status: **LOCAL_PROTOCOL_PASSED / BROWSER_NOT_RUN**. The user selected local Keycloak. Scope was the independent loopback deployment, synthetic identities, and public WWI snapshot.
 
-## 交付
+Later bounded [session-recovery](session-expiry-login.md) and [navigation](navigation-access.md) browser checks do not overwrite this run's NOT RUN result or complete I07/E5. Current remaining work is in the [improvement plan](improvement-plan.md).
 
-- Nginx 1.30.5 HTTPS 入口、Keycloak 26.7.4、OAuth2 Proxy 7.15.4、Redis 7.4.11 服务端会话及私有 Web/Agent 服务；只有 `127.0.0.1:8443` 发布。
-- OIDC code flow、PKCE S256、state/nonce、Secure/HttpOnly/SameSite cookie、服务器 token 转发和后端独立验证。
-- 每请求查询当前身份策略，按页面/API 功能检查角色；移除企业模式浏览器 token cookie fallback；身份查询不授予额外业务角色。
-- 同源 mutation 校验、同源 POST 注销、Redis session 删除和 Keycloak 后台注销。
-- 初始化/启停脚本、可重复的协议验收脚本、健康检查与启动依赖、拒绝页面退出入口、运行手册与回归测试。
+## Delivered
 
-使用方式见 [认证网关运行手册](../../ops/auth-gateway.md)。入口为 `https://operion.localhost:8443`，凭据在忽略目录 `var/gateway/credentials.json`，浏览器需正确配置专用开发 CA 信任。
+- Nginx 1.30.5 HTTPS, Keycloak 26.7.4, OAuth2 Proxy 7.15.4, Redis 7.4.11 server sessions, private Web/Agent; only `127.0.0.1:8443` published.
+- Code flow, PKCE S256, state/nonce, Secure/HttpOnly/SameSite cookie, server token forwarding, independent backend checks.
+- Current identity/role policy per protected request; no enterprise browser-token-cookie fallback; identity lookup granted no extra role.
+- Same-origin mutations and POST sign-out deleting Redis session and ending Keycloak session.
+- Init/start/stop, reproducible protocol checks, health/readiness dependencies, denied-page exit, runbook, regressions.
 
-## 验证结果
+See [runbook](../../ops/auth-gateway.md). Entry `https://operion.localhost:8443`; secrets stayed in ignored `var/gateway/credentials.json`; the test browser needed dedicated development CA trust.
 
-| 检查 | 本次结果 | 范围 |
-|---|---|---|
-| 真实 Keycloak / HTTPS 协议验收 | 38/38 PASS | `scripts/verify-gateway.py --model`，包括实际模型请求 |
-| Python 全套回归 | 169 项：146 PASS，23 SKIPPED，0 FAIL | 未配置隔离测试数据库，数据库组明确跳过 |
-| Web 构建 | PASS | Docker 内 `npm run build -- --webpack`，TypeScript 检查通过 |
-| Python lint / diff 格式 | PASS | 变更 Python 文件通过 Ruff；`git diff --check` 通过 |
-| 实际浏览器渲染和点击 | NOT RUN | Computer Use inventory 没有浏览器或应用；HTTP/SSE 不替代此项 |
-| 实际用户 E5 观察 | NOT RUN | 合成测试账号不算实际用户；没有完成 10 个业务日观察 |
+## Results from this run
 
-协议通过项包括：匿名页面重定向/API 401、伪造认证头和 token cookie 拒绝、Host 校验、管理入口不公开、运行时端口隔离、私有 Web/Agent 的直接伪造请求拒绝、PKCE/state/nonce、callback 重放拒绝、安全 cookie、无 token 渲染、正常页面/API、跨域与缺失 Origin 拒绝、有效 IdP 用户无业务 policy 拒绝、禁用与恢复、错误功能角色、旧登录撤销、真实 Agent SSE、跨用户历史隔离、注销后的 cookie 重放拒绝及 IdP 会话终止。
+| Check | Result | Scope |
+| --- | --- | --- |
+| Real Keycloak/HTTPS protocol | 38/38 PASS | `scripts/verify-gateway.py --model`, including real model request |
+| Python | 169: 146 PASS, 23 SKIPPED, 0 FAIL | Isolated database unavailable; explicit skips |
+| Web build | PASS | Docker `npm run build -- --webpack` and TypeScript |
+| Python lint/diff | PASS | Changed Python Ruff; `git diff --check` |
+| Browser rendering/clicks | NOT RUN | No browser/app in Computer Use inventory; HTTP/SSE did not substitute |
+| Actual-user E5 observation | NOT RUN | Synthetic identities were not actual users; no ten-business-day observation |
 
-本次同时修复了重启期间“网关已能登录、后端尚未就绪”的启动顺序问题，新增健康依赖后重新通过。早期失败记录保留，未以删除失败记录获得最终通过。最终报告使用更新后的 Nginx/Redis 固定版本和最终 Web/Agent 构建。
+The 38 checks covered anonymous redirect/API 401; forged headers/token cookies; Host/admin paths; runtime port isolation; direct forged private Web/Agent requests; PKCE/state/nonce; callback replay; secure cookies/no rendered token; legitimate pages/APIs; cross-origin/missing Origin; valid IdP user without policy; disable/restore; wrong role; old-login revocation; real Agent SSE; cross-user history; signed-out cookie replay and IdP termination.
 
-本地详细证据（不提交 Git，仓库以此脱敏摘要共享结论）：
+Restart initially exposed login before backend readiness. Health dependencies repaired ordering and the final run passed. Initial failures were retained, not deleted. Final evidence used the pinned updated Nginx/Redis and final Web/Agent builds.
+
+Local ignored evidence:
 
 ```text
 reports/enterprise/improvements/gateway/
-  acceptance-final.json           最终 38 例逐项结果与时间
-  manifest.json                   代码基线、变更文件哈希、镜像 ID、环境摘要
-  initial.json                    早期重启干扰下的失败运行
-  acceptance.json                 后端未就绪时的失败运行
-  acceptance-after-readiness.json 健康依赖修复后的运行
+  acceptance-final.json           final 38 results/timestamps
+  manifest.json                   baseline, changed-file hashes, images, environment
+  initial.json                    early restart-interference failure
+  acceptance.json                 backend-not-ready failure
+  acceptance-after-readiness.json post-readiness-fix run
 ```
 
-没有记录或公开密码、OAuth code、token 或 session cookie。协议脚本对测试 policy 的临时修改在 finally 中恢复。没有启动 Action Worker，没有向 Twenty/ERPNext 写入业务对象；新增数据仅限该栈自己的身份库、会话历史和本地证据。
+No password, OAuth code, token, or cookie was published. Temporary test policy edits were restored in `finally`. No Action Worker or target business writes ran; new data stayed in stack identity/session/history/evidence stores.
 
-## 尚未放行的范围
+## Unreleased scope at this checkpoint
 
-- 浏览器点击与开发 CA 配置仍需实际验证；目前只证明协议和服务链路。
-- I01 实时订单归属问题、I02 最终答案评分、I03 履约模式边界未在本次修复。网关不能替代业务对象授权。
-- 当前单机 Keycloak 使用开发模式/H2，Redis 会话不持久化。实际部署需独立身份配置、数据库与备份、密钥/证书轮换、监控及故障演练。
-- 本栈只证明新服务的网络边界，不代表宿主机既有模型、业务系统及数据库的网络隔离已经通过。
-- 注销/撤销阻断后续请求；进行中的请求仍受原有超时控制，不能宣称立即撤回。仅 IdP 撤销也不能替代 Operion 服务端撤销策略。
-- 本次不把 I07 标为全范围 PASSED，不放行 E5/M3、真实写入或私有业务数据。
+- Browser clicks/CA trust still required actual testing; only protocol/service behavior was established.
+- I01 relation, I02 grading, and I03 fulfillment defects were not repaired by this gateway work. Later separate fixes do not change this run's scope; login does not replace object authorization.
+- Keycloak used start-dev/H2; Redis was unpersisted. Actual deployment needed identity database/backups, key/certificate rotation, monitoring, and recovery.
+- Stack isolation did not prove existing host model/business/database network isolation.
+- Logout/revocation blocked subsequent requests; in-flight requests retained timeout. IdP revocation did not replace server policy.
+- This run did not mark full I07 PASSED, release E5/M3, enable real writes, or approve private data.

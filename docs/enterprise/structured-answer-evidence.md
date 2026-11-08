@@ -1,48 +1,50 @@
-# 结构化回答与证据契约
+# Structured answers and evidence contract
 
-2026-10-17：运行时政策 `structured-evidence-v1` 替代 `business-facts-v2`。删除 `answer_claims.py` 和 `business_facts.py`，不再从自然语言或 Markdown 中反推业务事实。
+Implemented on 2026-10-17: runtime policy `structured-evidence-v1` replaces `business-facts-v2`. `answer_claims.py` and `business_facts.py` were removed. Business facts are no longer inferred from natural-language or Markdown output. See [ADR-001](../architecture/adr-001-deterministic-agent.md) and the [current implementation queue](improvement-plan.md).
 
-## 数据流
+## Data flow
 
-1. 服务器认证、授权并执行原有业务工具。工具仍负责数据读取与对象权限。
-2. `EvidenceRegistry` 对已知工具及版本化结果进行归一化，生成只属于本次运行与权限范围的随机引用。事实包含实体、字段、值、币种、覆盖范围、JSON 指针及来源上下文；表格包含服务器确定的行列。
-3. 工具返回 `answer_evidence` 清单。模型通过 `present_answer` 提交严格的 `AnswerPlan`，只能选择当前事实 ID、表格 ID 和允许的列，不能提交业务文字、自定义标题、数值、币种、行数据或“全部历史”声明。
-4. 校验引用、上下文、字段、重复选择及证据冲突。无效选择允许一次模型修正；仍失败则不给出业务答案。普通文字没有默认放行路径。
-5. 服务器按固定语义标签和证据生成中英文回答。发送 SSE 前再次校验；模型中间文字、输出工具参数及未经验证的部分回答均不发布。只有服务器生成的最终文字进入成功会话历史。
-6. 最终 `ModelResponse.metadata["operion.answer_evidence"]` 保存所选事实与表格证据，便于审计及验收；浏览器公开历史接口仍只返回既有消息结构。原有历史不重写，取消或失败的运行不保存新答案。
+1. The server authenticates, authorizes, and executes existing business tools. Tools retain responsibility for reading data and checking object permission.
+2. `EvidenceRegistry` normalizes known tools and versioned results into random references valid only for this run and authorization scope. Facts include entity, field, value, currency, coverage, JSON pointer, and source context; tables contain server-defined rows and columns.
+3. Tools return an `answer_evidence` manifest. The model submits a strict `AnswerPlan` through `present_answer`, selecting only current fact IDs, table IDs, and allowed columns. It cannot submit business prose, custom titles, numbers, currencies, row data, or claims of complete source history.
+4. Validate references, context, fields, duplicate selections, and evidence conflicts. Invalid selections allow one model repair; continued failure produces no business answer. Ordinary text has no default allow path.
+5. The server generates English or Chinese answers from fixed semantic labels and evidence. It validates again before SSE publication. Model intermediate text, output-tool arguments, and unverified partial answers are not published. Only final server-rendered text enters successful conversation history. Documentation language does not change supported answer languages.
+6. Final `ModelResponse.metadata["operion.answer_evidence"]` stores selected fact/table evidence for audit and acceptance. The public browser history API retains its existing message structure. Old history is not rewritten; failed/cancelled runs save no new answer.
 
-## 校验边界
+## Verification boundaries
 
-| 场景 | 约束 |
+| Scenario | Constraint |
 | --- | --- |
-| 客户人口与有单客户 | `customer_count`、`customers_with_orders` 独立；完整订单列表只能推导有单客户数，不能证明客户人口总数 |
-| 分页与总数 | `page_order_count` 来自返回行；筛选总数只来自明确的 `completeness.total_count` 或组织汇总；分页客户分布不能提升为完整分布 |
-| 实体与金额 | 表格不能修改或重排值；投影强制保留身份列，金额强制保留币种，数量保留单位。缺币种的金额显示未知，其他证据可用；非法金额不生成有效证据 |
-| 状态 | 来源状态、业务状态、单据状态及拣货/交付字段各自保留字段语义，不相互替代 |
-| 缺失与零 | `None`/未暴露字段/来源故障均不能生成零事实；显式零仍可显示；联系字段保留 present/explicit_empty/not_exposed |
-| 时效与覆盖 | 绑定运行、租户/用户/授权范围、工具、查询条件、来源模式、业务日期、观测时间、完整性及来源警告；快照场景履约结论不能冒充 live 结果 |
-| 冲突与越权 | 同一运行中相同对象字段的矛盾证据不能任择其一；发现关系对象越出范围时整次归一化回滚 |
-| 操作能力 | 能力查询不证明已执行；提案仅接受 `PENDING_APPROVAL`，固定说明尚未执行。原有审批与 Worker 门禁保持独立 |
-| 来源文本 | 名称等来源字符串以数据渲染并转义 Markdown/HTML，不作为模型指令、列标签或任意回答文字 |
+| Customer population versus customers with orders | `customer_count` and `customers_with_orders` are independent. A complete order list proves the latter, not the total customer population |
+| Pagination and totals | `page_order_count` comes from returned rows. Filtered totals require explicit `completeness.total_count` or an organization summary. Paged customer distribution is not a complete distribution |
+| Entities and amounts | Tables cannot alter or reorder values. Projections retain identity columns, currency with amounts, and units with quantities. Unknown currency suppresses the amount while other evidence remains usable; invalid amounts cannot become valid evidence |
+| State | Source, business, document, picking, and delivery states retain their own field semantics |
+| Missing and zero | `None`, unexposed fields, and source failures cannot produce zero facts. Explicit zero remains displayable. Contact fields preserve `present`, `explicit_empty`, and `not_exposed` |
+| Freshness and coverage | Bind run, tenant/user/scope, tool, filters, source mode, business date, observation time, completeness, and source warnings. Snapshot fulfillment cannot be presented as live |
+| Conflict and scope | Contradictory evidence for the same object/field cannot be chosen arbitrarily. An out-of-scope related object rolls back the entire normalization |
+| Operation capability | Capability checks do not prove execution. Proposals accept only `PENDING_APPROVAL` and explicitly state that execution has not occurred. Approval/Worker gates remain independent |
+| Source text | Escape source strings such as names as Markdown/HTML data, never as model instructions, column labels, or arbitrary answer prose |
 
-这里验证的是**所选择事实的证据支持性**。模型仍可能选错工具、漏选事实或没有完成问题，所以 E2 还需独立检查工具选择、参数、预期事实是否真正出现在回答中，不能把结构化合法等同于任务完成。工具和业务源本身仍是事实的可信边界；未知工具或契约版本无法生成有效事实。复杂推导、税额/币种换算等必须先增加有类型、带来源的领域计算工具，再通过新契约暴露，不能重新添加自由业务 prose 通道。
+This validates **evidence support for selected facts**. The model can still choose the wrong tool, omit facts, or fail the task. E2 therefore independently checks tool choice, arguments, and whether required facts actually appear in the answer. Schema legality is not task completion. Tools and sources remain the trust boundary for facts. Unknown tools or contract versions cannot produce valid evidence. Complex calculations, tax, and currency conversion require typed, source-backed domain capabilities exposed through new contracts; never restore an unconstrained business-prose channel.
 
-## 回归与观测
+## Regressions and observation
 
-- `test_business_fact_binding.py`：两次生产误拦截复现（总数 30/单页 1；30 单/8 个有单客户）、中英文、实体/字段/币种/范围不可覆盖、旧运行/跨范围引用、冲突证据、销售与采购区分。
-- `test_output_guardrails.py`：零/缺失/故障、未知契约、字段投影、履约、提案与能力、源文本注入、空/重复/伪造引用。
-- `test_answer_evidence_contracts.py`：用实际仓库输出覆盖读工具适配器，避免只用手写形状自证。
-- `test_agent_app.py`：无效输出不进入 SSE/成功历史，最终文字与恢复历史一致，权限变化保留可见对话并刷新模型上下文，取消路径不发布部分答案。
-- `test_e2_evaluation.py` 与两份 `accept_guardrails*.py`：按所选结构化证据评分，真实模型验收的预期仍分别来自 CSV 或独立只读业务 API。
+- `test_business_fact_binding.py`: the two recorded false-rejection incidents (total 30/page 1; 30 orders/8 customers with orders), English/Chinese rendering, immutable entity/field/currency/scope bindings, old-run/cross-scope references, conflicts, and sales/purchase distinction.
+- `test_output_guardrails.py`: zero/missing/failure, unknown contracts, projections, fulfillment, proposals/capability, source injection, and empty/duplicate/forged references.
+- `test_answer_evidence_contracts.py`: actual repository outputs exercise read-tool adapters instead of relying only on hand-written response shapes.
+- `test_agent_app.py`: invalid output never enters SSE/successful history; final and restored text agree; permission changes retain visible conversation while refreshing model context; cancellation publishes no partial answer.
+- `test_e2_evaluation.py` and both `accept_guardrails*.py` scripts: score selected structured evidence. Real-model expectations still come independently from CSV or read-only source APIs.
 
-Langfuse 的 `operion.guardrail.output_facts` 记录稳定原因码、策略版本、事实/表格数量与已知引用；未知引用的原始模型字符串不写入内容关闭的诊断。工具契约错误另记 `operion.guardrail.evidence_contract`。最终运行 span 记录验证过的引用计划，业务正文仍遵循现有内容捕获开关。校验不依赖 Langfuse 是否可用。
+Langfuse `operion.guardrail.output_facts` records stable reason codes, policy version, fact/table counts, and known references. Unknown model-supplied reference strings do not enter content-disabled diagnostics. Tool-contract errors use `operion.guardrail.evidence_contract`. The final run span records the validated reference plan; business content follows the existing capture switch. Validation does not depend on Langfuse availability.
 
-重跑：`scripts/verify.sh offline`；定向：`scripts/verify.sh case fact-binding`；实模：`PYTHONPATH=src .venv/bin/python scripts/accept_guardrails.py --output /tmp/operion-guardrails.json`。数据库测试使用既有隔离 PostgreSQL 工作流；本次不更改数据库 schema。
+Rerun with `scripts/verify.sh offline`; focus with `scripts/verify.sh case fact-binding`. Real-model command: `PYTHONPATH=src .venv/bin/python scripts/accept_guardrails.py --output /tmp/operion-guardrails.json`. Database checks use the existing isolated PostgreSQL workflow. The structured-answer implementation did not change the database schema.
 
-## 本次验收结果
+## Historical acceptance results (2026-10-17)
 
-- 离线回归：237 项，213 通过，24 项隔离 PostgreSQL 集成测试按离线工作流跳过；Ruff 与 `git diff --check` 通过。
-- 真实 qwen3.8-27b → FastAPI → AG-UI：计数、金额与币种、写权限拒绝、伪造引用拒绝，4/4 通过。CSV 提供独立预期。验收报告在本地 `/tmp/operion-guardrails-structured-acceptance.json`。
-- 本地开发 Gateway 已重建 Agent。内置浏览器验证客户总数 10、完整销售订单表 30 行、单行分页同时显示筛选总数 30/本页 1，以及客户总数 10/有单客户数 8/销售订单数 30。刷新后最终文字和已有历史完整恢复。
-- 当前数据是 `interview-wwi-v1` 的公开样本快照。本次未重新运行在线 ERPNext/Twenty 验收或 PostgreSQL 集成组；在线验收脚本已迁移到新契约，导入检查通过。
-- Langfuse 只读回查确认浏览器运行 `Ey2cy7J` 的两个校验节点均为 `GUARDRAIL / DEFAULT / STRUCTURED_EVIDENCE_SUPPORTED`，政策 `structured-evidence-v1`；[对应 Trace](https://cloud.langfuse.com/project/cmv41jt6h05egad0el9rcy2kh/traces/44cf2e3adc3838c45bbb0f86b5670265)。
+These are the recorded implementation results, not a new acceptance run for the current worktree.
+
+- Offline: 237 tests, 213 passed, 24 isolated PostgreSQL integration tests skipped under the offline workflow; Ruff and `git diff --check` passed.
+- Real qwen3.8-27b → FastAPI → AG-UI: counts, amount/currency, write denial, and forged-reference denial, 4/4 passed with independent CSV expectations. Local report: `/tmp/operion-guardrails-structured-acceptance.json`.
+- The local development Gateway Agent was rebuilt. Browser checks verified total customers 10, a complete 30-row sales table, filtered total 30/page 1, and customer population 10/customers with orders 8/orders 30. Refresh restored final text and previous history.
+- Data was the `interview-wwi-v1` public-sample snapshot. Online ERPNext/Twenty and PostgreSQL integration acceptance were not rerun. Online acceptance scripts were migrated to the new contract and passed import checks.
+- Read-only Langfuse inspection found both checks for browser run `Ey2cy7J` were `GUARDRAIL / DEFAULT / STRUCTURED_EVIDENCE_SUPPORTED`, policy `structured-evidence-v1`: [trace](https://cloud.langfuse.com/project/cmv41jt6h05egad0el9rcy2kh/traces/44cf2e3adc3838c45bbb0f86b5670265).

@@ -1,40 +1,39 @@
-# E0：环境、权限与恢复基线
+# E0: Environment, permission, and recovery baseline
 
-状态：PASSED（实验环境，2026-09-16）。责任：系统/数据负责人、运维负责人；开发维护者整理证据。
+Status: PASSED, experimental environment, 2026-09-16. Owners: system/data and operations; developer assembles evidence. This is historical acceptance, not a new environment certification.
 
-验收摘要见 [E0 基线验收结果](../e0-baseline-result.md)。详细证据位于本地受控目录
-`reports/enterprise/e0/20260916T205333Z/`，其中备份和配置含敏感数据，不提交 Git。
+See [E0 summary](../e0-baseline-result.md). Controlled local evidence: `reports/enterprise/e0/20260916T205333Z/`; sensitive backups/configuration are not committed.
 
-## 目标与入口
+## Goal and entry
 
-确定实际可用环境和安全边界，为之后每一步提供可恢复、可重复的验证基础。入口为现有仓库与部署访问；当前方案不证明任何线上权限已收紧。
+Establish usable infrastructure and safety boundaries for recoverable, reproducible work. Entry is the existing repository/deployment access. A written plan does not prove deployed permission restrictions.
 
-## 子目标与实施顺序
+## Subgoals
 
-| ID | 子目标 | 实施与交付物 | 验证方法和通过条件 |
-|---|---|---|---|
-| E0.1 | 核对现状 | 核对 README、ETL 报告与目标回读，形成已完成/待核验清单 | Twenty Company、People、ERPNext 分别记录证据；不按代码存在判已部署 |
-| E0.2 | 版本和拓扑基线 | 记录 Twenty、ERPNext/Frappe、数据库、SGLang、模型/模板/解析器、Python 和可用资源 | 组件健康探针通过；版本/镜像或修订可重建；未知项显式列出 |
-| E0.3 | 凭据与权限矩阵 | 区分人工、ETL、只读工具、写执行器和管理员身份；盘点 AI/MCP/插件入口 | 对每个实际 Agent 执行入口做隔离环境负向验证；查询凭据不能写或改元数据 |
-| E0.4 | 可恢复实验基线 | 备份必要业务数据、附件、映射和配置到独立位置 | 恢复到隔离实例，核对记录及关联；仅备份命令成功不算通过 |
-| E0.5 | 冻结演示约定 | 固定业务日期、仓库、单位、占用规则、经营主体和样本 | 业务负责人核对 15 个案例的输入来源与预期，不要求完整操作培训 |
-| E0.6 | 关闭绕行路径 | Twenty 内置 AI 实际只读或关闭不可约束入口，写网络入口限于执行器 | 模型即使请求删除字段也不能产生副作用；人工管理员不受普通 Agent 账号替代 |
+| ID | Goal/deliverable | Verification |
+| --- | --- | --- |
+| E0.1 | Reconcile README, ETL reports, and target readback into implemented/unverified items | Separate Twenty Company/People and ERPNext evidence; code existence is not deployment |
+| E0.2 | Versions/topology: business systems, databases, SGLang/model/template/parser, Python/resources | Health probes, reproducible images/revisions, explicit unknowns |
+| E0.3 | Distinct human/ETL/read/Worker/admin identities and AI/MCP/plugin entry points | Isolated negative checks at every Agent execution path; query credentials cannot mutate records/metadata except documented exceptions |
+| E0.4 | Back up required data, attachments, mappings, configuration independently | Restore to an isolated instance and check records/relations; backup command success alone is insufficient |
+| E0.5 | Pin business date, warehouse, units, reservations, company, sample | Business owner checks inputs/expectations for fifteen cases; no full product training required |
+| E0.6 | Constrain built-in AI or close unconstrainable paths; restrict write network to executor | Even a model requesting field deletion cannot cause effects; human admin authority is not delegated to Agent accounts |
 
-目标系统版本勘查只记录配置摘要和密钥引用，不把密钥值写入报告。权限负向测试使用隔离测试对象；不对真实字段执行破坏性探针。
+Record configuration summaries/secret references, never secret values. Negative permission probes use isolated objects, not destructive operations on real fields.
 
-## 能力矩阵必须回答
+## Capability matrix questions
 
-- Twenty 内置 AI 工具权限与 API 账号权限是否独立，是否存在绕过只读限制的入口？
-- 两个系统的记录级/经营主体级/字段级授权能如何落实？服务账号有哪些额外权限？
-- Twenty 跟进任务的实际对象、字段、关联和通知工作流是什么？
-- 下游是否有原生幂等、唯一外部引用、精确查找和原子条件更新？此时可记录待 E3 探针确认。
-- 实际模型是否支持配置的 thinking、结构化输出、工具返回与流式格式？E2 再做完整验证。
-- 备份能恢复哪些数据、恢复耗时和缺口是什么？
+- Are built-in AI and API-account permissions independent? Can either bypass read-only policy?
+- How are record/company/field permissions enforced, and what extra authority does a service account retain?
+- What Task fields, relations, notifications, and workflows exist in the installed Twenty version?
+- Does the target support native deduplication, unique references, exact lookup, and atomic conditional updates? E3 may resolve unknowns.
+- Does the actual model support configured thinking, structured output, tool results, and streaming? E2 performs full compatibility checks.
+- What can backups restore, how long does it take, and what is missing?
 
-## 交付与退出条件
+## Deliverable and exit
 
-交付 `reports/enterprise/e0/<run-id>/` 验收包，包括环境清单、权限矩阵、恢复报告、数据现状和待决事项。E0.1–E0.6 全部有结论；未知写能力可以阻塞后续写入而不阻塞只读建设，但未约束的现存 Agent 写路径必须关闭。
+Acceptance package `reports/enterprise/e0/<run-id>/`: inventory, permission matrix, restore results, data status, decisions. Every E0.1–E0.6 has a conclusion. Unknown write capabilities may block writes without blocking read-only development; existing unconstrained Agent write paths must close.
 
-## 失败处理与下一步
+## Failure and next step
 
-权限无法收窄：关闭受影响 AI 入口；恢复失败：先修复基线，不进行不可恢复的数据准备。E0 通过后进入 [E1](e1-read-tools.md)。阶段状态按 [统一规范](../delivery-plan.md)更新。
+If permission cannot be narrowed, close the affected AI path. Repair failed restoration before irreversible preparation. Continue to [E1](e1-read-tools.md), updating state under the [acceptance rules](../delivery-plan.md).

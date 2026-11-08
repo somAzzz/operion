@@ -1,44 +1,46 @@
-# 企业运行方案与阶段索引
+# Enterprise architecture, implementation, and acceptance index
 
-版本：v1.10；日期：2026-10-17；状态：E0–E4 历史实验范围已通过；当前先补实时读取与评测正确性，E5 单人只读真实证据待完成。
+Documentation revision: 2026-11-08. E0–E4 retain their historical experimental acceptance scopes. Current code includes structured evidence answers, ambiguity selection gates, budget diagnostics, enterprise identity controls, and the minimal developer runner. E5 actual-user operational evidence remains incomplete; real-data writes are not released.
 
-本目录把 Operion 从公开样本演示推进到企业受控运行。文档完成不等于系统上线，也不代表现有部署已经符合要求。
+A document, a running service, and an old passing report are different kinds of evidence. This documentation reconciliation adds no new runtime acceptance.
 
-## 阅读顺序
+## Read current guidance first
 
-当前实施结果见 [2026-10-17 修复记录](fixes-2026-10-17.md)：事实绑定、取消历史、隔离数据库、依赖修复和最小案例报告已落地；当前队列以总体改进计划 v1.5 为准。
+1. [ADR-001](../architecture/adr-001-deterministic-agent.md) and [Agent / MCP boundaries](../agent-boundaries.md): ownership of business facts, execution, and model behavior.
+2. [Structured answers and evidence](structured-answer-evidence.md): `present_answer`, `AnswerPlan`, `EvidenceRegistry`, and deterministic rendering. Free-form business prose is not an output fallback.
+3. [Agent API](../../contracts/e2-agent-api-v1.md): authentication modes, ambiguity selection, limits, budget diagnostics, and public errors.
+4. [Improvement plan](improvement-plan.md): the single current I01–I16 status table and remaining queue. Full repeated model acceptance, CS01–CS40/holdouts, live fault matrices, and E5 gates are separate pending work.
+5. [Operating plan](operating-plan.md), [delivery/acceptance rules](delivery-plan.md), and [frontend plan](frontend-plan.md): architecture, operational targets, and release criteria.
+6. [Developer observability/testing](developer-observability-and-testing.md): implemented `scripts/verify.sh` commands and the explicitly proposed full evidence timeline.
 
-历史复核见 [2026-10-11 进展复核与规划更新](progress-review-2026-10-11.md)：已补齐可移植测试、原始正确性修复及 tracing；记录当时缺口；其中事实绑定、测试隔离的后续修复见上方最新记录。I01–I16 由总体改进计划统一维护。
+Current Web guidance includes [navigation access](navigation-access.md) and [session-expiry login](session-expiry-login.md). Both have bounded browser records; these do not establish completion of the full HTTPS/OIDC/revocation/network matrix or E5 observation.
 
-面向个人项目与面试的完整评估见 [系统评估与发展规划](system-assessment-and-roadmap.md)（2026-10-07）：包含当前代码复核、干净检出问题、ERP/CRM 功能差距、面试交付和分阶段工作量；该文为历史快照，当前状态由总体改进计划统一维护。
+Tracing configuration lives in the [OTel/Langfuse runbook](opentelemetry-langfuse-runbook.md). [Development telemetry acceptance](telemetry-development-acceptance-2026-10-17.md) records content opt-in, release/environment labels, health-span suppression, and cloud protocol checks. Capacity and release/recovery measurements remain pending.
 
-开发者调试与测试入口设计见 [Developer observability and testing](developer-observability-and-testing.md)：统一链路证据、guardrails、golden cases、MCP 传输测试及当前可用命令；基础 `scripts/verify.sh` 已落地，完整分层 runner 仍是提案。
+I07: [local gateway acceptance](gateway-acceptance.md) and [runbook](../../ops/auth-gateway.md). The local stack uses synthetic identities and public snapshots. Original CA/browser blockers and later bounded browser checks must be read in their dated scopes; do not turn either into blanket acceptance or a blanket statement that no browser work exists.
 
-OpenTelemetry 和 Langfuse 的实际接入、环境配置见 [运行手册](opentelemetry-langfuse-runbook.md)，分步结果见[验收记录](opentelemetry-langfuse-acceptance.md)。 运行时事实门禁、真实 WWI 快照及在线 ERPNext/Twenty 验收见 [Guardrails 与 Langfuse 实施及验收](guardrails-langfuse-implementation.md)。
+## Stage status
 
-1. [企业运行总方案](operating-plan.md)：业务范围、架构、安全、执行可靠性和日常运营。
-2. [阶段计划与验收规范](delivery-plan.md)：依赖、子目标、证据格式和总体放行条件。
-3. [assistant-ui 前端方案](frontend-plan.md)：对话、审批和动作状态界面的技术选择与信任边界。
-4. [总体改进计划与优先级](improvement-plan.md)：当前执行队列、实时跨系统验收、WWI 首批导入、工具与 E5 完善；下一批先做 P0。
-5. 按当前阶段进入对应子方案。
+| Stage | Plan | Deliverable | Status and limits |
+| --- | --- | --- | --- |
+| E0 | [Environment, permissions, recovery](phases/e0-baseline.md) | Verifiable versions, scope, and recovery | PASSED experimentally; [historical summary](e0-baseline-result.md) |
+| E1 | [Data and read tools](phases/e1-read-tools.md) | Source-backed, scoped domain facts | PASSED original scope on 2026-09-19; later capabilities require their own evidence |
+| E2 | [Read-only Agent/evaluation](phases/e2-read-agent.md) | Original overview/fulfillment and fifteen cases | Historical 7/7 compatibility and 45/45 model baseline; selected structured-answer acceptance is recorded separately, not a replacement full rerun |
+| E3 | [Action control/recovery](phases/e3-action-control.md) | Persistent proposals, independent approval, idempotency | PASSED persistent-stub scope on 2026-09-20 |
+| E4 | [One controlled write](phases/e4-followup-task.md) | One internal Twenty follow-up Task path | PASSED isolated public/simulated demo scope on 2026-09-20 |
+| E5 | [Single-operator read-only pilot](phases/e5-enterprise-pilot.md) | Actual user, alerts, recovery, release, observation | Technical controls implemented; actual operational evidence and ten-business-day use incomplete; writes remain closed |
+| E6 | [Synchronization and expansion](phases/e6-expansion.md) | Individually justified extensions | Start only when needed and accept each new scope separately |
 
-当前 I07：[本地认证网关验收摘要](gateway-acceptance.md) · [启动与运维手册](../../ops/auth-gateway.md)。已实现独立 Keycloak 登录及协议验证，浏览器点击和实际用户验收仍待完成；不替代其余 P0 或 E5 门槛。
+## Historical evidence
 
-| 阶段 | 子方案 | 产出 | 当前状态 |
-|---|---|---|---|
-| E0 | [环境、权限与恢复基线](phases/e0-baseline.md) | 可核验的版本、权限和恢复能力 | PASSED（实验环境；[摘要](e0-baseline-result.md)） |
-| E1 | [数据与只读业务工具](phases/e1-read-tools.md) | 有来源、口径和权限的业务事实 | PASSED（实验范围；2026-09-19） |
-| E2 | [只读 Agent 与评估](phases/e2-read-agent.md) | 客户概览、履约检查及 15 个固定案例 | 已通过 |
-| E3 | [动作控制与故障恢复](phases/e3-action-control.md) | 持久化提案、可信审批、幂等和恢复闭环 | PASSED（持久化测试桩；2026-09-20） |
-| E4 | [单一受控写入](phases/e4-followup-task.md) | 仅创建内部跟进任务 | PASSED（隔离演示；2026-09-20） |
-| E5 | [单人只读试运行与运维](phases/e5-enterprise-pilot.md) | 一名实际用户、告警、恢复演练、发布流程 | 技术控制已实现；单人真实 10 日观察阻塞；写入不放行 |
-| E6 | [持续同步与能力扩展](phases/e6-expansion.md) | 按业务需求逐项放行扩展 | 按需启动 |
+Keep original dates, baselines, failures, counts, skips, source modes, and limitations. Translation and current-guidance corrections do not revalidate old results.
 
-## 与现有文档的关系
+- [2026-10-17 fixes](fixes-2026-10-17.md): old explicit-fact parser, cancellation, dependency repair, isolated PostgreSQL, and minimal runner. The parser was subsequently replaced by structured evidence.
+- [2026-10-11 progress review](progress-review-2026-10-11.md): reproduced gaps and the state before those fixes.
+- [2026-10-07 system assessment](system-assessment-and-roadmap.md): historical engineering/interview assessment and ERP/CRM capability gaps.
+- [Guardrails/Langfuse implementation](guardrails-langfuse-implementation.md) and [initial tracing acceptance](opentelemetry-langfuse-acceptance.md): earlier selected snapshot/live/model/cloud evidence, not current universal correctness.
+- [Minimum demo](../minimum-demo.md): original C/F/P/A cases and fixed fulfillment semantics.
+- [Human workflows](../human-functions-agent-map.md): human/Agent responsibility split.
+- [Data pipeline runbook](../../ops/data-pipeline.md): ETL preparation and recovery. ETL credentials and loading functions are not Agent tools.
 
-- [Agent / MCP 边界](../agent-boundaries.md)继续定义禁止动作和最小权限；本目录细化实施与运行要求。
-- [最小演示与评估](../minimum-demo.md)定义 E1/E2 的业务场景和原始 15 个案例。
-- [人工功能与 agent 设计对照](../human-functions-agent-map.md)定义业务功能、人机分工和异常重点。
-- [数据流水线运行手册](../../ops/data-pipeline.md)管理已有 ETL 操作；ETL 凭据和加载能力不得直接作为 Agent 工具。
-
-既有文档中的进度文字可能落后于代码和本地报告。应按实际版本逐项核验，不能仅凭历史勾选或目录存在判定完成。2026-09-29 复核发现实时订单关联、最终答案评分和固定履约/live 边界需要重验，详见总体改进计划；上述历史阶段状态不表示这些新增范围已通过。新方案不扩大首次写入范围；发现范围或规则冲突时，登记决策并同步修改相关文档后再实现。
+Current contracts define behavior. The improvement plan defines the remaining queue. Historical reports establish only what was observed in their recorded versions and scopes. If these disagree, document and resolve the discrepancy rather than expanding authority or claiming a new pass.

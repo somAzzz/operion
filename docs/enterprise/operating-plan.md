@@ -1,273 +1,270 @@
-# Operion 企业运行总方案
+# Operion enterprise operating plan
 
-版本：v1.1；日期：2026-09-16；性质：目标设计与验收要求，非已部署能力声明。
+Version: v1.2; documentation reconciled 2026-11-08. This plan combines implemented architecture with explicitly labeled operational targets. It is not a claim of production deployment or E5 acceptance. See the [current status/queue](improvement-plan.md) and [architecture decision](../architecture/adr-001-deterministic-agent.md).
 
-## 1. 目标、现状与边界
+## 1. Purpose, status, and boundaries
 
-Operion 是 Twenty 与 ERPNext 之上的受控业务 Agent 层。企业系统保存权威业务事实，确定性业务工具读取和计算，模型解释结果与提出动作，人保留必要业务判断，服务端决定是否执行。
+Operion is a controlled business Agent layer above Twenty and ERPNext. Business systems own authoritative facts; deterministic domain tools read and calculate them; the model understands requests and selects capabilities/evidence; people retain material judgment; the server controls execution and final rendering.
 
-E0 已核验 WWI 最小 ETL、Twenty Company/People 和 ERPNext 小样本的目标回读，并完成实验环境恢复演练；详见 [E0 基线验收结果](e0-baseline-result.md)。E1 确定性业务工具、E2 只读 Agent、E3 动作控制测试桩和 E4 单一 Twenty 内部跟进任务已经通过各自验收。E4 只放行公开/模拟数据隔离 workspace：Agent 只能提案，不持有写凭据；独立审批后由 Worker 创建确定性 Task/TaskTarget 并回读。真实企业数据、企业身份、告警和发布控制仍未放行，须完成 E5。现有通用 GraphQL 调用能力不得直接注册为模型工具。
+E0 verified minimum WWI ETL, target readback, and experimental recovery; see [E0 results](e0-baseline-result.md). E1 domain reads, E2 Agent, E3 action stub, and E4 one Twenty internal Task path passed their recorded experimental acceptance. E4 is limited to an isolated public/simulated workspace: the Agent proposes without write credentials, and an independent approval permits a Worker to create/read back deterministic Task/TaskTarget IDs. Real-data writes, full actual-user identity acceptance, alerts, and release operations remain gated by E5 and write-specific acceptance. Generic GraphQL capability must not become a model tool.
 
-首个业务闭环：客户概览 → 履约规则检查 → 必要时提出内部跟进任务 → 预览并批准 → 确定性创建 → 回读与审计。模型不得承诺实际交付，不推断未知库存，不自动变更客户身份映射。
+Current code also includes closed evidence plans/server rendering, server-owned ambiguity selection, cross-turn revalidation, budget diagnostics, local OIDC ingress, and bounded session/navigation browser checks. These implementation facts do not extend old model, live-source, or operational acceptance.
 
-### 运行等级
+The first business loop is customer overview → frozen fulfillment rules → eligible internal follow-up proposal → exact preview/approval → deterministic creation → readback/audit. Do not promise delivery, infer unknown inventory, or automatically change identity mappings. Current fulfillment cases do not constitute live stock/reservation/delivery evidence.
 
-| 等级 | 数据与能力 | 放行门槛 |
-|---|---|---|
-| 实验 | 公开样例、标记模拟数据、隔离系统 | E0 基线；写入只限获准的实验准备操作 |
-| 只读演示 | 客户概览、履约检查 | E1/E2 通过；无 Agent 写凭据 |
-| 受控写入演示 | 内部跟进任务 | E3/E4 通过；逐动作批准 |
-| 单人试运行 | 一名实际用户、限定经营主体和使用时段 | E5 单人范围通过；只读试运行也适用真实数据控制 |
-| 扩展运行 | 新写工具、同步、更多经营主体或行业 | E6 对每项能力独立验收 |
+| Operating level | Data/capability | Gate |
+| --- | --- | --- |
+| Experiment | Public sample, labeled simulation, isolated systems | E0; only approved preparation writes |
+| Read-only demo | Scoped queries and frozen fulfillment | E1/E2; no Agent business-write credentials |
+| Controlled-write demo | Internal follow-up Task | E3/E4 and per-action approval |
+| Single-user pilot | One actual user/company and defined hours | Applicable E5 actual-user/data controls; initially read-only |
+| Expansion | New writes, sync, companies, or industry | Individually accepted E6 scope |
 
-首次写入不包含报价、正式订单、发票、付款、库存调整、对外消息、批量删除、字段或权限变更。后续业务扩展不默认授予这些能力。
+Initial writes exclude quotations, formal orders, invoices, payment, inventory changes, external messages, bulk deletion, and field/permission changes. Later expansion does not inherit authority for them.
 
-## 2. 业务所有权与责任
+## 2. Business ownership and responsibilities
 
-| 责任域 | 权威方 | Operion 的作用 |
-|---|---|---|
-| 联系人、跟进、商机、客户分层 | Twenty | 授权查询和有限跟进任务创建 |
-| 账务身份、付款条件、商品、库存、交易单据 | ERPNext | 授权查询和规则检查；正式动作由业务系统处理 |
-| 跨系统 ID、映射版本、批次 | 集成层 | 身份关联、来源追踪与对账 |
-| 动作提案、批准、执行事件 | Operion 动作服务 | 保存授权证据和执行事实，不复制业务主库 |
+| Domain | Authority | Operion role |
+| --- | --- | --- |
+| Contacts, follow-up, opportunities, customer segmentation | Twenty | Scoped reads and limited follow-up Task creation |
+| Accounting identity, payment terms, items, inventory, transactions | ERPNext | Scoped reads/rules; formal actions stay in the business system |
+| Cross-system IDs, mapping versions, batches | Integration layer | Identity linking, provenance, reconciliation |
+| Proposals, approval, execution events | Operion action service | Authorization/execution evidence, not a duplicate business master |
 
-Twenty Company 与 ERPNext Company 含义不同，不能直接映射；同名不等于同一客户。客户交接和映射修改需独立业务动作。字段冲突按所有权处理，不使用通用“最后更新时间覆盖”。
+Twenty Company is not ERPNext Company. Equal names do not establish identity. Customer handoff/mapping changes require their own business action. Resolve conflicting fields by ownership, not generic last-update-wins.
 
-### 人员职责
+| Role | Responsibility |
+| --- | --- |
+| Business owner | Fulfillment rules, Task effects, scope, benefit |
+| System/data owner | Accounts, scope, import/reconciliation, target capabilities |
+| Developer/maintainer | Contracts, implementation, tests, upgrades, repairs |
+| Operator | Deployment, credentials, backup, alerts, incidents, recovery |
+| Permission/data-governance owner | Actual-user mapping, sensitive fields, retention, access review |
+| Action approver | Exact content/impact; approval does not replace permission |
 
-| 角色 | 职责与决策权 |
-|---|---|
-| 业务负责人 | 确认履约口径、任务副作用、业务范围和收益 |
-| 系统/数据负责人 | 业务账号、数据范围、导入与对账、后端能力确认 |
-| 开发维护者 | 工具合同、实现、测试、版本升级和技术修复 |
-| 运维负责人 | 部署、凭据保管、备份、告警、故障协调和恢复 |
-| 权限/数据治理负责人 | 真实用户映射、敏感字段、保留期限和访问复核 |
-| 动作审批人 | 审查具体内容与影响；批准不代替业务权限 |
+One operator may implement and self-check a read-only pilot, with their actual name recorded and writes closed. The action service forbids self-approval. A second test account is not an independent approver. Real writes/high-impact expansion need an independent person and separate acceptance.
 
-单人试运行允许一人兼任实施和自检，验收记录必须填写实际操作者，写入口保持关闭。动作服务禁止提案人批准自己的动作；单人测试账号不能冒充独立审批人。真实写入及高影响扩展须确定独立审批人并另行验收。
-
-## 3. 架构与部署边界
+## 3. Architecture and deployment
 
 ```text
-Operion Web UI（assistant-ui + shadcn/ui）     经认证的 MCP 客户端
-        ├─ AG-UI ──────────┐                         │
-        └─ REST ───────┐   │                         │
-                       ↓   ↓                         ↓
-              动作控制 API  接入层：身份验证、请求限额、服务端会话
-                       │                    │
-                       │                    ↓
-                       │       单个 Pydantic AI Agent ──→ 可选 LLM Proxy ──→ SGLang / 指定模型
-                       │                    │                          仅模型传输、参数适配和观测
-                       │                    ├─→ 只读业务工具 → 权限与业务规则 → Twenty / ERPNext 读取 API
-                       │                    │
-                       │                    └─→ propose_* ─┐
-                       └───────────────────────────────────→ 动作服务 / PostgreSQL
-                                                            ↓
-                                                可信预览与审批 → 持久化执行任务
-                                                            ↓
-                                                  确定性执行器 → 受限写入 API
-                                                            ↓
-                                                     回读、事件审计、对账
+Web (Next.js / assistant-ui)               scoped MCP stdio client
+  |-- AG-UI --> authenticated Agent API            |
+  |               |                               |
+  |               +--> shared deterministic read services --> Twenty / ERPNext
+  |               +--> SGLang through model transport
+  |               +--> AnswerPlan / EvidenceRegistry --> verified server-rendered text
+  |               +--> optional eligible proposal ---------+
+  +-- REST --> Action API / PostgreSQL <-------------------+
+                      |
+                trusted preview/approval
+                      |
+                deterministic Worker --> restricted target write API
+                      |
+                readback, audit, reconciliation
 ```
 
-### 模块职责
+The current Agent calls shared Python domain services directly through `FunctionToolset`. The separate stdio MCP entry point exposes those same services; Web requests do not all traverse network MCP. Enterprise MCP deployment/identity integration is a separate topology that must be verified rather than inferred from the local stdio server.
 
-- Web UI：使用 assistant-ui 呈现对话、工具结果和业务卡片，使用 shadcn/ui 构建审批与动作页面；不持有业务写凭据，不把客户端状态当作授权事实。
-- 接入层：从经验证的会话获得用户和经营主体范围，不信任模型或客户端传入的角色声明。
-- Agent：选择被允许的读取工具、解释事实、生成候选提案；没有直接写凭据。
-- 业务工具：显式字段与数量白名单、来源与时间、确定性计算；MCP 与应用调用共用同一业务实现。
-- 动作服务：规范化提案、验证、保存不可变修订、生成预览和审批记录。
-- 执行器：仅支持固定动作类型；复核批准及当前状态，领取任务并精确执行持久化内容。
-- 集成适配器：调用受支持的业务 API，负责分页、超时、类型和错误归一；不暴露通用请求给模型。
+- Web presents conversation, evidence, and actions without write credentials or trusted client state.
+- Ingress obtains validated identity and scope, stripping client identity claims.
+- Agent selects allowed reads/evidence and eligible proposals, never executes target writes.
+- Domain tools enforce fields, volume, scope, provenance, time, resolution, and deterministic calculation; Agent/MCP share rules.
+- Evidence validation binds run/scope/entity/field and renders facts. No free-form business prose bypass is allowed.
+- Action Service normalizes/validates immutable revisions and owns previews/approval.
+- Worker supports fixed actions, rechecks current eligibility, leases work, and executes persisted content exactly.
+- Adapters own supported API pagination, timeout, types, and error normalization; no arbitrary model-specified requests.
 
-正式前端的两条通道相互独立：AG-UI 负责对话和流式 Agent 事件，普通 REST API 负责动作预览、批准、状态和事件。Pydantic AI `Agent.to_web()` 只用于开发诊断；assistant-ui 的消息历史和 interrupt 能力不得替代服务端会话、动作修订或批准记录。完整页面、接口、组件和验收设计见 [assistant-ui 前端方案](frontend-plan.md)。
+AG-UI carries tool progress and verified final text; REST carries action review/state/events. `Agent.to_web()` is diagnostic only. UI interrupts/history cannot replace server conversations, immutable revisions, or approval. See the [frontend plan](frontend-plan.md).
 
-开始采用现有仓库内的模块化应用，不新建通用 Agent 平台。只读阶段一个应用进程足够；开放写入时，Agent 与写执行器至少分进程/运行身份，写密钥只注入执行器。动作控制 API 通过状态机授予执行资格，不提供任意调用下游的入口。写 Worker 可以与应用同机，不能因此宣称具备主机级隔离或高可用。
+Keep the modular repository application; do not build a generic Agent platform. One process serves the read-only phase. Agent and write executor use separate processes/identities; only the executor receives the write key. A colocated Worker is not host isolation or high availability.
 
-部署环境分开发、验收、企业运行；业务数据、数据库、凭据、模型日志和备份分别隔离。仅接入层经授权网络入口可达；SGLang、动作数据库和写执行器不直接暴露给普通客户端。服务间鉴权，跨主机传输使用加密连接；网络策略按实际拓扑验证。
+Separate development, acceptance, and enterprise data/databases/credentials/model logs/backups. Only trusted ingress is user-reachable. SGLang, action database, and executor are private. Authenticate services, encrypt cross-host transport, and prove network isolation in the actual topology.
 
-### Twenty 内置 AI 与绕行防护
+### Twenty built-in AI and bypass prevention
 
-Twenty 内置 AI 保持实际只读或禁用相关入口。模型 Proxy 不是业务授权边界。必须盘点 Twenty 原生 tools/MCP、插件、工作流及 Operion 入口，验证所有 Agent 写路径均受控。人工业务账号仍可按自身权限操作，不要求所有人工操作绕经 Operion。
+Keep built-in AI actually read-only or disable its relevant entry points. The model proxy is not a permission boundary. Inventory native tools/MCP/plugins/workflows and Operion paths; verify all Agent writes are controlled. Human business-system users retain their own supported workflows.
 
-若部署版本无法收紧内置 AI 权限，禁用相应能力；不靠提示词或过滤模型响应替代。ETL、管理员、只读工具、写执行器使用不同凭据，禁止把管理员凭据下放给 Agent。
+If the deployed version cannot constrain built-in AI, disable the capability. Prompts/output filtering cannot substitute. ETL, admin, read tools, and Worker use separate credentials; never delegate admin authority to the model.
 
-## 4. 模型接入与可选 Proxy
+## 4. Model transport and optional proxy
 
-模型、tokenizer/chat template、SGLang、工具解析器、Pydantic AI 版本和运行参数构成一个完整兼容性基线。记录准确模型仓库/修订或本地校验值，不能仅写“Qwen 27B”。
+Model revision, tokenizer/chat template, SGLang, tool parser, Pydantic AI, and runtime settings form one compatibility baseline. Record exact repositories/revisions/checksums, not only a model size/name.
 
-第一版采用单 Agent，写执行器不是第二个 LLM。thinking 开关仅作为性能和质量配置，必须在实际模型组合上验证；不将关闭 thinking 当安全保证。
+Use one Agent; the deterministic executor is not another LLM. Thinking is a measured quality/performance option, not a safety guarantee.
 
-Proxy 只在客户端无法传参、需统一多客户端策略或需协议级排查时引入。最小要求：流式与非流式兼容、工具参数分片、取消与超时、错误码传递、连接释放、限额和脱敏日志。避免静默修补危险 tool call 导致会话语义不一致。模型重试与业务动作重试分开管理。
+Add a proxy only for demonstrated parameter, multi-client policy, or protocol diagnostic needs. It must preserve streaming/non-streaming, fragmented tool arguments, cancellation/timeouts, errors, connections, limits, and redaction. Do not silently repair dangerous tool calls. Model transport retries and business-effect retries have separate semantics.
 
-起始限制为待压测配置：每次请求最多 8 次模型调用、12 次工具调用、120 秒总时长；工具响应每次最多 100 条并受字节预算约束。达到限额返回已验证事实与未完成项，不能自行放宽。具体 token、并发和队列容量在 E2/E5 根据硬件确定。
+Current defaults are eight model requests, six business tool calls, and a 60-second run deadline. `present_answer` is an output tool, excluded from the business-call count. Settings require at least `max_tool_calls + 2` model requests for final output and one repair. This replaces the obsolete 8-model/12-tool/120-second proposal, which is incompatible with current validation. Profiles may override deadlines/tokens; consult their configuration and the [Agent API](../../contracts/e2-agent-api-v1.md). Read list inputs have a maximum of fifty; completeness, total counts, and aggregates follow their specific [read contracts](../../contracts/e1-read-tools-v1.md), not an arbitrary universal row count.
 
-## 5. 身份、授权与数据防护
+Exhaustion emits `RUN_ERROR / LIMIT_EXCEEDED`, never success with an unverified partial answer. Previously emitted authorized tool progress remains separate from final-answer publication. Internal content-free diagnostics preserve observed usage, limits, and exceeded dimension; they are not added to public SSE/history. Capacity/concurrency/queue targets still require measurement.
 
-最终允许范围 = 用户实际权限 ∩ 本次任务已授权范围 ∩ 工具合同 ∩ 业务状态约束。模型的 intent、reason、required_capabilities 只作为建议或说明，不能扩大权限。
+## 5. Identity, authorization, and data protection
 
-动态工具过滤减少暴露面，但每个服务端调用仍检查工具是否允许、记录归属、字段、数量和业务规则。只读也有泄露风险：检索、详情、关联查询、聚合、来源链接和错误内容均不能绕过权限。
+Effective authority is user permission ∩ task scope ∩ tool contract ∩ business-state constraints. Model `intent`, `reason`, and `required_capabilities` are suggestions, never grants.
 
-企业身份对接可信登录系统；MCP 请求同样验证身份与受众/访问范围。用户到目标系统权限的映射由服务端维护，权限变更和会话撤销应使旧缓存失效。使用共享服务账号时，应用必须收窄到请求者权限，并记录其局限；禁止默认共享管理员权限。
+Dynamic filtering reduces exposure; every execution still checks allowlist, ownership, fields, volume, and domain rules. Search, details, relations, aggregates, links, and errors all obey scope. Ambiguous single-object requests create explicit selection state. Subsequent calls, including calls already submitted in the same turn, are checked at execution; cross-turn choices revalidate candidate/conversation/query/current permission. List requests do not force selection; incomplete pages cannot prove uniqueness.
 
-不接受客户端上传的对话历史或批准标记作为授权事实。会话、消息、工具结果均绑定用户与租户；跨会话缓存和模型服务日志避免串用数据。客户备注、网页和工具输出属于不可信内容，不能授权新动作；不开放任意 HTTP、SQL、Shell 或由模型指定的目标地址。
+Enterprise identity uses trusted OIDC and server mappings. Verify each MCP deployment's identity/audience/scope path too. Permission changes/session revocation invalidate old authority. Shared service credentials must be narrowed to the requester's scope and their limitations recorded; no shared admin default.
 
-输入模型使用明确字段，外层与嵌套模型设置 `extra='forbid'`；根据 JSON 输入合同选择严格类型校验，不盲目依赖隐式转换。更新区分未传字段与显式 null；禁止空变更、非法负责人、跨公司引用和被保护字段。敏感字段尽量不发送给模型。
+Client history/approval flags are not authoritative. Bind conversations, messages, results, and caches to user/tenant; prevent model-log/history cross-use. Customer notes, pages, and tool text are untrusted data. No arbitrary URL/HTTP/SQL/Shell tools.
 
-### 操作类型与风险分开
+Use explicit input fields and `extra='forbid'` on outer/nested models; validate types according to the JSON contract instead of relying on coercion. Distinguish absent from explicit null, reject empty changes/invalid owners/cross-company references/protected fields, and minimize sensitive data sent to the model.
 
-CRUD 只描述操作类型。风险由固定代码/配置结合字段敏感度、数量、金额、外部副作用、可逆性和用户范围判定。新动作默认拒绝，必须登记并测试。
+### Operation type and risk
 
-| 能力 | 默认策略 |
-|---|---|
-| 授权范围内的客户和履约读取 | 自动执行，受字段与查询限额约束 |
-| 创建内部跟进任务提案 | 可生成；保存 Operion 提案不创建业务任务 |
-| 创建内部跟进任务 | 逐次预览批准、执行复核、幂等回读 |
-| 客户资料更新或其他草稿 | E6 独立合同和验收后决定 |
-| 对外发送、过账、付款、库存调整 | 初期人工在业务系统完成 |
-| 权限、字段/模型结构、任意 SQL/Shell、物理批量删除 | 业务 Agent 永不开放 |
+CRUD describes an operation, not risk. Fixed server policy evaluates field sensitivity, volume, money, external effects, reversibility, and user scope. New actions default to denial.
 
-## 6. 数据与查询合同
+| Capability | Default |
+| --- | --- |
+| Authorized queries | Automatic within field/volume limits |
+| Follow-up proposal | May persist a proposal, not a target Task |
+| Follow-up execution | Exact approval, preflight, idempotency, readback |
+| Customer updates/other drafts | Separate E6 contract/acceptance |
+| External sending, posting, payment, stock changes | Initially human business-system actions |
+| Permissions, schema/model changes, arbitrary SQL/Shell, bulk physical deletion | Never business-Agent tools |
 
-复用现有 Canonical 合同和身份映射；回答同时携带 `source_system`、记录 ID/链接、`as_of`、`fetched_at`、规则版本、模拟标记与缺失项。历史业务时间与系统抓取时间分别记录。
+## 6. Data, query, and answer contracts
 
-履约计算使用未交付数量、单位、仓库、占用归属、采购未收货量及日期、承诺出库/送达口径；由确定性代码计算，模型解释。不同系统不保证同时快照，结果标明各自时间；缺关键依据返回信息不足。
+Reuse Canonical contracts/identity maps. Preserve source system, record IDs/links, business and fetch times, rule version, simulation flags, and missing fields. Exact response names follow capability contracts; conceptual `as_of` and `fetched_at` must not be mistaken for a universal implemented schema.
 
-对外错误合同至少区分：`NOT_FOUND`、`FORBIDDEN`、`AMBIGUOUS`、`STALE_DATA`、`UPSTREAM_UNAVAILABLE`、`VALIDATION_ERROR`、`CONFLICT`、`OUTCOME_UNKNOWN`、`LIMIT_EXCEEDED`。不可把接口失败当零库存；对无权用户避免通过错误差异泄露记录是否存在。
+Fulfillment calculations need remaining quantities, UOM, warehouse, reservation ownership, inbound remaining quantities/dates, and shipment/delivery rules. Deterministic services calculate them; unknown support produces insufficient information. Each source exposes its own time. Existing frozen cases are snapshot-only.
 
-读取缓存按用户/租户/权限版本/查询条件隔离，敏感授权结果使用短期缓存并支持撤销；写前检查不依赖过期缓存。批量查询遵循稳定分页、结果上限和部分结果标记。
+Preserve distinctions among not found, forbidden, ambiguous, stale, source unavailable, invalid input, conflict, unknown effect, and limits. The actual public codes/statuses are defined by read/Agent/action contracts; a conceptual taxonomy is not a promise of identical uppercase codes at every API. Failure is not zero inventory; errors must not disclose out-of-scope existence.
 
-## 7. 提案、审批与执行协议
+Scope caches by user/tenant/permission version/query; keep authorization caches short/revocable. Preflight cannot trust stale cache. Batch reads use stable pagination, bounds, and partial-result markers. Final facts require current-run evidence references; valid schema/support still do not prove the user task is complete.
 
-### 动作对象
+## 7. Proposal, approval, and execution
 
-服务端为每个提案生成 `action_id`，并保存不可变 `revision`。修改提案生成新修订并使旧批准失效。同一 HTTP 提交重试通过用户/租户范围内的请求键关联同一提案；用户有意新建相同任务可形成不同 action，但界面提示近期重复候选，不按参数哈希全局合并。
+### Action object
 
-动作内容至少包含：动作类型及 schema 版本、请求人和租户、关联业务 ID、规范化参数、数据与权限前置条件、真实来源的预览、通知等副作用、策略版本、创建时间和失效时间。模型的 reason 是声明，审计另存用户请求引用与实际执行事实。
+The server generates `action_id` and immutable `revision`. Generic stub revisions invalidate old approval. E4 target/parameter changes instead require a new proposal from current facts: the generic revision endpoint cannot mutate its protected target. Same-request retries use scoped idempotency; an intentional new Task may have another action ID. Duplicate-candidate UI is a design goal, not a claimed implemented guarantee or global payload-hash merge.
 
-审批保存 `action_id + revision + payload_digest`、审批人、身份验证上下文、批准时间、有效期和适用策略。摘要涵盖目标、参数、范围、前置条件及副作用；使用固定规范化方式，摘要不能代替服务端身份与数据库约束。
+Content includes action/schema type, requester/tenant, business references, normalized parameters, data/permission preconditions, source-backed preview, effects, policy version, creation, and expiry. A model reason is only a claim; retain the user request reference and actual execution facts separately.
 
-UI 从服务端读取提案，展示系统、客户/订单、负责人、正文、截止时间、前后值和影响。审批请求只引用服务端提案和决策，不接受客户端重新上传的执行参数。Cookie 会话需 CSRF 防护。批准事件可审计、可撤销且只能授予该动作修订执行资格。
+Approval binds `action_id + revision + payload_digest`, approver, authentication context, time, expiry, and policy. Normalize target/parameters/scope/preconditions/effects consistently before hashing. Digests do not replace identity/database constraints.
 
-Pydantic AI 的 DeferredToolRequests/Results 可用于暂停/恢复对话，但服务端动作表和批准表是权威。进程重启后从持久化状态恢复，不从客户端拼接的历史恢复执行权限。批准后由执行器使用保存的参数，模型仅解释结果。
+Read preview from the server: system, customer/order, owner, body, deadline, values, and impact. Client decisions cannot resubmit executable parameters. Cookie sessions need CSRF. Approval is auditable/revocable and grants only one revision eligibility.
 
-### 状态机
+DeferredToolRequests/Results may pause conversations but are not the action ledger. Recover from persisted server state after restart, not client-assembled history. The executor uses stored parameters; the model selects evidence about the result.
+
+### State machine
+
+Current transitions are defined by the [E3 contract](../../contracts/e3-action-control-v1.md), not by the former illustrative `PROPOSED` diagram:
 
 ```text
-PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → SUCCEEDED
-                │                │           ├→ FAILED
-                ├→ REJECTED       ├→ EXPIRED  └→ UNKNOWN → RECONCILING
-                └→ EXPIRED        └→ CANCELLED                ├→ SUCCEEDED
-                                                            ├→ FAILED
-                                                            └→ MANUAL_REVIEW
+PENDING_APPROVAL -> APPROVED -> EXECUTING -> SUCCEEDED
+       |              |             +-> UNKNOWN -> RECONCILING
+       |              |                                |-> SUCCEEDED
+       |              |                                |-> APPROVED (proven not submitted)
+       |              |                                +-> MANUAL_REVIEW
+       |              +-> REVOKED / CONFLICT / CANCELLED
+       +-> REJECTED / EXPIRED / CANCELLED
 ```
 
-执行前策略、权限或前置条件改变时进入 `CONFLICT` 或 `CANCELLED`，需要新修订/新批准。`FAILED` 仅用于能够确认未产生预期业务写入的终态；失败响应本身未必证明没有副作用。明确无副作用且可重试的尝试可在批准有效时回到队列，保留同一 action_id 和尝试事件，不伪造新批准。
+Changed policy/permission/preconditions prevent sending and require renewed proposal/approval under the capability contract. A failure response does not prove no effect. Only a demonstrably safe retry retains the same action/attempt evidence and valid approval; never fabricate new approval. A confirmed-no-effect terminal failure and an unknown outcome are different semantics.
 
-Worker 使用数据库事务原子领取已批准动作，并记录尝试 ID、租约/心跳。租约到期不表示远端执行停止，必须先对账，不能让第二个 Worker 直接重新写入。取消和暂停能阻止尚未发送的写入；已经发送的请求可能成功，应继续追踪并报告。
+Worker transactionally claims approved work with attempt/lease/heartbeat. Lease expiry does not stop a remote request; reconcile before another Worker can resend. Pause/cancel blocks unsent writes; sent requests may succeed and must remain tracked.
 
-全局、租户和工具级写暂停开关在领取与发送前检查。授权/审批/审计持久化不可用时禁止新写入；观测后端不可用可以降级缓冲，但不能丢失业务动作账本。
+Check global/tenant/tool pause at claim and pre-send. Missing authorization, approval, or audit persistence blocks writes. Telemetry can buffer/degrade but cannot lose the authoritative ledger.
 
-## 8. 幂等、并发与恢复
+## 8. Idempotency, concurrency, and recovery
 
-### 幂等保证
+### Idempotency
 
-`action_id` 在模型重试、HTTP 重试、队列重投和进程恢复中保持不变，不能由 trace_id 或 tool_call_id 替代。数据库唯一约束防止重复提案/执行资格；状态迁移使用事务，不能依赖先 SELECT 再无条件 INSERT。
+Keep `action_id` stable across model/HTTP retries, queue delivery, and restarts; trace/tool-call IDs are not substitutes. Unique constraints and transactional transitions prevent duplicate eligibility; SELECT followed by unconditional INSERT is insufficient.
 
-下游优先使用原生幂等键；否则评估以 action_id 为唯一外部引用的业务支持扩展，须由目标系统强制唯一并支持精确查询。仅“创建前查一下”不能排除并发重复。缺乏这些能力时，写入超时必须冻结动作并人工确认，不承诺严格一次执行。
+Prefer native deduplication or a target-enforced unique external action reference with exact lookup. A pre-create lookup alone cannot exclude concurrency. Without reliable deduplication, freeze timed-out writes for manual confirmation instead of promising exactly-once execution.
 
-本地数据库事务不能覆盖 Twenty/ERPNext 的远端提交。发送超时、连接中断、成功后进程崩溃均进入结果未知流程：按稳定关联查目标 → 回读内容 → 记录结果；无法确认则人工处理，禁止盲重试。安全重试必须有明确无提交证据或下游可靠去重。
+Local transactions cannot cover remote commits. Timeout, disconnect, or crash after success enters unknown → exact lookup → readback → ledger evidence. If unprovable, escalate manually. Retry needs proof of no submission or reliable target deduplication.
 
-### 并发保证
+### Concurrency
 
-更新或恢复已有记录需要目标端原子条件更新，例如版本条件与写入同事务完成。`expected_version` 字段或 Gateway 本地锁本身不能防止业务系统里的人工并发写入。若后端没有此能力，相关更新不进入自动执行范围；首次创建任务只验证关联对象/负责人仍有效，并说明其检查时点限制。
+Existing-record updates/restoration need target-atomic conditional writes, such as a version predicate in the write transaction. An `expected_version` field or gateway lock cannot prevent concurrent human edits in the target. Exclude updates lacking that guarantee. Initial Task creation rechecks related records/owner and states the preflight timing limitation.
 
-### 恢复与补偿
+### Recovery and compensation
 
-任务创建后通过批准的业务取消/关闭流程补偿；通知等已发生影响不能抹去。字段恢复比较版本并原子更新；已过账业务走冲销/修正。补偿是新的受控动作，关联原 action_id，独立审批、执行和审计，不把原成功事件改写成从未发生。
+Compensate Task creation through an approved close/cancel workflow; notifications already sent cannot be erased. Field restoration requires version comparison/atomic update; posted records use supported reversals. Compensation is a new independently approved/audited action linked to the original; never rewrite successful history as if nothing happened.
 
-跨系统复合写入留到 E6：每一步独立动作、持久化依赖、部分成功状态、补偿步骤和人工接管。不宣称跨系统 ACID 事务，也不在第一版自动回滚两个系统。
+Composite cross-system writes belong to E6 with persistent steps/dependencies, partial success, compensation, and manual intervention. Do not claim cross-system ACID or automatically roll back both systems in the first version.
 
-## 9. 持久化与审计
+## 9. Persistence and audit
 
-PostgreSQL 建议分为动作、提案修订、批准、执行尝试和追加事件几类逻辑表；可简化物理设计，但不能丢失历史。核心字段包含用户/租户、请求与会话引用、动作 ID、修订/摘要、工具及策略版本、目标系统/记录、前置条件、批准、幂等关联、尝试状态、远端响应摘要和回读结果。
+The implemented PostgreSQL action ledger stores actions, immutable revisions/decisions, attempts, pauses, and append-only events. Preserve user/tenant/request/conversation, action/revision/digest, tool/policy, target, preconditions, approval, idempotency, attempts, remote summary, and readback. Application accounts cannot rewrite history. Independent admin audit/backup/export remains an operational requirement, not proof of tamper-proof storage.
 
-事件由服务端生成并追加；应用账号不能修改历史事件。管理员访问独立留痕，定期导出校验清单到独立备份位置。未实现不可篡改存储时，不把普通数据库日志称为不可篡改审计。
+Link results by action ID, conversations by conversation ID, and each execution by trace/span. Approval and later execution can have different linked traces. Traces may be sampled; business audit must not be.
 
-每次执行以 `action_id` 关联业务结果，以 `conversation_id` 关联对话，以 trace/span 关联一次运行；长时间审批后的执行可以创建新 trace 并关联旧请求，不强行复用同一个 trace。trace 可能采样，业务审计不能采样。
+Default logs contain argument summaries, tool, latency, status, versions, and error categories, never secrets/headers. Content capture is explicit and restricted; public/synthetic development opt-in does not authorize private-data telemetry. Initial proposed retention: raw troubleshooting content 24 hours, ordinary diagnostics fourteen days, traces seven days, action/approval events 180 days. Only the applicable implemented session purge is a code guarantee; confirm operational retention/deletion/backup exceptions with data owners before real data. These are not legal requirements.
 
-日志默认记录参数摘要、工具、时延、状态、版本和错误类别，禁止记录密钥与认证头。原始模型输入输出仅在受控排障期开启，访问受限并脱敏。数据保留初始建议：原始排障内容 24 小时，普通诊断日志 14 天，traces 7 天，动作与批准事件 180 天；均为待业务/数据负责人确认的运营参数，不代表法定要求。真实数据接入前确认期限、删除流程、备份到期和必要留存例外。
+## 10. Operations, monitoring, and capacity
 
-## 10. 企业运行、监控与容量
+### Proposed pilot targets
 
-### 建议试运行目标
+Measure and confirm these before E5; they are not current performance promises. The pilot has one actual user/company and defined hours. Five concurrent sessions are automated load, not five real users; multiple-user expansion needs separate acceptance.
 
-以下是 E5 前必须测量并确认的目标，不是当前性能承诺。当前试运行限定一名实际用户、单一经营主体和明确使用时段；五个并发会话由自动化负载产生，不代表五名实际用户。多人扩量须单独验证。
+| Metric | Initial target/rule | Measurement |
+| --- | --- | --- |
+| Ingress/tool availability | 99.5% monthly in agreed hours | Valid requests excluding unauthorized denials; report dependency downtime separately |
+| Deterministic reads | p95 ≤ 5 seconds | Fixed scale including upstream reads; cold start separate |
+| Complete Agent answer | p95 ≤ 60 seconds | Queue/model included, human clarification wait excluded |
+| Approved Task processing | 95% read back within 30 seconds when target healthy | Approval to verified success; unknown separate |
+| Unauthorized/unapproved/duplicate effects | Zero tolerance; pause affected writes | Deterministic checks, audit, reconciliation |
+| Recovery | RPO ≤ 15 minutes, RTO ≤ 4 hours | Actual recoverable backup and timed restoration |
 
-| 指标 | 初始目标/规则 | 度量方式 |
-|---|---|---|
-| 接入与工具服务可用性 | 约定业务时段内月度 99.5% | 合法请求中非内部/依赖故障比例，拒绝越权不算故障；另报依赖停机 |
-| 确定性只读工具时延 | p95 ≤ 5 秒 | 固定数据规模，含上游读取；冷启动单列 |
-| Agent 完整回答时延 | p95 ≤ 60 秒 | 包含排队与模型调用，人工澄清等待不计 |
-| 已批准任务处理 | 下游健康时 95% 在 30 秒内完成回读 | 从批准到验证成功；未知结果单独统计 |
-| 越权、未批准写入、重复业务副作用 | 0 容忍；任一发现立即暂停受影响写入 | 确定性测试、审计与对账 |
-| 恢复目标 | RPO ≤ 15 分钟，RTO ≤ 4 小时 | 从可恢复备份位置和实测演练计算 |
+RPO is the tolerated recent data-loss window; RTO is restoration time. Daily backups alone cannot meet fifteen-minute RPO; use continuous backup/WAL or a verified equivalent. Narrow scope or explicitly revise targets when resources cannot meet them. A single-host homelab is not highly available.
 
-RPO 表示容许丢失的最近数据时长，RTO 表示恢复服务所需时长。仅每日备份不能满足 15 分钟 RPO；需要相应持续备份/WAL 归档或经验证的替代机制。硬件和运维能力不足时先缩小服务范围或正式调整目标，不能标为达标。单机 homelab 不提供高可用承诺。
+Monitor request success, upstream latency/errors, model queue/tokens, tool denials, approval backlog, unknown age, Worker heartbeat, backup freshness, disk, and connections. Separate read and recovery/write budgets. Existing tracing, verified-text latency, health-noise suppression, and budget snapshots are implemented; capacity/alert delivery still need actual evidence.
 
-监控请求成功率、上游延迟/错误、模型排队和 token、工具拒绝原因、审批积压、未知动作时长、Worker 心跳、备份新鲜度、磁盘和数据库连接。只读和写入资源预算隔离，读流量不能挤占恢复/对账任务。
+Suggested alerts: unauthorized/duplicate effects or audit gaps immediately pause affected writes; unknown over five minutes requires review; five continuous minutes above 5% errors in operating hours or backup beyond RPO alerts the operator. Tune/deduplicate using measured load and record the actual receiving channel. Unattended writes stay paused; do not promise a human response.
 
-告警建议：越权/重复写入或审计缺失立即告警并暂停受影响写入；UNKNOWN 超过 5 分钟转人工检查；使用时段连续 5 分钟错误率超过 5% 或备份超出 RPO 告警。按阶段压测调整阈值，去重告警并填写操作者实际接收通道。无人值守时保持写入暂停，不能承诺有人响应。
+Degrade by capability: deterministic reads/action state may remain available without the model; unavailable sources yield partial/unknown results, not fabricated data; absent approval/ledger blocks new writes; failed telemetry cannot hide business state. The UI distinguishes proposal, pending, executing, success, conflict, and unknown.
 
-降级顺序：模型不可用时保留确定性查询与待办状态；某业务系统不可用时标记部分结果和信息不足；审批或账本不可用时禁止新写入；通知观测失败不掩盖真实业务状态。界面始终区分提案、待批准、执行中、成功、冲突和结果未知。
+## 11. Backup, incidents, and release
 
-## 11. 备份、事故与发布
+### Backup and restore
 
-### 备份与恢复
+Cover action/needed business databases, attachments, mappings, deployment config, and version manifests. Recover secrets separately. Keep at least one encrypted/access-controlled/expiring backup off the running host. Record each system's restore point; separate backups are not simultaneous.
 
-备份覆盖动作数据库、必要业务数据库、附件、映射、部署配置与版本清单；密钥通过独立安全恢复渠道保管。至少一个备份位置独立于运行主机，设置加密、访问控制和到期清理。联合恢复记录各系统恢复点，不假设独立备份时间一致。
+Disable Worker after restore; reconcile potentially committed remote actions since backup by action ID, rebuild evidence, and do not replay old approvals automatically. Restore writes only after permission/pause/reconciliation checks.
 
-恢复后先禁用写 Worker，核对自备份点以来可能已提交的远端动作，按 action_id 回读和重建证据；旧批准默认不直接自动重放。完成对账、权限与暂停开关验证后再恢复业务写入。
+### Incidents
 
-### 事故处理
+1. Pause writes on unauthorized/duplicate effects or unknown-scope corruption; revoke affected credentials when needed.
+2. Preserve request/action/readback evidence and identify users/data/in-flight work.
+3. Business owner chooses compensation; do not bulk-restore a snapshot over new data.
+4. Reproduce in isolation, repair, and add deterministic/model regressions.
+5. Operator/business owner release based on evidence, recording cause, impact, and prevention.
 
-1. 发现越权、重复副作用或未知范围损坏：暂停写入，必要时撤销受影响凭据。
-2. 保留请求/动作/业务回读证据，确认受影响用户、数据范围及仍在途请求。
-3. 由业务负责人选择业务补偿；不批量恢复快照覆盖新数据。
-4. 在隔离环境重现、修复并补充确定性与模型回归案例。
-5. 运维和业务负责人依据证据决定恢复，记录原因、影响和防复发措施。
+Assigned people handle external communication under the actual incident process. A write pause need not stop legitimate reads unless identity/data isolation is also affected.
 
-外部沟通按企业实际事件流程由指定负责人执行。一次写入暂停不自动中止合法只读服务，除非身份或数据隔离也受影响。
+### Release and change
 
-### 发布与变更
+Pin lockfiles, image digests, migrations, tool/policy/prompt versions, and model revision. Accept in isolation, then read-only shadow mode, then scoped rollout. Shadow mode has no real writes.
 
-固定依赖锁文件、镜像摘要、数据库迁移、工具/策略版本、提示词和模型修订。先隔离验收，再只读影子验证，最后按用户/工具灰度。影子模式不得产生真实业务写入。
+Model/SGLang/template/parser changes rerun compatibility/behavior; tool/permission/executor changes rerun deterministic safety/fault checks. Back up and verify migration compatibility/recovery first; code rollback is not automatic database rollback. Keep the last runnable combination; failed release disables new capability or restores verified versions.
 
-模型、SGLang、模板、解析器任一变更都重跑兼容性和行为案例；工具/权限/执行器变更重跑确定性安全与故障测试。数据库迁移先备份并验证兼容与恢复；代码回退不代表数据库可直接回退。保存上一可运行组合，发布失败关闭新能力或恢复已验证版本。
+## 12. Testing, operating cadence, and cost
 
-## 12. 测试、运营节奏与成本
+Four layers: pure rules/state → business API integration → model behavior → enterprise end-to-end/fault drills. Directly attack execution without the model: forged identity, approval replay, illegal arguments, revocation, concurrency, timeout, and forged evidence. Test legitimate completion as well as denial; finite passes are not a safety proof.
 
-测试分四层：纯规则/状态机 → 业务 API 集成 → 模型行为评估 → 企业端到端与故障演练。必须在无模型情况下直接攻击执行入口，验证伪造身份、批准重放、非法参数、权限撤销、并发和超时。模型测试既检查危险动作被阻止，也检查合法任务能完成；有限案例通过不是安全证明。
+Daily: failed/unknown work, approval backlog, backup. Weekly: fact quality, denials, slow requests, business feedback. Monthly: accounts, secrets, retention, restore evidence. Upgrade: affected regressions. One operator may perform small-scope operations but retains records.
 
-每天检查失败/未知动作、审批积压和备份；每周抽查事实质量、权限拒绝、慢请求和业务反馈；每月复核账号、密钥、保留期限和恢复证据；每次升级执行对应回归。小规模运行可由一人完成，但保留记录。
+Track GPU/host/storage, backup, request latency/resources, business API use, and maintenance time. Compare manual and Agent task time while recording factual errors, abandonment, and human intervention. A 30% improvement is a proposed business goal, not measured success. Scale from queue/bottleneck measurements, not agent/tool count.
 
-成本按 GPU/主机与存储、备份、模型请求时延和资源、业务 API、维护人时分别记录。比较人工查询整理时间与 Agent 完成时间，同时统计事实错误、放弃率和人工处理时间；30% 时间改善仅作为待验证业务目标。扩容依据排队和瓶颈测量，不以 Agent 数量或工具数量作为成果。
+## 13. Decisions and unconfirmed capabilities
 
-## 13. 决策与未决能力
+E0/E3/E5 must record actual versions, built-in AI restrictions, Task fields/notifications, target deduplication/exact lookup/conditional update support, identity mappings, GPU capacity, network, backup locations, hours/owners, and retention. Each needs evidence, owner, decision, and affected scope. Unconfirmed is not supported.
 
-E0/E3/E5 必须记录：实际版本；Twenty 内置 AI 的可约束权限；目标任务字段及通知；API 是否支持稳定去重、精确关联查询、原子条件更新；身份系统与用户映射；GPU 容量；部署网络；备份位置；服务时段、责任人和保留期限。每项记录证据、负责人、决策和受影响能力；未确认不能写成已支持。
+Where reliable deduplication is absent, allow only an accepted manual-reconciliation path with no automatic unknown retries; block the tool if that limitation is unacceptable. Where atomic conditional update is absent, exclude automatic updates/restoration needing it.
 
-后端不支持可靠去重时，允许受限人工对账模式，但未知结果不得自动重试；若业务不能接受该限制，则不放行该写工具。后端不支持原子条件更新时，不放行需要该保证的自动更新/字段恢复。
+## 14. References and version applicability
 
-## 14. 资料与版本适用性
+These references inform project decisions; pin and test installed versions rather than assuming the latest online documentation applies.
 
-本方案的架构选择为项目设计。以下官方资料用于核查框架/API 能力，实施仍需固定并验证部署版本，不能从在线最新版推断本地支持。
+- [Pydantic AI Toolsets](https://pydantic.dev/docs/ai/tools-toolsets/toolsets/): dynamic filtering.
+- [Pydantic AI Deferred Tools](https://pydantic.dev/docs/ai/tools-toolsets/deferred-tools/): approval/external execution/client trust.
+- [Pydantic configuration](https://pydantic.dev/docs/validation/latest/api/pydantic/config/): extra fields and validation.
+- [SGLang OpenAI-compatible documentation source](https://github.com/sgl-project/sglang/blob/main/docs_new/docs/basic_usage/openai_api_completions.mdx): model transport; verify template support separately.
+- [Twenty APIs](https://docs.twenty.com/developers/extend/api): verify installed permission/concurrency behavior.
+- [Frappe REST](https://docs.frappe.io/framework/user/en/api/rest): identity/document access; verify ERPNext state semantics separately.
 
-- [Pydantic AI Toolsets](https://pydantic.dev/docs/ai/tools-toolsets/toolsets/)：动态工具过滤。
-- [Pydantic AI Deferred Tools](https://pydantic.dev/docs/ai/tools-toolsets/deferred-tools/)：审批、外部执行及客户端信任边界。
-- [Pydantic 配置](https://pydantic.dev/docs/validation/latest/api/pydantic/config/)：额外字段处理等校验配置。
-- [SGLang 官方 OpenAI-compatible 接口文档源码](https://github.com/sgl-project/sglang/blob/main/docs_new/docs/basic_usage/openai_api_completions.mdx)：模型参数接入；具体模板支持另行验证。
-- [Twenty APIs](https://docs.twenty.com/developers/extend/api)：业务 API 入口；权限和并发能力需现场确认。
-- [Frappe REST API](https://docs.frappe.io/framework/user/en/api/rest)：认证与文档访问；具体 ERPNext 业务状态另行验证。
-
-详细执行顺序见 [阶段计划与验收规范](delivery-plan.md)。
+Execution order and release evidence follow the [delivery plan](delivery-plan.md).

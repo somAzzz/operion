@@ -1,5 +1,11 @@
 # E2 read-only Agent runbook
 
+This runbook starts the local E2 read-only profile. E3/E4 action services are
+separate optional processes; they are not future unimplemented work. Current
+runtime contracts are [Agent API](../contracts/e2-agent-api-v1.md) and
+[structured answers/evidence](../docs/enterprise/structured-answer-evidence.md).
+Historical acceptance is limited to its recorded version and scope.
+
 ## Fixed compatibility set
 
 - SGLang model: `RadixArk/Qwen3.8-27B-NVFP4`, served as `qwen3.8-27b`
@@ -8,7 +14,7 @@
 - Pydantic AI: 2.46.0; OpenAI SDK: 3.16.2
 - FastAPI: 0.141.1; Uvicorn: 0.53.0
 - assistant-ui: 0.15.21; react-ag-ui: 0.0.60; AG-UI client: 0.0.59
-- Next.js: 16.3.5; React: 19.3.0; Node.js: 22+ recommended
+- Next.js: 16.3.8; React: 19.3.0; Node.js: 22.18+ for the current Web checks
 
 Python and frontend packages are locked by `uv.lock` and
 `apps/web/package-lock.json`. Thinking is disabled in normal runs and in the UI;
@@ -31,7 +37,7 @@ Install dependencies and configure the Agent without reusing administrator or
 business-write credentials:
 
 ```bash
-uv sync --extra dev
+scripts/verify.sh setup
 export OPERION_AGENT_TOKEN='<random-local-service-token>'
 export OPERION_IDENTITY_MAP='reports/enterprise/e2/20260919T-preseed/identity_map.reconciled.csv'
 export OPERION_OBSERVED_AT='<fresh-ISO-8601-observation-time>'
@@ -55,10 +61,11 @@ the Agent credential must never use a `NEXT_PUBLIC_` name.
 ## Verify
 
 ```bash
-uv run ruff format --check .
-uv run ruff check .
-PYDANTIC_AI_NO_BANNER=1 uv run python -m unittest discover -s tests -q
-cd apps/web && npm run build
+scripts/verify.sh offline
+scripts/verify.sh case
+scripts/verify.sh web
+# Optional action integration group, with Docker available:
+scripts/verify.sh postgres
 ```
 
 Run model compatibility and the 15 cases three times:
@@ -87,5 +94,6 @@ pass. The report intentionally excludes the model API key and Agent token.
 - A source outage returns `source_unavailable`; a stale satisfiable result is
   downgraded to `insufficient_information`; neither is reported as no orders or
   a delivery guarantee.
-- E2 has no write tool, approval endpoint, or business-write credential. Those
-  remain E3 work.
+- The local E2 profile has no business write tool, approval endpoint, or business-write credential. Implemented E3/E4 processes are enabled and accepted separately; the Agent can only propose an eligible follow-up when the server explicitly enables it.
+- Default limits are six business calls, eight model requests, and a 60-second run deadline. `present_answer` does not consume a business call. Model requests must be at least business calls plus two; profile overrides, token limits, and diagnostic semantics are specified in the Agent API. Budget exhaustion remains `RUN_ERROR / LIMIT_EXCEEDED`, without publishing unverified partial answers.
+- Final business output is a validated evidence plan rendered by the server, not free model text. Ambiguous single-object requests enter server-owned selection state; further calls are blocked until a valid selection is checked. Real-model routing and task completion still need separate evaluation.
