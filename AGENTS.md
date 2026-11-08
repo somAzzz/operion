@@ -36,3 +36,17 @@ For work involving the Agent, tools, business semantics, or answer behavior, rea
 - Report the root cause, enforcement layer, actual verification results, and remaining model dependencies. Never count unexecuted, skipped, or blocked checks as passed.
 - Flag changes that move business rules into prompts, weaken evidence validation, hide tools without execution gates, or fork Agent/MCP rules. Responsibility-boundary changes require corresponding architecture decisions and contracts.
 - Preserve existing uncommitted changes. Do not overwrite, revert, or mix in unrelated work.
+
+## Code Quality
+
+- Before completing a code change, apply [lean-comments](.agents/skills/lean-comments/SKILL.md) to the source and declaration documentation affected by the change.
+- Explain a business rule, invariant, or constraint in a comment only when the code and tests leave its rationale unclear. Omit comments that narrate the implementation. Keep architectural decisions in the relevant ADR.
+- Document what callers need to use a public API or tool safely, including non-obvious authorization requirements, side effects, and error semantics. Keep shared rules in the capability contract. Before editing a tool docstring, check whether it supplies the model-visible tool description.
+
+## Git Commits
+
+- Apply [git-commit](.agents/skills/git-commit/SKILL.md) before every requested commit. A request to edit files or draft a commit message does not authorize a commit.
+- Keep each commit to one logical change. Inspect the full staged diff before committing; exclude unrelated edits and preserve any unrelated work already staged by the user.
+- Follow Conventional Commits. Use an imperative summary and keep the entire subject, including type and optional scope, to 72 characters or fewer. Add a body only when the reason or impact needs more context than the subject provides.
+- Run the checks relevant to the staged change before committing, as described under [Verification and code review](#verification-and-code-review).
+- Never push without explicit user authorization.
