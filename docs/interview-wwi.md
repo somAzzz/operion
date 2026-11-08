@@ -1,8 +1,10 @@
 # WWI interview dataset script
 
+[German interview script with English Web prompts for T01–T05](interview-wwi-de.md)
+
 Dataset: `interview-wwi-v1`; pinned WWI v1 public sample; business date
 2016-05-31; `data_class=public_sample`. Names, IDs, dates, lines, quantities,
-prices, and source statuses come from WWI. USD is an explicit dataset assumption
+prices, and source statuses come from WWI. EUR is the common demo denomination
 because WWI orders do not store a currency code. Snapshot results must not be
 described as live.
 
@@ -20,7 +22,7 @@ Checkable questions:
 5. “List sales orders and paginate.” — all 30 order IDs appear exactly once when callers
    reuse each opaque `next_cursor`.
 6. “Open order 66823.” — use canonical ID `wwi:sales_order:66823`; expose its
-   source status and tax-exclusive USD-assumed total without inventing ERPNext
+   source status and tax-exclusive EUR total without inventing ERPNext
    docstatus. Line 210128 has ordered 48, picked 48, unpicked 0, and unknown
    delivered quantity because WWI order lines provide no delivery evidence.
 7. “List suppliers.” — five authorized suppliers.
@@ -35,7 +37,7 @@ Mapping revision `interview-wwi-v1.1` corrects two material contracts without
 changing the pinned WWI snapshot: `PickedQuantity` is now `picked_quantity`, not
 `delivered_quantity`; purchase-order target payloads use base quantity, base UOM,
 conversion factor 1, and a base-unit rate that preserves each source line amount.
-For example, line 8240 is 1,592 outers × 25 units × USD 1.90 = USD 75,620.00.
+For example, line 8240 is 1,592 outers × 25 units × EUR 1.90 = EUR 75,620.00.
 
 The 12-product catalog is deliberately broader than the three packaging products
 used by the selected complete orders. Do not infer a direct replenishment link

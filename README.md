@@ -7,7 +7,7 @@ lightweight ETL pipeline provide governed facts and tools.
 The goal is to keep material business judgment with people while agents help with
 search, consolidation, recommendations, and narrowly controlled execution.
 
-Try the [order 66823 delivery investigation](contracts/delivery-investigation-v1.md): can a later invoice confirmation prove that the customer received all 48 units?
+Try the [order 66823 delivery investigation](contracts/delivery-investigation-v1.md): can a later invoice confirmation prove that the customer received all 48 units? Open the simulated Twenty complaint in the local Web demo to trace invoice 64067, the stock issue and earlier supplier receipts, then review a customer reply draft. Direct SQL investigation covers 1,197 orders across ten authorized customers. Click **66823** in the conversation to open its ERPNext sales order. The first complaint investigation links to the original Twenty Note, the customer and the verified order contact. Prices and totals use EUR throughout the demo. The versioned 30-order snapshot supports offline regression tests.
 
 ## Demo video
 
@@ -30,7 +30,7 @@ flowchart TB
   Agent -->|Python tools| Domain[Shared deterministic read services]
   MCPClient[MCP client] --> MCP[Separate stdio MCP server]
   MCP --> Domain
-  Domain --> Source[Canonical snapshot or read-only Twenty / ERPNext]
+  Domain --> Source[Canonical snapshot or read-only WWI / Twenty / ERPNext]
   Agent -->|present_answer / AnswerPlan| Evidence[EvidenceRegistry validation and deterministic rendering]
   Evidence -->|Verified final answer| Web
   Agent -->|Eligible proposal only| Ledger[(PostgreSQL action ledger)]
@@ -93,7 +93,7 @@ current worktree includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer, supplier, contact-search, sales-order, purchase-order,
-  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI interview snapshot with invoice investigation; fourteen in live mode);
+  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI interview catalog with delivery investigation; fourteen in live mode);
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and

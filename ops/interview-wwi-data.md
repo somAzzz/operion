@@ -29,7 +29,7 @@ scripts/restore_wwi.sh \
 ```
 
 The generated manifest records the source SHA-256/profile, exact selections,
-business date, USD assumption, counts, and identity-row count. Re-running against
+business date, EUR demo denomination, counts, and identity-row count. Re-running against
 the pinned database produces byte-identical files.
 
 ## Dry-run and guarded apply
@@ -47,9 +47,22 @@ and disabled external effects. It creates only missing masters and draft orders,
 never submits orders, and updates a copied run-specific identity map only after
 target IDs are returned.
 
-WWI rows use USD as a documented dataset assumption. If the target company base
-currency is EUR, the admin environment must also contain a reviewed positive
-`OPERION_DEMO_EXCHANGE_RATE_USD_TO_EUR`; the apply path fails closed without it.
+Mapping revision `interview-wwi-v1.2` denominates all WWI demo prices and amounts
+in EUR and preserves source numeric values. WWI does not supply a currency code.
+
+The direct Web profile links each authorized sales order to its ERPNext draft,
+Twenty company, and matching order contact. The pinned order set remains available
+for offline regressions. To import the ten customers and their 1,197 complete sales
+orders into the local demo targets, run the following from the repository root.
+The importer reads WWI and verifies each document and line using read-only target
+credentials. ERPNext must allow multiple sales orders against a customer purchase order because the WWI customer reference can recur. The import retains that reference on every order. New stock items keep their WWI package unit (Each maps to Unit), and historical drafts use the corresponding company fiscal year. Only the separate provisioning command accesses write credentials.
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/import_wwi_order_records.py --apply
+PYTHONPATH=src .venv/bin/python scripts/import_wwi_order_records.py
+```
+
+For the separate dependency-closed selection workflow:
 
 ```bash
 mkdir -p reports/interview-wwi-v1/<run-id>

@@ -145,7 +145,7 @@ Reuse the [first-batch selection](../../config/interview/wwi-first-batch-selecti
 
 Resolve before import:
 
-1. WWI orders have no currency code. USD is a dataset assumption; target company/price lists use EUR. Decide currency/conversion policy and reviewed historical exchange-rate source. Never invent rates or silently relabel currencies.
+1. All WWI demo amounts use EUR and retain their source numeric values under mapping revision v1.2. WWI order rows have no currency code.
 2. Existing stock attributes for Items 184, 193, and 204 conflict with proposed imports. Decide correct semantics and reuse/isolation without overwriting for convenience.
 3. Recheck target, permission, backup, notification, and other effects under the [WWI runbook](../../ops/interview-wwi-data.md).
 
