@@ -252,12 +252,25 @@ class AgentDependencies:
     selected_candidate_id: str | None = None
     selected_lookup_complete: bool = False
 
+    user_request: str = ""
+
     def __post_init__(self) -> None:
         self.evidence = EvidenceRegistry(
             self.scope,
             run_id=self.run_id,
             tenant_id=self.tenant_id,
             user_id=self.user_id,
+            user_request=self.user_request,
+            delivery_order_ids=(
+                {
+                    row["source_id"]
+                    for row in self.repository.data["sales_orders"]
+                    if self.scope.allows_customer(row["customer_canonical_id"])
+                }
+                if isinstance(self.repository, CanonicalRepository)
+                and self.repository.supports_delivery_investigation
+                else frozenset()
+            ),
         )
 
 
@@ -680,6 +693,20 @@ def get_customer_order_context(
     )
 
 
+def get_order_delivery_evidence(
+    ctx: RunContext[AgentDependencies], order_id: str
+) -> dict[str, Any]:
+    """Investigate delivery complaints, recorded confirmation dates and receipt gaps for one WWI order. Select the complete investigation card in present_answer."""
+    return _record_tool(
+        ctx,
+        "get_order_delivery_evidence",
+        {"order_id": order_id},
+        lambda: ctx.deps.repository.get_order_delivery_evidence(
+            order_id, ctx.deps.scope
+        ),
+    )
+
+
 def get_sales_order(
     ctx: RunContext[AgentDependencies], order_id: str
 ) -> dict[str, Any]:
@@ -952,6 +979,7 @@ def create_operion_agent(
             get_customer_order_context,
             list_sales_orders,
             get_sales_order,
+            get_order_delivery_evidence,
             search_suppliers,
             get_supplier_overview,
             list_purchase_orders,

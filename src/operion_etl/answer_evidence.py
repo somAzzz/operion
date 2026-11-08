@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
@@ -25,6 +26,7 @@ from .answer_presentation import (
     escape_cell,
     label,
 )
+from .delivery_evidence import card_rows
 from .read_tools import AccessScope
 
 
@@ -110,6 +112,7 @@ CONTRACTS = {
     "get_contact_by_name": {"contact-detail-v1"},
     "list_sales_orders": {"sales-order-list-v1"},
     "list_purchase_orders": {"purchase-order-list-v1"},
+    "get_order_delivery_evidence": {"delivery-investigation-v1"},
     "get_sales_order": {"sales-order-detail-v1"},
     "get_purchase_order": {"purchase-order-detail-v1"},
     "check_fulfillment": {"fulfillment-v1"},
@@ -210,7 +213,29 @@ class EvidenceRegistry:
         run_id: str = "",
         tenant_id: str = "",
         user_id: str = "",
+        user_request: str = "",
+        delivery_order_ids: set[str] | frozenset[str] = frozenset(),
     ):
+        self.user_request = user_request
+        mentioned = set(
+            re.findall(
+                r"(?:wwi:sales_order:|\border(?:\s+(?:number|no\.?)\b)?\s*[:#]?\s*|订单(?:号(?:为|是)?)?[：:#\s]*)([0-9]+)(?![0-9])",
+                user_request,
+                re.I,
+            )
+        )
+        # A labelled secondary order must not override a bare primary order number.
+        other_ids = (
+            delivery_order_ids.intersection(re.findall(r"[0-9]+", user_request))
+            - mentioned
+        )
+        self.delivery_target = (
+            f"wwi:sales_order:{next(iter(mentioned))}"
+            if len(mentioned) == 1 and not other_ids
+            else None
+        )
+
+        self.delivery_calls: dict[int, str] = {}
         self.scope = scope
         self.run_id = run_id or uuid4().hex
         self.scope_id = hashlib.sha256(
@@ -432,6 +457,12 @@ class EvidenceRegistry:
                 )
             ),
         )
+        if tool == "get_order_delivery_evidence":
+            requested = str(arguments.get("order_id", "")).strip()
+            subject = data.get("order_id") or (
+                f"wwi:sales_order:{requested}" if requested.isdecimal() else requested
+            )
+            self.delivery_calls[ctx.call_index] = subject
         try:
             if payload.get("ok") is not True:
                 code = payload.get("error", {}).get("code", "")
@@ -536,6 +567,36 @@ class EvidenceRegistry:
     def _domain(
         self, ctx: EvidenceContext, tool: str, data: dict[str, Any], path: str = "/data"
     ) -> None:
+        if tool == "get_order_delivery_evidence":
+            self._authorized(data)
+            subject = data["order_id"]
+            for index, invoice in enumerate(data["invoices"]):
+                if (
+                    invoice["source_record_id"]
+                    != f"Sales.Invoices:{invoice['invoice_id']}"
+                    or f"wwi:sales_order:{invoice['invoice_order_id']}" != subject
+                    or f"wwi:organization:customer:{invoice['invoice_customer_id']}"
+                    != data["customer_id"]
+                ):
+                    raise EvidenceError("DELIVERY_ORDER_MISMATCH")
+                self._fact(
+                    ctx,
+                    invoice["source_record_id"],
+                    "invoice_id",
+                    invoice["invoice_id"],
+                    f"{path}/invoices/{index}/invoice_id",
+                    "entity",
+                )
+            ref = self._id("t")
+            self.tables[ref] = EvidenceTable(
+                ref,
+                "delivery investigation",
+                ("en", "zh"),
+                tuple(card_rows(data, self.user_request)),
+                path,
+                ctx,
+            )
+            return
         if tool == "get_customer_order_context":
             self._domain(
                 ctx,
@@ -800,6 +861,40 @@ class EvidenceRegistry:
             ) != len(selection.columns):
                 raise EvidenceError("TABLE_COLUMN_UNVERIFIED", selection.table_id)
 
+        if self.delivery_calls:
+            selected = [self.facts[ref] for ref in plan.facts] + [
+                self.tables[t.table_id] for t in plan.tables
+            ]
+            if self.delivery_target is None:
+                raise EvidenceError("DELIVERY_EXPLICIT_ORDER_REQUIRED")
+            # Statuses are rendered automatically, even without selected references.
+            if any(
+                self.delivery_calls.get(ctx.call_index) != self.delivery_target
+                for ctx, _ in self.statuses
+            ):
+                raise EvidenceError("DELIVERY_ORDER_MISMATCH")
+            for item in selected:
+                if (
+                    self.delivery_calls.get(item.context.call_index)
+                    != self.delivery_target
+                ):
+                    raise EvidenceError("DELIVERY_ORDER_MISMATCH", item.id)
+            target_cards = [
+                t
+                for t in self.tables.values()
+                if t.kind == "delivery investigation"
+                and self.delivery_calls[t.context.call_index] == self.delivery_target
+            ]
+            if target_cards and not any(t in selected for t in target_cards):
+                raise EvidenceError("DELIVERY_CARD_REQUIRED")
+            if not target_cards and not any(
+                self.delivery_calls.get(ctx.call_index) == self.delivery_target
+                for ctx, _ in self.statuses
+            ):
+                raise EvidenceError("DELIVERY_TARGET_NOT_QUERIED")
+            if any(t.columns for t in plan.tables):
+                raise EvidenceError("DELIVERY_CARD_PROJECTION_DENIED")
+
     def _context(self, ctx: EvidenceContext) -> None:
         if ctx.run_id != self.run_id or ctx.scope_id != self.scope_id:
             raise EvidenceError("EVIDENCE_CONTEXT_MISMATCH")
@@ -897,6 +992,13 @@ class EvidenceRegistry:
         for selection in plan.tables:
             table = self.tables[selection.table_id]
             contexts[table.context.call_index] = table.context
+            if table.kind == "delivery investigation":
+                heading = "交付调查" if zh else "Delivery investigation"
+                parts.append(
+                    f"### {heading} [E{table.context.call_index}]\n\n"
+                    + "\n".join("- " + escape_cell(row[int(zh)]) for row in table.rows)
+                )
+                continue
             columns = self.selected_columns(table, selection)
             parts.append(
                 f"{TABLE_LABELS[table.kind][zh]} [E{table.context.call_index}]\n\n| "

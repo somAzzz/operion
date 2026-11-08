@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from .agent_runtime import repository_from_environment, scope_from_environment
-from .read_tools import AccessScope, CanonicalRepository
+from .read_tools import AccessScope, CanonicalRepository, ReadToolError
 
 
 def create_server(
@@ -147,6 +148,16 @@ def create_server(
     def get_purchase_order(order_id: str) -> dict[str, Any]:
         """Return one authorized purchase order and its item lines."""
         return repository.get_purchase_order(order_id, scope)
+
+    if repository.supports_delivery_investigation:
+
+        @server.tool(annotations=read_only, structured_output=True)
+        def get_order_delivery_evidence(order_id: str) -> dict[str, Any]:
+            """Investigate one authorized WWI order's invoice confirmations, not physical receipt."""
+            try:
+                return repository.get_order_delivery_evidence(order_id, scope)
+            except ReadToolError as exc:
+                raise ToolError(exc.code) from exc
 
     if repository.data_mode == "snapshot":
 

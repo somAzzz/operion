@@ -24,3 +24,4 @@ reports/**
 !reports/interview-demo-v1/identity_map.csv
 !reports/interview-wwi-v1/identity_map.csv
 *.log
+!data/canonical/interview-wwi-v1/delivery-evidence-v1.json

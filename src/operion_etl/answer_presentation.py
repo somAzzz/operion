@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from .answer_evidence import EvidenceContext
 
 LABELS = {
+    "invoice_id": ("Invoice ID", "发票 ID"),
     "customer_count": ("Customers", "客户数"),
     "customers_with_orders": ("Customers with sales orders", "有销售订单的客户数"),
     "sales_order_count": ("Sales orders", "销售订单数"),

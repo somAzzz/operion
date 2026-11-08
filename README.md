@@ -7,6 +7,8 @@ lightweight ETL pipeline provide governed facts and tools.
 The goal is to keep material business judgment with people while agents help with
 search, consolidation, recommendations, and narrowly controlled execution.
 
+Try the [order 66823 delivery investigation](contracts/delivery-investigation-v1.md): can a later invoice confirmation prove that the customer received all 48 units?
+
 ## Demo video
 
 [![Watch the Operion demo on YouTube](https://i.ytimg.com/vi/TxG6GOX3BZE/hqdefault.jpg)](https://www.youtube.com/watch?v=TxG6GOX3BZE)
@@ -91,7 +93,7 @@ current worktree includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer, supplier, contact-search, sales-order, purchase-order,
-  portfolio, and fulfilment services exposed as fifteen snapshot-mode read-only MCP tools (fourteen in live mode, where frozen fulfilment cases are unavailable);
+  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI interview snapshot with invoice investigation; fourteen in live mode);
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and

@@ -19,7 +19,7 @@ See [ADR-001](architecture/adr-001-deterministic-agent.md), the [operating plan]
 
 Each tool records purpose, input structure, field allowlist, scope, read semantics, maximum volume, provenance, data time, effects, idempotency, approval requirements, and error types.
 
-The original minimum demo exposed customer overview and frozen fulfillment. The current shared MCP service exposes fifteen snapshot read operations, or fourteen in live mode, where frozen fulfillment is unavailable. Customer, supplier, contact, order, and aggregate capabilities reuse the same domain services as the Agent. Tool count is not an acceptance goal. Data-quality capabilities may later explain recorded import failures.
+The original minimum demo exposed customer overview and frozen fulfillment. The current shared MCP service exposes fifteen baseline snapshot read operations (sixteen with [WWI delivery investigation](../contracts/delivery-investigation-v1.md)), or fourteen in live mode, where frozen fulfillment is unavailable. Customer, supplier, contact, order, and aggregate capabilities reuse the same domain services as the Agent. Tool count is not an acceptance goal. Data-quality capabilities may later explain recorded import failures.
 
 The Agent can expose `propose_followup_task()` only when server policy and release configuration permit it. This records a `PENDING_APPROVAL` proposal, not a business-system Task. Only the independently approved Worker creates the Task under the [E4 contract](../contracts/e4-followup-task-v1.md). MCP remains read-only.
 

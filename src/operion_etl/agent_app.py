@@ -217,6 +217,8 @@ class AgentApplication:
         self.allowed_tools = (
             READ_TOOLS | FOLLOWUP_TOOLS if proposal_service is not None else READ_TOOLS
         )
+        if self.repository.supports_delivery_investigation:
+            self.allowed_tools |= {"get_order_delivery_evidence"}
         self.agent = agent or create_operion_agent(settings)
         self.semaphore = asyncio.Semaphore(settings.max_concurrent_runs)
         self.conversation_locks: dict[str, asyncio.Lock] = {}
@@ -484,7 +486,7 @@ class AgentApplication:
         )
         cancellation = CancellationToken()
         self.active_runs[run_id] = (owner_id, cancellation)
-        allowed_tools = READ_TOOLS
+        allowed_tools = self.allowed_tools - FOLLOWUP_TOOLS
         if self.proposal_service is not None and "followup_proposer" in identity.roles:
             allowed_tools |= FOLLOWUP_TOOLS
         deps = AgentDependencies(
@@ -500,6 +502,7 @@ class AgentApplication:
             conversation_id=conversation_id,
             run_id=run_id,
             tenant_id=identity.tenant_id,
+            user_request=trusted_prompt,
             pending_selection=pending_selection,
             selected_candidate_id=selected_candidate_id,
         )

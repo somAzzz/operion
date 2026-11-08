@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, ClassVar, Literal
 
+from . import delivery_evidence
 from .identity_readback import ERPNextReadClient, TwentyReadClient
 
 
@@ -204,10 +205,12 @@ class CanonicalRepository:
         self.snapshot_skew = self.snapshot_skew_seconds > max_snapshot_skew_seconds
         self.data = {name: _read_csv(directory / f"{name}.csv") for name in self.FILES}
         manifest_path = directory / "dataset.json"
+        self.dataset_version = None
         self.snapshot_source_observed_at = None
         if manifest_path.is_file():
             try:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self.dataset_version = manifest.get("dataset_version")
                 self.snapshot_source_observed_at = manifest.get("source_observed_at")
             except (OSError, ValueError) as error:
                 raise SourceUnavailableError(
@@ -1461,6 +1464,27 @@ class CanonicalRepository:
             "missing": [],
             **self._metadata(source_system=["twenty", "erpnext"]),
         }
+
+    @property
+    def supports_delivery_investigation(self) -> bool:
+        return (
+            self.data_mode == "snapshot" and self.dataset_version == "interview-wwi-v1"
+        )
+
+    def get_order_delivery_evidence(
+        self, order_id: str, scope: AccessScope
+    ) -> dict[str, Any]:
+        if not self.supports_delivery_investigation:
+            raise SourceUnavailableError(
+                "WWI delivery evidence is unavailable for this dataset"
+            )
+        detail = self.get_sales_order(order_id, scope)
+        try:
+            return delivery_evidence.investigate(self.directory, detail)
+        except (OSError, KeyError, ValueError, TypeError) as error:
+            raise SourceUnavailableError(
+                "delivery snapshot unavailable or incomplete"
+            ) from error
 
     def get_sales_order(self, order_id: str, scope: AccessScope) -> dict[str, Any]:
         return self._get_order(order_id, scope, "sales")

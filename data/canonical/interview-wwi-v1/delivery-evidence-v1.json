@@ -1,0 +1,292 @@
+{
+  "snapshot_id": "interview-wwi-delivery-v1",
+  "orders_sha256": "f8cfaf457b3ce1240178d415b60c90325477165321debc8d0a7bc11dce658a53",
+  "extracted_at": "2026-11-08T14:11:53.666496+00:00",
+  "orders": {
+    "wwi:sales_order:31349": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 33513,
+          "invoice_order_id": 31349,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2014-09-26T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:36352": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 34983,
+          "invoice_order_id": 36352,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2014-10-22T07:25:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:40304": {
+      "customer_id": "wwi:organization:customer:58",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 40717,
+          "invoice_order_id": 40304,
+          "invoice_customer_id": 58,
+          "credit_note": false,
+          "confirmed_at": "2015-01-31T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:40787": {
+      "customer_id": "wwi:organization:customer:183",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 39343,
+          "invoice_order_id": 40787,
+          "invoice_customer_id": 183,
+          "credit_note": false,
+          "confirmed_at": "2015-01-07T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:41481": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 41103,
+          "invoice_order_id": 41481,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2015-02-07T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:42411": {
+      "customer_id": "wwi:organization:customer:58",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:42840": {
+      "customer_id": "wwi:organization:customer:58",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 41265,
+          "invoice_order_id": 42840,
+          "invoice_customer_id": 58,
+          "credit_note": false,
+          "confirmed_at": "2015-02-11T07:25:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:43195": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 41691,
+          "invoice_order_id": 43195,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2015-02-18T07:20:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:47710": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 66251,
+          "invoice_order_id": 47710,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2016-03-26T07:10:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:50258": {
+      "customer_id": "wwi:organization:customer:840",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:50679": {
+      "customer_id": "wwi:organization:customer:840",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 50713,
+          "invoice_order_id": 50679,
+          "invoice_customer_id": 840,
+          "credit_note": false,
+          "confirmed_at": "2015-07-11T07:10:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:51106": {
+      "customer_id": "wwi:organization:customer:840",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 50236,
+          "invoice_order_id": 51106,
+          "invoice_customer_id": 840,
+          "credit_note": false,
+          "confirmed_at": "2015-07-04T07:20:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:53222": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:53965": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 51865,
+          "invoice_order_id": 53965,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2015-07-29T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:55518": {
+      "customer_id": "wwi:organization:customer:961",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 56554,
+          "invoice_order_id": 55518,
+          "invoice_customer_id": 961,
+          "credit_note": false,
+          "confirmed_at": "2015-10-15T07:15:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:55522": {
+      "customer_id": "wwi:organization:customer:463",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:56074": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 54084,
+          "invoice_order_id": 56074,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2015-09-05T07:10:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:57457": {
+      "customer_id": "wwi:organization:customer:1011",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:57891": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:58562": {
+      "customer_id": "wwi:organization:customer:463",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:60139": {
+      "customer_id": "wwi:organization:customer:463",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 57898,
+          "invoice_order_id": 60139,
+          "invoice_customer_id": 463,
+          "credit_note": false,
+          "confirmed_at": "2015-11-05T07:20:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:62581": {
+      "customer_id": "wwi:organization:customer:183",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:63469": {
+      "customer_id": "wwi:organization:customer:183",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:66694": {
+      "customer_id": "wwi:organization:customer:58",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:66823": {
+      "customer_id": "wwi:organization:customer:65",
+      "linked_invoice_count": 1,
+      "invoices": [
+        {
+          "invoice_id": 64067,
+          "invoice_order_id": 66823,
+          "invoice_customer_id": 65,
+          "credit_note": false,
+          "confirmed_at": "2016-02-19T07:25:00",
+          "has_recipient": true
+        }
+      ]
+    },
+    "wwi:sales_order:69034": {
+      "customer_id": "wwi:organization:customer:1011",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:69872": {
+      "customer_id": "wwi:organization:customer:935",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:71206": {
+      "customer_id": "wwi:organization:customer:183",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:72172": {
+      "customer_id": "wwi:organization:customer:961",
+      "linked_invoice_count": 0,
+      "invoices": []
+    },
+    "wwi:sales_order:73279": {
+      "customer_id": "wwi:organization:customer:935",
+      "linked_invoice_count": 0,
+      "invoices": []
+    }
+  }
+}
