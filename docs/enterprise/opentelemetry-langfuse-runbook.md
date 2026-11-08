@@ -70,7 +70,8 @@ Apply the configuration explicitly; plain Compose without `--env-file` will use 
 
 ```sh
 docker compose --env-file .env.langfuse.local -f deploy/gateway/compose.yaml --profile observability up -d collector
-docker compose --env-file .env.langfuse.local -f deploy/gateway/compose.yaml up -d --build --no-deps --wait agent web
+scripts/deploy_gateway_observed.sh --check agent web
+scripts/deploy_gateway_observed.sh agent web
 ```
 
 For a dashboard, filter business runs by observation name `operion.agent.run`. PydanticAI also produces an AGENT observation, so counting all AGENT rows double-counts a request. Count tools at `type=TOOL`; `operion.domain.read` is a nested diagnostic span.
