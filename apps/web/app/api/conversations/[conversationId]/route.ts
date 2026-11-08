@@ -2,7 +2,7 @@ import { upstreamAuthorization } from "@/lib/upstream-auth";
 import { upstreamTraceHeaders } from "@/lib/trace-headers";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ conversationId: string }> },
 ) {
   const token = process.env.OPERION_AGENT_TOKEN;
@@ -11,6 +11,7 @@ export async function GET(
   const { conversationId } = await context.params;
   const base = process.env.OPERION_AGENT_URL ?? "http://127.0.0.1:8000/api/agent";
   const url = new URL(`conversations/${encodeURIComponent(conversationId)}`, base.replace(/agent$/, ""));
+  if (new URL(request.url).searchParams.get("suggest") === "1") url.pathname += "/suggestion";
   const response = await fetch(url, {
     headers: upstreamTraceHeaders({ Authorization: authorization }),
     cache: "no-store",

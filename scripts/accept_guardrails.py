@@ -94,12 +94,12 @@ def main() -> None:
     parser.add_argument(
         "--canonical-dir",
         type=Path,
-        default=Path("data/canonical/interview-wwi-v1"),
+        default=Path("data/canonical/demo-wwi-v1"),
     )
     parser.add_argument(
         "--identity-map",
         type=Path,
-        default=Path("reports/interview-wwi-v1/identity_map.csv"),
+        default=Path("reports/demo-wwi-v1/identity_map.csv"),
     )
     parser.add_argument("--customer-id", default="wwi:organization:customer:65")
     parser.add_argument("--output", type=Path, required=True)

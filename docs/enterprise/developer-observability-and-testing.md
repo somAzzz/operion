@@ -15,7 +15,7 @@ This guide complements the [system assessment](system-assessment-and-roadmap.md)
 | Trusted message history | Model requests/responses from completed or cancelled runs | Per-request evidence for interrupted/error paths; content handling policy |
 | E2 JSON evaluations | Cases, repeated runs, tool payloads, final answers | Structured evidence scoring and entity/field/currency binding are implemented; extend independent task-completion gold, holdouts and per-layer reports |
 | MCP tests | Tool names, schemas, annotations, in-process calls | Real stdio handshake/list/call coverage exists in the minimal runner; extend malformed requests, lifecycle and correlation |
-| Complex interview script | Web → Agent → SGLang → tools, SSE ordering | Persist events, full authorized answer, assertion differences and links to spans |
+| Complex demo script | Web → Agent → SGLang → tools, SSE ordering | Persist events, full authorized answer, assertion differences and links to spans |
 | Action ledger and W01–W15 | Approval, revision, leases, UNKNOWN, reconciliation and trace links | Isolated database lifecycle is implemented; correlate ledger evidence with the same test run |
 
 The current Web Agent uses local `FunctionToolset` wrappers. The MCP server is a separate stdio entry point sharing domain services. A passing Agent test does not prove MCP transport works. An in-process `server.call_tool()` test does not prove client/server protocol compatibility.
@@ -257,7 +257,7 @@ This is illustrative. The report should also show whether the input/tool facts w
 
 The HTML report needs only a filterable case list, timeline, input/output panels, guardrail decisions, expected/actual differences and a rerun command. Begin with a generated static report; a permanent admin application is unnecessary for the first milestone.
 
-Write evidence during execution, finalize reports on success/error/cancel, and preserve unfinished events after crashes. Escape all model/tool content in HTML; never execute returned HTML. Large payloads should be bounded with a full artifact reference and explicit truncation flag. Restrict private evidence access and retention consistently with existing E5 policy; export only reviewed redacted evidence for interviews.
+Write evidence during execution, finalize reports on success/error/cancel, and preserve unfinished events after crashes. Escape all model/tool content in HTML; never execute returned HTML. Large payloads should be bounded with a full artifact reference and explicit truncation flag. Restrict private evidence access and retention consistently with existing E5 policy; export only reviewed redacted evidence for demos.
 
 ## 8 Commands available today
 
@@ -289,8 +289,8 @@ npx @modelcontextprotocol/inspector
 Choose stdio and command `/home/bo/projects/python/operion/.venv/bin/operion-mcp`. Configure these child environment values in the Inspector, using absolute paths:
 
 ```text
-OPERION_CANONICAL_DIR=/home/bo/projects/python/operion/data/canonical/interview-wwi-v1
-OPERION_IDENTITY_MAP=/home/bo/projects/python/operion/reports/interview-wwi-v1/identity_map.csv
+OPERION_CANONICAL_DIR=/home/bo/projects/python/operion/data/canonical/demo-wwi-v1
+OPERION_IDENTITY_MAP=/home/bo/projects/python/operion/reports/demo-wwi-v1/identity_map.csv
 OPERION_DATA_MODE=snapshot
 OPERION_OBSERVED_AT=2026-10-07T00:00:00Z
 OPERION_COMPANY=AI Demo GmbH
@@ -320,7 +320,7 @@ Requires the E2 environment and SGLang described in [the E2 runbook](../../ops/e
 For an already-running WWI Web profile:
 
 ```bash
-.venv/bin/python scripts/verify-interview-complex-cases.py \
+.venv/bin/python scripts/verify-demo-complex-cases.py \
   --base-url http://127.0.0.1:3100
 ```
 

@@ -65,12 +65,13 @@ new unverified answer. See the [structured answer contract](../docs/enterprise/s
 
 Evidence support is distinct from task completion. Routing, correct parameters,
 required-fact selection, omissions, and legitimate user-task success still require
-independent evaluation. English-only repository documentation does not remove
-supported application answer languages or alter multilingual test fixtures.
+independent evaluation. `AnswerPlan.language` accepts only `en`; server-owned
+labels, notices, investigation cards, and provenance are rendered in English.
+Source values and user statements remain data and are escaped without translation.
 
 ## Run budgets and internal diagnostics
 
-The default and gateway/interview profiles allow six business tool calls and
+The default and gateway/demo profiles allow six business tool calls and
 eight model requests per run. Configuration must allow at least
 `max_tool_calls + 2` model requests: one final structured answer and one answer
 repair after a sequential chain of business calls. `present_answer` is an output

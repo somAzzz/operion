@@ -14,14 +14,20 @@ data/**
 !data/**/
 !data/README.md
 !data/**/.gitkeep
-!data/canonical/interview-demo-v1/*.csv
-!data/canonical/interview-demo-v1/dataset.json
-!data/canonical/interview-wwi-v1/*.csv
-!data/canonical/interview-wwi-v1/dataset.json
+!data/canonical/demo-v1/*.csv
+!data/canonical/demo-v1/dataset.json
+!data/canonical/demo-wwi-v1/*.csv
+!data/canonical/demo-wwi-v1/dataset.json
 reports/**
 !reports/**/
 !reports/**/.gitkeep
-!reports/interview-demo-v1/identity_map.csv
-!reports/interview-wwi-v1/identity_map.csv
+!reports/demo-v1/identity_map.csv
+!reports/demo-wwi-v1/identity_map.csv
 *.log
-!data/canonical/interview-wwi-v1/delivery-evidence-v1.json
+!data/canonical/demo-wwi-v1/delivery-evidence-v1.json
+
+# Compatibility links for existing demo profiles
+!data/canonical/interview-demo-v1
+!data/canonical/interview-wwi-v1
+!reports/interview-demo-v1
+!reports/interview-wwi-v1

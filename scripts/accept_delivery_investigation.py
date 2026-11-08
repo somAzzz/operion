@@ -17,7 +17,7 @@ def main():
         store = ConversationStore(Path(temp) / "sessions.db")
         app = AgentApplication(
             settings=AgentSettings.from_environment(),
-            repository=CanonicalRepository(Path("data/canonical/interview-wwi-v1")),
+            repository=CanonicalRepository(Path("data/canonical/demo-wwi-v1")),
             scope=AccessScope(
                 "AI Demo GmbH", frozenset({"wwi:organization:customer:65"})
             ),

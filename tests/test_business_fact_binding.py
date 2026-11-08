@@ -56,6 +56,12 @@ def orders(*, limit=1, total=30, complete=False):
 
 
 class FactBindingTests(unittest.TestCase):
+    def test_answer_language_is_enforced_by_the_schema(self):
+        self.assertEqual("en", AnswerPlan(language="en").language)
+        for language in ("zh", "fr", ""):
+            with self.subTest(language=language), self.assertRaises(ValidationError):
+                AnswerPlan(language=language)
+
     def test_total_page_population_and_active_population_are_separate(self):
         reg = registry()
         evidence = add(
@@ -112,17 +118,14 @@ class FactBindingTests(unittest.TestCase):
         facts = {f["field"]: f for f in evidence["facts"]}
         self.assertEqual(8, facts["customers_with_orders"]["value"])
         self.assertNotIn("customer_count", facts)
-        for language in ("en", "zh"):
-            plan = AnswerPlan(
-                language=language,
-                facts=[facts["customers_with_orders"]["id"]],
-                tables=[TableSelection(table_id=evidence["tables"][0]["id"])],
-            )
-            self.assertEqual(
-                GuardrailVerdict.ALLOW, verify_answer_plan(reg, plan).verdict
-            )
-            self.assertIn("**8**", reg.render(plan))
-            self.assertEqual(30, len(reg.tables[plan.tables[0].table_id].rows))
+        plan = AnswerPlan(
+            language="en",
+            facts=[facts["customers_with_orders"]["id"]],
+            tables=[TableSelection(table_id=evidence["tables"][0]["id"])],
+        )
+        self.assertEqual(GuardrailVerdict.ALLOW, verify_answer_plan(reg, plan).verdict)
+        self.assertIn("**8**", reg.render(plan))
+        self.assertEqual(30, len(reg.tables[plan.tables[0].table_id].rows))
 
     def test_values_labels_units_and_scope_cannot_be_overridden(self):
         for field, value in [

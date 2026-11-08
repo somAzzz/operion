@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -154,6 +155,13 @@ class ConversationStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_runs_conversation
                     ON agent_runs(conversation_id, started_at);
+                CREATE TABLE IF NOT EXISTS complaint_rounds (
+                    owner_id TEXT NOT NULL,
+                    case_id TEXT NOT NULL,
+                    round_number INTEGER NOT NULL,
+                    thread_id TEXT UNIQUE NOT NULL,
+                    PRIMARY KEY(owner_id, case_id, round_number)
+                );
                 CREATE TABLE IF NOT EXISTS access_events (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     owner_id TEXT NOT NULL,
@@ -254,6 +262,33 @@ class ConversationStore:
                     """,
                     (conversation_id, owner_id, now, now),
                 )
+
+    def complaint_threads(
+        self, owner_id: str, case_id: str, *, start_after: str | None = None
+    ) -> list[str]:
+        """Round one uses the original case thread. Retrying a start reuses its successor."""
+        with self._lock, self._connect() as connection:
+            if start_after is not None:
+                connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                "SELECT thread_id FROM complaint_rounds WHERE owner_id = ? AND case_id = ? "
+                "ORDER BY round_number",
+                (owner_id, case_id),
+            )
+            threads = [case_id, *(row["thread_id"] for row in rows)]
+            if start_after is None:
+                return threads
+            if len(threads) > 1 and start_after == threads[-2]:
+                return threads
+            if start_after != threads[-1]:
+                raise ConversationBusyError("The current investigation has changed.")
+            thread_id = f"case-{uuid4().hex}"
+            connection.execute(
+                "INSERT INTO complaint_rounds(owner_id, case_id, round_number, thread_id) "
+                "VALUES (?, ?, ?, ?)",
+                (owner_id, case_id, len(threads) + 1, thread_id),
+            )
+            return [*threads, thread_id]
 
     def history(self, conversation_id: str, owner_id: str) -> list[ModelMessage]:
         with self._lock, self._connect() as connection:

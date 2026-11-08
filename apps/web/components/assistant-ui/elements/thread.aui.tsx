@@ -8,6 +8,8 @@ import {
 import { File } from "@/components/assistant-ui/elements/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/elements/follow-up-suggestions.aui";
 import { Image } from "@/components/assistant-ui/elements/image";
+import { ActiveConversation } from "@/app/MyRuntimeProvider";
+import { InlineOrderText } from "@/components/order-records-link";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
   Reasoning,
@@ -32,6 +34,7 @@ import {
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
+  unstable_useComposerInput,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
@@ -48,6 +51,8 @@ import {
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
+  ArrowUpRightIcon,
+  ScanTextIcon,
   ArrowUpIcon,
   AudioLinesIcon,
   CheckIcon,
@@ -67,6 +72,8 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  useEffect,
+  useState,
   useContext,
   type ComponentType,
   type FC,
@@ -194,9 +201,8 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]:
-          "color-mix(in oklab, var(--color-muted) 30%, transparent)",
+        ["--thread-max-width" as string]: isEmpty ? "50rem" : "64rem",
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "1rem",
         ["--composer-padding" as string]: "8px",
       }}
@@ -378,17 +384,17 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col px-2">
-      <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        How can I help you today?
-      </p>
+    <div className="inquiry-welcome">
+      <span className="welcome-icon"><ScanTextIcon aria-hidden="true" /></span>
+      <h2>Explore your records</h2>
+      <p>Ask about customers, orders, or fulfillment in your authorized workspace.</p>
     </div>
   );
 };
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-col">
+    <div className="aui-thread-welcome-suggestions">
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -404,16 +410,11 @@ const ThreadSuggestionItem: FC = () => {
           type="button"
           className="aui-thread-welcome-suggestion group hover:bg-foreground/[0.03] focus-visible:ring-ring/50 flex w-full items-baseline gap-2.5 rounded-md px-2 py-2 text-start text-sm transition-colors outline-none focus-visible:ring-1 motion-reduce:transition-none"
         >
-          <span
-            aria-hidden
-            className="text-muted-foreground/60 group-hover:text-foreground font-mono text-xs transition-colors motion-reduce:transition-none"
-          >
-            {">"}
+          <span className="suggestion-copy">
+            <SuggestionPrimitive.Title className="suggestion-title" />
+            <SuggestionPrimitive.Description className="suggestion-description" />
           </span>
-          <span className="min-w-0 flex-1 truncate">
-            <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1 text-foreground" />{" "}
-            <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 text-muted-foreground empty:hidden" />
-          </span>
+          <ArrowUpRightIcon aria-hidden="true" />
         </button>
       </SuggestionPrimitive.Trigger>
     </div>
@@ -421,6 +422,24 @@ const ThreadSuggestionItem: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+  const id = useContext(ActiveConversation);
+  const last = useAuiState(s => s.thread.messages.at(-1));
+  const running = useAuiState(s => s.thread.isRunning);
+  const composer = unstable_useComposerInput();
+  const text = useAuiState(s => s.composer.text);
+  const key = !running && id && last?.role === "assistant" && last.status?.type !== "incomplete" ? id + "/" + last.id : "";
+  const [hint, setHint] = useState({key: "", value: ""});
+  useEffect(() => {
+    if (!key) return;
+    const controller = new AbortController();
+    fetch("/api/conversations/" + encodeURIComponent(id) + "?suggest=1", {signal: controller.signal, cache: "no-store"})
+      .then(async response => response.ok ? (await response.json()).suggestion : null)
+      .then(value => {
+        if (!controller.signal.aborted && typeof value === "string") setHint({key, value});
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [id, key]);
+  const suggestion = !text && key && hint.key === key ? hint.value : "";
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerRunStatus />
@@ -432,13 +451,20 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           <ComposerQueue />
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="Send a message..."
+            placeholder={suggestion || "Ask a question about your records…"}
+            onKeyDown={event => {
+              if (suggestion && event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                composer.setText(suggestion);
+              }
+            }}
             className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"
             aria-label="Message input"
           />
+          {suggestion && <button type="button" className="self-start px-2.5 text-xs text-muted-foreground" onClick={() => composer.setText(suggestion)}>Use suggestion · Tab</button>}
           <ComposerAction />
         </div>
       </ComposerPrimitive.AttachmentDropzone>
@@ -799,6 +825,10 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
   </div>
 );
 
+const UserText: TextMessagePartComponent = ({ text }) => (
+  <span className="whitespace-pre-wrap"><InlineOrderText text={text} /></span>
+);
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
@@ -811,7 +841,7 @@ const UserMessage: FC = () => {
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
-            components={{ File: UserFilePart, Image: UserImagePart }}
+            components={{ Text: UserText, File: UserFilePart, Image: UserImagePart }}
           />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">

@@ -13,7 +13,7 @@ class OutputGuardrailTests(unittest.TestCase):
     def test_unstructured_text_has_no_allow_by_default_path(self):
         for text in (
             "There are one hundred orders",
-            "一百张订单",
+            "The customer has one hundred orders.",
             "Done.",
             "No protected claims",
             "",
@@ -74,7 +74,7 @@ class OutputGuardrailTests(unittest.TestCase):
         self.assertIn("wwi:sales\\_order:1", text)
         self.assertIn("Draft", text)
         self.assertNotIn("100.00", text)
-        self.assertIn("unknown / 未知", text)
+        self.assertIn("unknown", text)
 
     def test_unknown_version_and_unknown_tool_fail_closed(self):
         for tool, contract in [
@@ -153,7 +153,7 @@ class OutputGuardrailTests(unittest.TestCase):
         text = reg.render(plan)
         self.assertIn("Picked quantity", text)
         self.assertIn("Delivered quantity", text)
-        self.assertIn("12 | unknown / 未知", text)
+        self.assertIn("12 | unknown", text)
         self.assertNotIn("12 | 0", text)
 
     def test_fulfillment_is_bound_to_snapshot_scenario(self):

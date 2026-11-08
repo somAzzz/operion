@@ -13,6 +13,8 @@ import {
   unstable_useComposerInput,
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
+import { InlineOrderText, OrderRecordsLink } from "@/components/order-records-link";
+import { MyRuntimeProvider } from "@/app/MyRuntimeProvider";
 import {
   ArchiveIcon,
   Clock3Icon,
@@ -22,11 +24,11 @@ import {
   PackageCheckIcon,
   SendIcon,
   PlusIcon,
-  ShieldCheckIcon,
   Trash2Icon,
   UserRoundSearchIcon,
 } from "lucide-react";
-import { ActionLink, WorkspaceNavigation } from "@/components/workspace-navigation";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ActionLink } from "@/components/workspace-navigation";
 
 type ToolRenderProps = {
   args: Record<string, unknown>;
@@ -176,7 +178,8 @@ function CustomerOrderContextCard({ result, status }: ToolRenderProps) {
   return <section className="result-card" aria-label="Verified customer and sales order">
     <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />Order-backed customer resolution</div>
     <h3>{String(resolution.customer_name ?? "Customer")}</h3>
-    <p>Order {String(resolution.order_id ?? "")} identifies customer {String(resolution.customer_id ?? "")}</p>
+    <p>Order <InlineOrderText text={String(resolution.order_id ?? "")} /> identifies customer {String(resolution.customer_id ?? "")}</p>
+    <OrderRecordsLink order={resolution.order_id} />
     <p>{orders.length} sales orders returned in the authorized scope</p>
     <EvidenceRows data={data} />
   </section>;
@@ -198,7 +201,7 @@ function OrderListCard({ result, status, kind }: ToolRenderProps & { kind: "sale
           const row = item as Record<string, unknown>;
           const id = String(row.canonical_id ?? "");
           const nativeStatus = row.native_status as Record<string, unknown> | null;
-          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · source status: {String(row.source_status ?? "unknown")}</span>{nativeStatus ? <span>ERPNext docstatus: {String(nativeStatus.docstatus)}</span> : <span>No ERPNext native status in this snapshot</span>}<code>{id}</code></div><SelectStableId id={id} noun={kind} /></div>;
+          return <div className="result-list__item" key={id}><div><strong>{String(row.order_number ?? id)}</strong><span>{String(row.customer_name ?? row.supplier_name ?? "")} · {String(row.order_date ?? "")}</span><span>{String(row.net_total_ex_tax || "amount unavailable")} {String(row.currency ?? "")} · source status: {String(row.source_status ?? "unknown")}</span>{nativeStatus ? <span>ERPNext docstatus: {String(nativeStatus.docstatus)}</span> : <span>No ERPNext native status in this snapshot</span>}<code><InlineOrderText text={id} /></code>{kind === "sales order" && <OrderRecordsLink order={id} />}</div><SelectStableId id={id} noun={kind} /></div>;
         })}
       </div>
       {pagination.has_more ? <small>Results are truncated; continue with next_cursor.</small> : null}
@@ -218,6 +221,7 @@ function OrderDetailCard({ result, status, kind }: ToolRenderProps & { kind: "sa
     <section className="result-card" aria-label={`${kind} detail`}>
       <div className="result-card__eyebrow"><ArchiveIcon aria-hidden="true" />{kind} detail</div>
       <h3>{String(order.order_number ?? order.canonical_id ?? kind)}</h3>
+      {kind === "sales order" && <p><InlineOrderText text={String(order.canonical_id ?? "")} /> · <OrderRecordsLink order={order.canonical_id} /></p>}
       <p>{String(order.customer_name ?? order.supplier_name ?? "")} · {String(order.order_date ?? "")} · source status: {String(order.source_status ?? "unknown")}</p>
       <div className="result-list">
         {lines.map((item) => {
@@ -431,7 +435,7 @@ function NewThreadButton() {
     <button
       type="button"
       onClick={() => aui.threads.switchToNewThread()}
-      className="bg-background hover:bg-accent absolute top-4 right-4 z-10 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition-colors"
+      className="desk-button desk-button-primary"
     >
       <PlusIcon className="size-4" aria-hidden="true" />
       New inquiry
@@ -446,15 +450,17 @@ function ConversationHistoryItem() {
 
   return (
     <ThreadListItemPrimitive.Root className="conversation-history__item">
-      <ThreadListItemPrimitive.Trigger
-        className="conversation-history__trigger"
-        title={title}
-      >
-        <MessageSquareTextIcon aria-hidden="true" />
-        <span>
-          <ThreadListItemPrimitive.Title fallback="New conversation" />
-        </span>
-      </ThreadListItemPrimitive.Trigger>
+      <DialogClose asChild>
+        <ThreadListItemPrimitive.Trigger
+          className="conversation-history__trigger"
+          title={title}
+        >
+          <MessageSquareTextIcon aria-hidden="true" />
+          <span>
+            <ThreadListItemPrimitive.Title fallback="New conversation" />
+          </span>
+        </ThreadListItemPrimitive.Trigger>
+      </DialogClose>
       <ThreadListItemPrimitive.Delete
         className="conversation-history__delete"
         aria-label={`Delete conversation: ${title}`}
@@ -475,22 +481,30 @@ function ConversationHistory() {
   const isLoading = useAuiState((state) => state.threads.isLoading);
   const threadCount = useAuiState((state) => state.threads.threadIds.length);
   return (
-    <section className="conversation-history" aria-label="Conversation history">
-      <div className="conversation-history__header">
-        <span><HistoryIcon aria-hidden="true" />History</span>
-      </div>
-      <ThreadListPrimitive.Root className="conversation-history__list">
-        <ThreadListPrimitive.Items
-          components={{ ThreadListItem: ConversationHistoryItem }}
-        />
-      </ThreadListPrimitive.Root>
-      {isLoading ? (
-        <p className="conversation-history__empty">Loading history…</p>
-      ) : null}
-      {!isLoading && threadCount === 0 ? (
-        <p className="conversation-history__empty">No saved conversations yet.</p>
-      ) : null}
-    </section>
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="desk-button">
+          <HistoryIcon aria-hidden="true" />
+          History
+        </button>
+      </DialogTrigger>
+      <DialogContent className="history-dialog" aria-describedby={undefined}>
+        <DialogTitle>Conversation history</DialogTitle>
+        <ThreadListPrimitive.Root className="conversation-history__list">
+          <ThreadListPrimitive.Items
+            components={{ ThreadListItem: ConversationHistoryItem }}
+          />
+        </ThreadListPrimitive.Root>
+        {isLoading ? (
+          <p className="conversation-history__empty">Loading history…</p>
+        ) : null}
+        {!isLoading && threadCount === 0 ? (
+          <p className="conversation-history__empty">
+            No saved conversations yet.
+          </p>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -506,33 +520,42 @@ function ThreadWithSuggestions() {
       {
         title: "Find customers",
         label: "search the Northstar demo accounts",
-        prompt: "查找名称包含 Northstar 的客户。",
+        prompt: "Find customers whose names contain Northstar.",
       },
       {
         title: "Purchase orders",
         label: "review confirmed orders to receive",
-        prompt: "列出所有已确认待收货的采购订单。",
+        prompt: "List all confirmed purchase orders awaiting receipt.",
       },
       {
         title: "Fulfillment check",
         label: "evaluate case F01",
-        prompt: "检查履约场景 F01。",
+        prompt: "Check fulfillment scenario F01.",
       },
       {
         title: "Follow-up capability",
         label: "check whether a proposal is allowed",
-        prompt: "检查本会话是否允许提出内部跟进任务；若不允许，请说明限制。",
+        prompt:
+          "Check whether this session permits internal follow-up task proposals; if not, explain the restriction.",
       },
     ]),
   });
   return (
     <AuiProvider extends={aui} config={config}>
-      <Thread />
+      <Thread autoFocus={false} />
     </AuiProvider>
   );
 }
 
 export default function Home() {
+  return (
+    <MyRuntimeProvider>
+      <Inquiry />
+    </MyRuntimeProvider>
+  );
+}
+
+function Inquiry() {
   const aui = useAui();
   const config = AuiConfig({
     tools: Tools({ toolkit }),
@@ -541,30 +564,20 @@ export default function Home() {
   return (
     <AuiProvider extends={aui} config={config}>
       <main className="ops-shell">
-        <aside className="evidence-rail" aria-label="Workspace status">
-          <div className="brand-mark">OP</div>
-          <div>
-            <p className="rail-kicker">OPERION</p>
-            <h1>Evidence desk</h1>
-          </div>
-          <div className="rail-status"><span className="status-dot" />Controlled actions</div>
-          <dl>
-            <div><dt><ShieldCheckIcon aria-hidden="true" />Access</dt><dd>Scoped</dd></div>
-            <div><dt><ArchiveIcon aria-hidden="true" />Tools</dt><dd>Server-scoped reads</dd></div>
-            <div><dt><DatabaseIcon aria-hidden="true" />Sources</dt><dd>Twenty + ERPNext</dd></div>
-          </dl>
-          <ConversationHistory />
-          <p className="rail-note">Follow-up proposals require a server-granted role. Creating an internal Task also requires separate approval and the deterministic worker.</p>
-        </aside>
-        <section className="chat-workspace" aria-label="Controlled business assistant">
+        <section
+          className="chat-workspace"
+          aria-label="Controlled business assistant"
+        >
           <header className="workspace-header">
-            <div><p>Operations / inquiry</p><h2>Ask against verified records</h2></div>
-            <nav className="workspace-nav" aria-label="Workspace">
-              <WorkspaceNavigation />
+            <h1>Inquiry</h1>
+            <div className="inquiry-controls">
+              <ConversationHistory />
               <NewThreadButton />
-            </nav>
+            </div>
           </header>
-          <div className="thread-frame"><ThreadWithSuggestions /></div>
+          <div className="thread-frame">
+            <ThreadWithSuggestions />
+          </div>
         </section>
       </main>
     </AuiProvider>

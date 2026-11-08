@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { EvidenceDeskLink, WorkspaceNavigation } from "@/components/workspace-navigation";
 
 export function ActionShell({
   eyebrow,
@@ -12,12 +11,6 @@ export function ActionShell({
 }) {
   return (
     <main className="action-page">
-      <header className="action-page__header">
-        <EvidenceDeskLink />
-        <nav aria-label="Action control">
-          <WorkspaceNavigation icons />
-        </nav>
-      </header>
       <section className="action-page__intro">
         <p>{eyebrow}</p>
         <h1>{title}</h1>

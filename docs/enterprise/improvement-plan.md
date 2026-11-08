@@ -23,7 +23,7 @@ This subsection preserves the original findings, not an unresolved defect list. 
 | Deterministic regression | 164 tests; 141 passed, 23 PostgreSQL tests skipped, no failures | Test DSN removed; skips were not passes |
 | Read-only MCP | Fifteen registered snapshot tools | Tool count was not the next success measure |
 | Agent | Historical fifteen cases × three repeats plus five complex Web/Agent scenarios | Fixed data does not establish live correctness or generalization |
-| WWI | Snapshot customer/supplier/order queries existed; new batch not fully imported | Do not describe WWI as not integrated; see [interview readiness](../interview-readiness.md) |
+| WWI | Snapshot customer/supplier/order queries existed; new batch not fully imported | Do not describe WWI as not integrated; see [demo readiness](../demo-readiness.md) |
 | E5 | Technical controls existed, actual operational evidence incomplete | Read-only prerequisites still apply; M4 writes not released |
 
 Original safe regression command:
@@ -141,13 +141,13 @@ Test the scorer with correct tools/wrong answer, wrong tools/fluent answer, nega
 
 ## 5. WWI data strategy
 
-Reuse the [first-batch selection](../../config/interview/wwi-first-batch-selection.json): sales order 66823, purchase order 2044, customer/supplier/contacts, every referenced item, and full lines. Do not truncate dependencies to increase record counts.
+Reuse the [first-batch selection](../../config/demo/wwi-first-batch-selection.json): sales order 66823, purchase order 2044, customer/supplier/contacts, every referenced item, and full lines. Do not truncate dependencies to increase record counts.
 
 Resolve before import:
 
-1. WWI orders have no currency code. USD is a dataset assumption; target company/price lists use EUR. Decide currency/conversion policy and reviewed historical exchange-rate source. Never invent rates or silently relabel currencies.
+1. All WWI demo amounts use EUR and retain their source numeric values under mapping revision v1.2. WWI order rows have no currency code.
 2. Existing stock attributes for Items 184, 193, and 204 conflict with proposed imports. Decide correct semantics and reuse/isolation without overwriting for convenience.
-3. Recheck target, permission, backup, notification, and other effects under the [WWI runbook](../../ops/interview-wwi-data.md).
+3. Recheck target, permission, backup, notification, and other effects under the [WWI runbook](../../ops/wwi-demo-data.md).
 
 Sequence: mapping/plan version → dry-run → concrete approved apply under existing rules → small import → independent identity/relation/unit/quantity/amount/native-state readback → duplicate-free rerun → corresponding live Agent cases. Preserve partial success and recovery evidence.
 

@@ -7,7 +7,7 @@ lightweight ETL pipeline provide governed facts and tools.
 The goal is to keep material business judgment with people while agents help with
 search, consolidation, recommendations, and narrowly controlled execution.
 
-Try the [order 66823 delivery investigation](contracts/delivery-investigation-v1.md): can a later invoice confirmation prove that the customer received all 48 units?
+Try the [order 66823 delivery investigation](contracts/delivery-investigation-v1.md): can a later invoice confirmation prove that the customer received all 48 units? Open the simulated Twenty complaint in the local Web demo to trace invoice 64067, the stock issue and earlier supplier receipts, then review a customer reply draft. Direct SQL investigation covers 1,197 orders across ten authorized customers. Click **66823** in the conversation to open its ERPNext sales order. The first complaint investigation links to the original Twenty Note, the customer and the verified order contact. Prices and totals use EUR throughout the demo. The versioned 30-order snapshot supports offline regression tests.
 
 ## Demo video
 
@@ -30,7 +30,7 @@ flowchart TB
   Agent -->|Python tools| Domain[Shared deterministic read services]
   MCPClient[MCP client] --> MCP[Separate stdio MCP server]
   MCP --> Domain
-  Domain --> Source[Canonical snapshot or read-only Twenty / ERPNext]
+  Domain --> Source[Canonical snapshot or read-only WWI / Twenty / ERPNext]
   Agent -->|present_answer / AnswerPlan| Evidence[EvidenceRegistry validation and deterministic rendering]
   Evidence -->|Verified final answer| Web
   Agent -->|Eligible proposal only| Ledger[(PostgreSQL action ledger)]
@@ -93,7 +93,7 @@ current worktree includes:
 - a GET-only cross-system identity reconciliation with 72/72 ERPNext and 35/35
   Twenty target identities matched;
 - deterministic customer, supplier, contact-search, sales-order, purchase-order,
-  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI interview snapshot with invoice investigation; fourteen in live mode);
+  portfolio, and fulfilment services exposed as fifteen baseline snapshot read-only MCP tools (sixteen in the WWI demo catalog with delivery investigation; fourteen in live mode);
 - a Pydantic AI / local SGLang read-only Agent with trusted server-side history,
   an AG-UI FastAPI endpoint, and an assistant-ui evidence desk;
 - a PostgreSQL-backed action control service with immutable revisions and
@@ -125,7 +125,7 @@ server-side Redis sessions, and private Web/Agent services. See the
 It uses synthetic users and public snapshots; browser and real-user pilot
 acceptance remain separate.
 
-The interview demonstration adds scoped customer/supplier search and order
+The demo adds scoped customer/supplier search and order
 listing/detail. It includes both a separate simulated dataset and a pinned,
 deterministically extracted WWI public-sample dataset at the same demonstration
 scale, while retaining the deterministic fulfilment check and its 15 fixed
@@ -147,8 +147,9 @@ use cases and expected answers
 
 ## Documentation
 
-The repository maintains one English documentation set. Supported application
-answer languages and multilingual evaluation fixtures are unchanged.
+Documentation, built-in UI text, prompts, and evaluation fixtures are maintained
+in English. Structured answers accept only `AnswerPlan.language = "en"`.
+Source values and quoted user statements remain escaped data without translation.
 
 - [Architecture decision and development boundaries](docs/architecture/adr-001-deterministic-agent.md)
 - [Agent / MCP capability boundaries](docs/agent-boundaries.md)
@@ -160,12 +161,13 @@ answer languages and multilingual evaluation fixtures are unchanged.
 - [Agent API](contracts/e2-agent-api-v1.md), [action control](contracts/e3-action-control-v1.md), [follow-up Task](contracts/e4-followup-task-v1.md), and [enterprise boundary](contracts/e5-enterprise-boundary-v1.md) contracts.
 - [Agent](ops/e2-agent.md), [actions](ops/e3-action-control.md), [follow-up Task](ops/e4-followup-task.md), and [single-operator pilot](ops/e5-enterprise-pilot.md) runbooks.
 - [Gateway](ops/auth-gateway.md), [telemetry](docs/enterprise/opentelemetry-langfuse-runbook.md), [navigation access](docs/enterprise/navigation-access.md), and [session-expiry login](docs/enterprise/session-expiry-login.md).
-- [Data storage](data/README.md), [simulated demo data](ops/interview-demo-data.md), and [WWI interview data](ops/interview-wwi-data.md).
+- [WWI demo walkthrough](docs/wwi-demo-walkthrough.md) · [German presentation script](docs/wwi-demo-walkthrough-de.md) · [Demo readiness](docs/demo-readiness.md).
+- [Data storage](data/README.md), [simulated demo data](ops/demo-data.md), and [WWI demo data](ops/wwi-demo-data.md).
 
 Current implementation also includes server-owned ambiguity selection, cross-turn
 candidate validation, and content-free budget diagnostics. The default run allows
 six business calls and eight model requests, with a 60-second deadline. Gateway
-and interview profiles explicitly override some limits; see the Agent API and
+and demo profiles explicitly override some limits; see the Agent API and
 profile configuration. Implementation, historical acceptance, and operational
 release are separate states: E5 actual-user observation, operational evidence,
 and real-data writes remain unapproved.
@@ -216,10 +218,14 @@ PYTHONPATH=src python3 -m operion_etl run \
 Run the reproducible verification entry point with the checked-in uv and npm lockfiles:
 
 - scripts/verify.sh setup: install locked Python and Web dependencies.
+- scripts/verify.sh english: reject Han characters in maintained text and file names.
 - scripts/verify.sh offline: Python lint and offline tests.
 - scripts/verify.sh web: Web type check and production build.
 
 Offline tests use public sample inputs in tests/fixtures and need no restored WWI database. PostgreSQL action tests are a separate destructive group: run `scripts/verify.sh postgres` with Docker available. The runner creates and cleans up its own isolated container and ignores inherited database URLs. Direct destructive tests without runner ownership are rejected; skipped integration tests fail the runner. Use `scripts/verify.sh case` for JSON/JUnit/HTML developer evidence and per-case reruns. CI runs both groups and the Web build. The Web check uses Next.js webpack mode.
+
+The [CI/CD runbook](ops/ci-cd.md) describes repository policy checks, verified GHCR
+images, and manually triggered deployment to the existing observed gateway.
 
 Run the deterministic test suite with:
 

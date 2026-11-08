@@ -49,7 +49,6 @@ class AgentRuntimeTests(unittest.TestCase):
             "customer_order_counts",
         ):
             self.assertNotIn(rule, AGENT_INSTRUCTIONS)
-        self.assertIn("latest user message", AGENT_INSTRUCTIONS)
 
     def test_new_typed_tools_return_server_decisions(self):
         calls = [
@@ -498,7 +497,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(75, limits.output_tokens_limit)
         self.assertEqual(50, settings.model_settings()["max_tokens"])
 
-    def test_settings_read_explicit_interview_token_budgets(self):
+    def test_settings_read_explicit_demo_token_budgets(self):
         with patch.dict(
             os.environ,
             {

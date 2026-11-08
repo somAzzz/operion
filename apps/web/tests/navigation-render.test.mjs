@@ -36,6 +36,13 @@ before(async () => {
         return;
       }
       response.end(JSON.stringify({ roles: identities[user] }));
+    } else if (path === "/api/orders/66823/records" && request.url.endsWith("?erp_only=true")) {
+      const sales_order = user === "reader" ? { status: "verified", id: "SO 16" } : { status: "no_match" };
+      response.end(JSON.stringify({ sales_order }));
+    } else if (path === "/api/orders/66823/records") {
+      response.end(JSON.stringify({ person: {
+        status: "verified", id: "00000000-0000-4000-a000-000000000001", label: "Order contact",
+      } }));
     } else if (path === "/api/actions") {
       response.end(JSON.stringify({ actions: [] }));
     } else {
@@ -50,6 +57,8 @@ before(async () => {
       ...process.env, HOSTNAME: "127.0.0.1", PORT: "34567", NODE_ENV: "production",
       OPERION_ENVIRONMENT: "enterprise", OPERION_OTEL_ENABLED: "0",
       OPERION_PUBLIC_ORIGIN: "https://operion.localhost:8443",
+      OPERION_TWENTY_WEB_URL: "https://crm.example.test",
+      OPERION_ERPNEXT_WEB_URL: "https://erp.example.test",
       OPERION_AGENT_URL: `${backend}/agent`, OPERION_ACTION_URL: backend,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -89,6 +98,20 @@ async function page(user, path = "/") {
   return { status: response.status, html, hrefs: [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]) };
 }
 
+test("anonymous login renders English and preserves the fixed return target", async () => {
+  for (const expired of [false, true]) {
+    const response = await fetch(`${origin}/login${expired ? "?reason=session_expired" : ""}`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.ok(html.includes('<main class="login-page" lang="en">'));
+    assert.ok(html.includes(expired ? "Sign in to Operion again" : "Sign in to Operion"));
+    assert.equal(html.includes("Your session has expired or is no longer valid."), expired);
+    assert.ok(html.includes('action="/oauth2/start"'));
+    assert.ok(html.includes('name="rd" value="/"'));
+    assert.ok(!html.includes("Message input"));
+  }
+});
+
 test("SSR and hydration input omit action anchors for agent and proposer roles", async () => {
   for (const role of ["agent", "proposer"]) {
     const result = await page(role);
@@ -96,6 +119,19 @@ test("SSR and hydration input omit action anchors for agent and proposer roles",
     assert.ok(!result.hrefs.includes("/actions"));
     assert.ok(!result.hrefs.includes("/approvals"));
     assert.ok(result.html.includes("New inquiry"));
+  }
+});
+
+test("shared navigation links directly to complaints and identifies the active workspace", async () => {
+  for (const path of ["/", "/complaints", "/actions", "/approvals"]) {
+    const result = await page("reader", path);
+    assert.equal(result.status, 200);
+    const nav = result.html.match(/<nav aria-label="Workspace">([\s\S]*?)<\/nav>/)?.[1] ?? "";
+    const links = [...nav.matchAll(/<a\b[^>]*>/g)].map(([tag]) => tag);
+    assert.ok(links.some(tag => tag.includes('href="/complaints"')));
+    const active = links.filter(tag => tag.includes('aria-current="page"'));
+    assert.equal(active.length, 1);
+    assert.ok(active[0].includes(`href="${path}"`));
   }
 });
 
@@ -114,6 +150,7 @@ test("action-only users do not receive a forbidden Evidence desk link", async ()
   const result = await page("action-only", "/actions");
   assert.equal(result.status, 200);
   assert.ok(!result.hrefs.includes("/"));
+  assert.ok(!result.hrefs.includes("/complaints"));
   assert.ok(result.hrefs.includes("/actions"));
 });
 
@@ -135,4 +172,29 @@ test("existing page guards still reject direct and RSC requests without roles", 
   for (const path of ["/actions", "/approvals", "/actions?_rsc=nav-regression"]) {
     assert.equal((await page("agent", path)).status, 403, path);
   }
+});
+
+test("inline order numbers open the verified native ERPNext form for the current user", async () => {
+  const path = "/orders/66823?open=erpnext";
+  const response = await fetch(origin + path, {
+    headers: { "X-Forwarded-Access-Token": "nav-test-reader" }, redirect: "manual",
+  });
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("location"), "https://erp.example.test/desk/sales-order/SO%2016");
+  const missing = await page("agent", path);
+  assert.ok(missing.html.includes("No matching ERPNext order"));
+  assert.ok(!missing.html.includes("erp.example.test"));
+  assert.equal((await page("action-only", path)).status, 403);
+});
+
+test("CRM deep links recheck the exact record and the current reader", async () => {
+  const id = "00000000-0000-4000-a000-000000000001";
+  const path = "/orders/66823?open=person&record=";
+  const response = await fetch(origin + path + id, {
+    headers: { "X-Forwarded-Access-Token": "nav-test-reader" }, redirect: "manual",
+  });
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("location"), "https://crm.example.test/object/person/" + id);
+  assert.ok((await page("reader", path + id.replace(/1$/, "2"))).html.includes("This CRM link could not be opened"));
+  assert.equal((await page("action-only", path + id)).status, 403);
 });

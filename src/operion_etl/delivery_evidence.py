@@ -1,13 +1,17 @@
-"""Frozen WWI invoice observations; no live delivery or line receipt semantics."""
+"""WWI delivery observations and order-scoped investigation cards."""
 
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+from . import complaint
 
 
 class Invoice(BaseModel):
@@ -27,7 +31,7 @@ class OrderInvoices(BaseModel):
 
 
 class Slice(BaseModel):
-    snapshot_id: Literal["interview-wwi-delivery-v1"]
+    snapshot_id: Literal["demo-wwi-delivery-v1", "interview-wwi-delivery-v1"]
     extracted_at: AwareDatetime
     orders_sha256: str
     orders: dict[str, OrderInvoices]
@@ -46,19 +50,46 @@ def investigate(directory: Path, detail: dict) -> dict:
     order = detail["order"]
     subject = order["canonical_id"]
     entry = snapshot.orders[subject]
-    owner = order["customer_id"]
     if len(entry.invoices) != entry.linked_invoice_count:
         raise ValueError("incomplete invoice slice")
-    if entry.customer_id != owner:
+    if entry.customer_id != order["customer_id"]:
         raise ValueError("order customer mismatch")
-    expected = date.fromisoformat(order["expected_delivery_date"])
-    invoices = []
     invoice_ids = [
         i.invoice_id for group in snapshot.orders.values() for i in group.invoices
     ]
     if len(invoice_ids) != len(set(invoice_ids)):
         raise ValueError("non-unique source invoice ID")
-    for i in entry.invoices:
+    return build_investigation(
+        subject,
+        order["customer_id"],
+        order["expected_delivery_date"],
+        detail["lines"],
+        entry.invoices,
+        {
+            "snapshot_id": snapshot.snapshot_id,
+            "extracted_at": snapshot.extracted_at.isoformat(),
+            "data_mode": "snapshot",
+            "business_date": detail["business_date"],
+            "source_observed_at": detail["source_observed_at"],
+            "completeness": {
+                "status": "complete",
+                "scope": "linked_invoices_in_pinned_snapshot",
+            },
+        },
+    )
+
+
+def build_investigation(
+    subject: str,
+    owner: str,
+    expected_date: str,
+    lines: list,
+    linked_invoices: list[Invoice],
+    metadata: dict,
+) -> dict:
+    expected = date.fromisoformat(expected_date)
+    invoices = []
+    for i in linked_invoices:
         if (
             subject != f"wwi:sales_order:{i.invoice_order_id}"
             or owner != f"wwi:organization:customer:{i.invoice_customer_id}"
@@ -101,71 +132,122 @@ def investigate(directory: Path, detail: dict) -> dict:
                 k: r[k]
                 for k in ("canonical_id", "ordered_quantity", "picked_quantity", "uom")
             }
-            for r in detail["lines"]
+            for r in lines
         ],
         "line_receipt": "not_evidenced",
         "carrier_responsibility": "not_evidenced",
         "next_step": "verify_line_level_receipt",
-        "snapshot_id": snapshot.snapshot_id,
-        "extracted_at": snapshot.extracted_at.isoformat(),
-        "data_mode": "snapshot",
-        "business_date": detail["business_date"],
-        "source_observed_at": detail["source_observed_at"],
-        "completeness": {
-            "status": "complete",
-            "scope": "linked_invoices_in_pinned_snapshot",
-        },
+        **metadata,
     }
 
 
-def card_rows(data: dict, request: str) -> list[tuple[str, str]]:
+def date_comparison_requested(request: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:compar\w*|difference|how many days|on time|early|late)\b",
+            request,
+            re.I,
+        )
+        and re.search(r"\b(?:dates?|expected|scheduled)\b", request, re.I)
+        and not re.search(
+            r"\b(?:quantity|units?|items?|receiv\w*|stock|warehouse|supplier|purchase|draft|reply|complaint)\b",
+            request,
+            re.I,
+        )
+    )
+
+
+def _reported_nonreceipt_on(note: dict, expected: date) -> bool:
+    day = f"{expected:%B} {expected.day}"
+    return bool(
+        re.match(
+            rf"^(?:Our warehouse reported that nothing arrived|We received nothing) on {day}(?:,? {expected.year})?[.]",
+            note["claim"],
+            re.I,
+        )
+    )
+
+
+def card_rows(
+    data: dict, request: str, record_links: dict | None = None
+) -> list[tuple[str]]:
     rows = []
-    if request:
+    note = data.get("complaint")
+    dates_only = not note and date_comparison_requested(request)
+    if note:
+        rows.extend(complaint.evidence_rows(note))
+    else:
+        reported = re.search(r"\bcustomer reports? ([^.!?]+)", request, re.I)
+        if reported:
+            rows.append((f"Reported customer statement (unverified): {reported[1]}.",))
+    crm = {} if dates_only else data.get("crm", {})
+    if crm.get("status") == "mapped" and not note:
+        contact_status = crm.get("order_contact", {}).get("status")
+        if contact_status == "verified":
+            contact_text = "Order contact verified."
+        elif contact_status == "unavailable":
+            contact_text = "Order contact lookup unavailable."
+        elif crm["has_linked_person"]:
+            contact_text = "Order contact pending confirmation."
+        else:
+            contact_text = "Contact pending confirmation (no linked Twenty Person)."
+        rows.append((f"Twenty company: {crm['company']}. {contact_text}",))
+    elif crm.get("status") == "no_crm_mapping":
         rows.append(
             (
-                f"User statement / request (unverified): {request}",
-                f"用户陈述或问题（未核实）：{request}",
+                "No matching Twenty company for this WWI customer. Contact pending confirmation.",
+            )
+        )
+    elif crm.get("status") == "source_unavailable":
+        rows.append(
+            (
+                "CRM context unavailable. Customer mapping and contact could not be verified.",
             )
         )
     order, expected = data["order_id"], data["expected_date"]
-    rows.append(
-        (
-            f"Order {order}; expected date {expected}.",
-            f"订单 {order}；预计日期 {expected}。",
-        )
-    )
+    rows.append((f"Order {order}; expected date {expected}.",))
     if not data["invoices"]:
         rows.append(
-            ("No linked invoice in this WWI slice.", "本 WWI 切片中未找到关联发票。")
+            (
+                "No linked invoice returned by WWI SQL Server."
+                if data["data_mode"] == "live"
+                else "No linked invoice in this WWI slice.",
+            )
         )
     for i in data["invoices"]:
         ref, ts = i["source_record_id"], i["confirmed_at"]
-        kind = (
-            ("Credit note", "贷项通知单")
-            if i["credit_note"]
-            else ("Invoice", "普通发票")
-        )
-        rows.append(
-            (
-                f"{kind[0]} {ref}: recorded confirmation: {ts or 'not available'}.",
-                f"{kind[1]} {ref}：记录的确认时间：{ts or '无可用记录'}。",
-            )
-        )
+        kind = "Credit note" if i["credit_note"] else "Invoice"
+        if record_links is not None and data["data_mode"] == "live":
+            record_links[len(rows)] = ("invoice", i["invoice_id"])
+        rows.append((f"{kind} {ref}: recorded confirmation: {ts or 'not available'}.",))
         days = i["calendar_days_from_expected"]
         if days is not None:
-            relation = (
-                ("after", "晚于")
-                if days > 0
-                else ("before", "早于")
-                if days < 0
-                else ("on", "等于")
-            )
+            relation = "after" if days > 0 else "before" if days < 0 else "on"
+            if dates_only:
+                rows[-1] = (
+                    f"{kind} {ref}: confirmation recorded at {ts}, {relation} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
+                )
+                continue
             rows.append(
                 (
-                    f"{ref}: confirmation date {relation[0]} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
-                    f"{ref}：确认日期{relation[1]}预计日期（相差 {abs(days)} 个日历日）。",
+                    f"{ref}: confirmation date {relation} expected date ({abs(days)} calendar {'day' if abs(days) == 1 else 'days'}).",
                 )
             )
+    linked = {str(i["invoice_id"]) for i in data["invoices"]}
+    cited = re.findall(r"\binvoice\s+(?:number\s+)?#?([0-9]+)\b", request, re.I)
+    for invoice_id in sorted(set(cited) - linked):
+        rows.append(
+            (
+                f"Invoice {invoice_id} is absent from the linked invoices for this order and cannot support this investigation.",
+            )
+        )
+    observed = (
+        f"WWI SQL Server query time (UTC): {data['queried_at']}."
+        if data["data_mode"] == "live"
+        else f"Historical WWI snapshot {data['snapshot_id']}; extracted {data['extracted_at']}."
+    )
+    if dates_only:
+        return [*rows, ("Actual arrival time is unknown.",), (observed,)]
     for line in data["lines"]:
         ident, qty, picked, unit = (
             line[k]
@@ -173,24 +255,56 @@ def card_rows(data: dict, request: str) -> list[tuple[str, str]]:
         )
         rows.append(
             (
-                f"{ident}: ordered {qty} {unit}; picked {picked or 'unknown'} {unit}.",
-                f"{ident}：订购 {qty} {unit}；已拣 {picked or '未知'} {unit}。",
+                f"{ident}: ordered {qty} {unit}; picked {picked if picked is not None and picked != '' else 'unknown'} {unit}.",
             )
         )
-    rows.extend(
-        [
+    for issue in data.get("issues", []):
+        if record_links is not None and data["data_mode"] == "live":
+            record_links[len(rows)] = ("issue", issue["issue_id"])
+        rows.append(
             (
-                "Not established: actual arrival, quantity received per line, or carrier responsibility. A later confirmation does not disprove a report of non-receipt on the expected date.",
-                "尚未证实：实际到货时刻、各行实收数量及承运商责任。较晚的确认记录不能否定客户关于预计日期未收到货的陈述。",
-            ),
+                f"Stock issue {issue['issue_id']} · invoice {issue['invoice_id']} · item {issue['stock_item_id']}: warehouse posted {abs(Decimal(issue['quantity'])).normalize():f} units out at {issue['issued_at']}.",
+            )
+        )
+    if data.get("issues"):
+        rows.append(
             (
-                "Next: verify the itemized receipt or warehouse discrepancy record before replying.",
-                "下一步：回复前核对逐行签收或仓库收货差异记录。",
-            ),
-            (
-                f"Historical WWI snapshot {data['snapshot_id']}; extracted {data['extracted_at']}.",
-                f"历史 WWI 切片 {data['snapshot_id']}；抽取时间 {data['extracted_at']}。",
-            ),
-        ]
+                "Purchase source unverified. See the stock issue for prior receipts of the same item. A lot allocation or reservation linking receipt to issue is required to identify the source.",
+            )
+        )
+    rows.append(
+        (
+            "Not established: actual arrival, quantity received per line, or carrier responsibility.",
+        )
     )
+    if note and _reported_nonreceipt_on(note, date.fromisoformat(expected)):
+        for invoice in data["invoices"]:
+            if (invoice["calendar_days_from_expected"] or 0) > 0:
+                confirmed = invoice["confirmed_at"][:10]
+                rows.append(
+                    (
+                        f"The customer reports non-receipt on {expected}. Invoice {invoice['invoice_id']} records confirmation on {confirmed}. These observations concern different dates and can both be true.",
+                    )
+                )
+    rows.append(("Next: verify the itemized receipt or warehouse discrepancy record.",))
+    rows.append((observed,))
+    if note:
+        confirmations = [
+            i for i in data["invoices"] if i["confirmed_at"] and not i["credit_note"]
+        ]
+        draft = [
+            "Thank you for letting us know. We checked the records for your order.",
+        ]
+        for issue in data["issues"]:
+            draft.append(
+                f"Our warehouse recorded {abs(Decimal(issue['quantity'])).normalize():f} units of item {issue['stock_item_id']} as issued on {issue['issued_at'][:10]}."
+            )
+        for invoice in confirmations:
+            draft.append(
+                f"The delivery confirmation in our system is dated {invoice['confirmed_at'][:10]}."
+            )
+        draft.append(
+            "We cannot yet confirm how many units your warehouse received. We will check the itemized receipt with our warehouse team."
+        )
+        rows.append((" ".join(draft),))
     return rows

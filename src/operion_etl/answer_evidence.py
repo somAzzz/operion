@@ -13,10 +13,11 @@ import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import complaint
 from .answer_presentation import (
     COVERAGE_LABELS,
     DEFAULT_COLUMNS,
@@ -26,7 +27,7 @@ from .answer_presentation import (
     escape_cell,
     label,
 )
-from .delivery_evidence import card_rows
+from .delivery_evidence import card_rows, date_comparison_requested
 from .read_tools import AccessScope
 
 
@@ -49,7 +50,7 @@ class AnswerPlan(ClosedModel):
     scope and pagination warnings render automatically.
     """
 
-    language: Literal["en", "zh"]
+    language: Literal["en"]
     facts: list[str] = Field(default_factory=list, max_length=40)
     tables: list[TableSelection] = Field(default_factory=list, max_length=8)
     notice: Literal["none", "needs_details", "unsupported"] = "none"
@@ -90,11 +91,42 @@ class EvidenceTable:
     pointer: str
     context: EvidenceContext
 
+    crm_links: tuple[tuple[str, str, str], ...] = ()
+    record_links: tuple[tuple[int, str, int], ...] = ()
+    has_reply_draft: bool = False
+
 
 class EvidenceError(ValueError):
     def __init__(self, code: str, reference: str = ""):
         self.code, self.reference = code, reference
         super().__init__(code)
+
+
+def _crm_links(data: dict) -> tuple[tuple[str, str, str], ...]:
+    crm = data.get("crm", {})
+    if crm.get("status") != "mapped":
+        return ()
+    if crm["customer_id"] != data["customer_id"]:
+        raise EvidenceError("CRM_CUSTOMER_SCOPE_MISMATCH")
+    links = [("company", "Customer: " + crm["company"], crm["company_id"])]
+    note = data.get("complaint")
+    if note:
+        if (
+            data["order_id"] != f"wwi:sales_order:{note['order_id']}"
+            or note["company_id"] != crm["company_id"]
+            or data["customer_id"] != note["customer_id"]
+        ):
+            raise EvidenceError("COMPLAINT_SCOPE_MISMATCH")
+        links.insert(0, ("note", "Complaint note", note["note_id"]))
+    person = crm.get("order_contact", {})
+    if person.get("status") == "verified":
+        links.append(("person", "Order contact: " + person["label"], person["id"]))
+    try:
+        return tuple(
+            (kind, label, str(UUID(record_id))) for kind, label, record_id in links
+        )
+    except ValueError as exc:
+        raise EvidenceError("INVALID_CRM_REFERENCE") from exc
 
 
 # Each adapter is tied to a server tool and a versioned domain result, not to
@@ -112,6 +144,7 @@ CONTRACTS = {
     "get_contact_by_name": {"contact-detail-v1"},
     "list_sales_orders": {"sales-order-list-v1"},
     "list_purchase_orders": {"purchase-order-list-v1"},
+    "get_complaint_context": {"complaint-context-v1"},
     "get_order_delivery_evidence": {"delivery-investigation-v1"},
     "get_sales_order": {"sales-order-detail-v1"},
     "get_purchase_order": {"purchase-order-detail-v1"},
@@ -182,26 +215,16 @@ ERROR_CODES = {
     "proposal_unavailable": "unavailable",
 }
 STATUS_TEXT = {
-    "ambiguous": (
-        "Several records match. Choose a returned canonical ID.",
-        "匹配到多个记录，请选择返回的规范 ID。",
+    "ambiguous": "Several records match. Choose a returned canonical ID.",
+    "denied": "Access to the requested operation or record is denied.",
+    "unavailable": "The source is unavailable; the result is unknown, not zero.",
+    "wwi_delivery_query_failed": (
+        "Operion could not query WWI SQL Server for delivery evidence this time. "
+        "Whether a linked invoice or delivery confirmation exists is unknown. "
+        "Please retry when WWI is available."
     ),
-    "denied": (
-        "Access to the requested operation or record is denied.",
-        "没有访问所请求操作或记录的权限。",
-    ),
-    "unavailable": (
-        "The source is unavailable; the result is unknown, not zero.",
-        "来源不可用，结果未知，不能视为零。",
-    ),
-    "not_found": (
-        "No matching record was found in the authorized scope.",
-        "授权范围内没有找到匹配记录。",
-    ),
-    "invalid": (
-        "More precise input is required for this lookup.",
-        "查询需要更准确的输入。",
-    ),
+    "not_found": "No matching record was found in the authorized scope.",
+    "invalid": "More precise input is required for this lookup.",
 }
 
 
@@ -214,27 +237,54 @@ class EvidenceRegistry:
         tenant_id: str = "",
         user_id: str = "",
         user_request: str = "",
+        prior_note: dict | None = None,
         delivery_order_ids: set[str] | frozenset[str] = frozenset(),
     ):
         self.user_request = user_request
+        sales_request = re.sub(
+            r"\b(?:purchase\s+order|po|invoice)\s*(?:number|no\.?)?\s*[:#]?\s*[0-9]+\b",
+            "",
+            complaint.NOTE_REF.sub("", user_request),
+            flags=re.I,
+        )
         mentioned = set(
             re.findall(
-                r"(?:wwi:sales_order:|\border(?:\s+(?:number|no\.?)\b)?\s*[:#]?\s*|订单(?:号(?:为|是)?)?[：:#\s]*)([0-9]+)(?![0-9])",
-                user_request,
+                r"(?:wwi:sales_order:|\border(?:\s+(?:number|no\.?)\b)?\s*[:#]?\s*)([0-9]+)(?![0-9])",
+                sales_request,
                 re.I,
             )
         )
-        # A labelled secondary order must not override a bare primary order number.
+        # A labelled secondary order must not override a bare primary order number
         other_ids = (
-            delivery_order_ids.intersection(re.findall(r"[0-9]+", user_request))
-            - mentioned
-        )
+            delivery_order_ids.intersection(re.findall(r"[0-9]+", sales_request))
+            | set(
+                re.findall(
+                    r"(?:^|\b(?:look up|investigate|review|check)\s+)#?([0-9]+)\b",
+                    sales_request,
+                    re.I,
+                )
+            )
+        ) - mentioned
         self.delivery_target = (
             f"wwi:sales_order:{next(iter(mentioned))}"
             if len(mentioned) == 1 and not other_ids
             else None
         )
 
+        refs = complaint.NOTE_REF.findall(user_request.lower())
+        self.requested_notes = set(refs)
+        self.note = None
+        self.ambiguous_order = bool(
+            (mentioned or other_ids) and self.delivery_target is None
+        )
+        if prior_note and not refs and scope.allows_customer(prior_note["customer_id"]):
+            subject = f"wwi:sales_order:{prior_note['order_id']}"
+            self.note = prior_note
+            self.delivery_target = (
+                subject
+                if not self.ambiguous_order and self.delivery_target in (None, subject)
+                else None
+            )
         self.delivery_calls: dict[int, str] = {}
         self.scope = scope
         self.run_id = run_id or uuid4().hex
@@ -392,7 +442,7 @@ class EvidenceRegistry:
                         value, row.get("currency"), f"{pointer}/{index}/{key}"
                     )
                 if value is None or value == "":
-                    value = "unknown / 未知"
+                    value = "unknown"
                 if not isinstance(value, (str, int)) or isinstance(value, bool):
                     raise EvidenceError("INVALID_SCALAR", f"{pointer}/{index}/{key}")
                 if key == "order_count" and (type(value) is not int or value < 0):
@@ -467,6 +517,12 @@ class EvidenceRegistry:
             if payload.get("ok") is not True:
                 code = payload.get("error", {}).get("code", "")
                 status = ERROR_CODES.get(code, "unavailable")
+                if (
+                    tool == "get_order_delivery_evidence"
+                    and code == "source_unavailable"
+                    and payload["error"].get("source") == "wwi_sqlserver"
+                ):
+                    status = "wwi_delivery_query_failed"
                 self.statuses.append((ctx, status))
                 candidates = payload.get("error", {}).get("candidates", [])
                 if status == "ambiguous":
@@ -567,8 +623,39 @@ class EvidenceRegistry:
     def _domain(
         self, ctx: EvidenceContext, tool: str, data: dict[str, Any], path: str = "/data"
     ) -> None:
+        if tool == "get_complaint_context":
+            self._authorized(data)
+            target = f"wwi:sales_order:{data['order_id']}"
+            if (
+                self.requested_notes != {data["note_id"]}
+                or self.ambiguous_order
+                or self.delivery_target not in (None, target)
+            ):
+                raise EvidenceError("COMPLAINT_SCOPE_MISMATCH")
+            ref = self._id("t")
+            self.tables[ref] = EvidenceTable(
+                ref,
+                "complaint context",
+                ("en",),
+                tuple(complaint.evidence_rows(data)),
+                path,
+                ctx,
+            )
+            self.note = data
+            self.delivery_target = target
+            return
         if tool == "get_order_delivery_evidence":
             self._authorized(data)
+            if data.get("issues") and data.get("stock_allocation") != "not_evidenced":
+                raise EvidenceError("UNVERIFIED_STOCK_ALLOCATION")
+            if data.get("complaint") != self.note or (
+                self.note
+                and (
+                    data["customer_id"] != self.note["customer_id"]
+                    or data["order_id"] != self.delivery_target
+                )
+            ):
+                raise EvidenceError("COMPLAINT_SCOPE_MISMATCH")
             subject = data["order_id"]
             for index, invoice in enumerate(data["invoices"]):
                 if (
@@ -588,13 +675,19 @@ class EvidenceRegistry:
                     "entity",
                 )
             ref = self._id("t")
+            record_links = {}
             self.tables[ref] = EvidenceTable(
                 ref,
                 "delivery investigation",
-                ("en", "zh"),
-                tuple(card_rows(data, self.user_request)),
+                ("en",),
+                tuple(card_rows(data, self.user_request, record_links)),
                 path,
                 ctx,
+                ()
+                if not self.note and date_comparison_requested(self.user_request)
+                else _crm_links(data),
+                tuple((index, *link) for index, link in record_links.items()),
+                has_reply_draft=bool(data.get("complaint")),
             )
             return
         if tool == "get_customer_order_context":
@@ -802,6 +895,21 @@ class EvidenceRegistry:
                     "snapshot_scenario_only",
                 )
 
+    def only_wwi_delivery_query_failed(self) -> bool:
+        return (
+            self.delivery_target is not None
+            and self.call_count > 0
+            and bool(self.statuses)
+            and len(self.statuses)
+            + sum(t.kind == "complaint context" for t in self.tables.values())
+            == self.call_count
+            and all(
+                status == "wwi_delivery_query_failed"
+                and self.delivery_calls.get(ctx.call_index) == self.delivery_target
+                for ctx, status in self.statuses
+            )
+        )
+
     def validate(self, plan: AnswerPlan) -> None:
         if not isinstance(plan, AnswerPlan):
             raise EvidenceError("STRUCTURED_ANSWER_REQUIRED")
@@ -861,6 +969,18 @@ class EvidenceRegistry:
             ) != len(selection.columns):
                 raise EvidenceError("TABLE_COLUMN_UNVERIFIED", selection.table_id)
 
+        if self.requested_notes and not self.delivery_calls:
+            if not self.statuses and not any(
+                self.tables[t.table_id].kind == "complaint context" for t in plan.tables
+            ):
+                raise EvidenceError("COMPLAINT_CONTEXT_REQUIRED")
+            for selection in plan.tables:
+                table = self.tables[selection.table_id]
+                if selection.columns and (
+                    table.kind != "complaint context"
+                    or tuple(selection.columns) != table.columns
+                ):
+                    raise EvidenceError("COMPLAINT_PROJECTION_DENIED")
         if self.delivery_calls:
             selected = [self.facts[ref] for ref in plan.facts] + [
                 self.tables[t.table_id] for t in plan.tables
@@ -874,6 +994,12 @@ class EvidenceRegistry:
             ):
                 raise EvidenceError("DELIVERY_ORDER_MISMATCH")
             for item in selected:
+                if (
+                    isinstance(item, EvidenceTable)
+                    and item.kind == "complaint context"
+                    and self.note
+                ):
+                    continue
                 if (
                     self.delivery_calls.get(item.context.call_index)
                     != self.delivery_target
@@ -925,12 +1051,42 @@ class EvidenceRegistry:
         self.validate(plan)
         return {
             "contract": "verified-answer-v1",
+            **(
+                {"complaint_context": self.note}
+                if self.note
+                and (
+                    self.delivery_calls
+                    or any(
+                        self.tables[t.table_id].kind == "complaint context"
+                        for t in plan.tables
+                    )
+                )
+                else {}
+            ),
+            "delivery_unavailable": self.only_wwi_delivery_query_failed(),
             "plan": plan.model_dump(mode="json"),
             "facts": [asdict(self.facts[ref]) for ref in plan.facts],
             "tables": [
                 {
                     "id": table.id,
                     "kind": table.kind,
+                    **(
+                        {
+                            "reply_review": {
+                                "draft": table.rows[-1][0],
+                                "records": [
+                                    {
+                                        "kind": kind,
+                                        "id": record_id,
+                                        "detail": table.rows[index][0],
+                                    }
+                                    for index, kind, record_id in table.record_links
+                                ],
+                            }
+                        }
+                        if table.has_reply_draft
+                        else {}
+                    ),
                     "pointer": table.pointer,
                     "context": asdict(table.context),
                     "rows": [
@@ -946,37 +1102,59 @@ class EvidenceRegistry:
             ],
         }
 
+    def _card_markdown(self, rows, order=None, record_links=()) -> str:
+        lines = [escape_cell(row[0]) for row in rows]
+        for index, kind, record_id in record_links:
+            label = (
+                f"Sales.Invoices:{record_id}" if kind == "invoice" else str(record_id)
+            )
+            lines[index] = lines[index].replace(
+                label, f"[{record_id}](/orders/{order}/evidence/{kind}/{record_id})", 1
+            )
+        if self.note:
+            note_id = str(UUID(self.note["note_id"]))
+            base = f"/orders/{self.note['order_id']}"
+            lines[0] = lines[0].replace(
+                note_id, f"[{note_id}]({base}?open=note&record={note_id})", 1
+            )
+            company = escape_cell(self.note["company"])
+            company_id = str(UUID(self.note["company_id"]))
+            suffix = f"Company: {company}."
+            if lines[1].endswith(suffix):
+                lines[1] = (
+                    lines[1].removesuffix(suffix)
+                    + f"Company: [{company}]({base}?open=company&record={company_id}&note={note_id})."
+                )
+            sender = self.note["sender"]
+            if sender["status"] == "verified":
+                person = str(UUID(sender["id"]))
+                name = escape_cell(sender["name"])
+                prefix = f"CRM sender: {name} "
+                if lines[1].startswith(prefix):
+                    lines[1] = (
+                        f"CRM sender: [{name}]({base}?open=sender&record={person}&note={note_id}) "
+                        + lines[1][len(prefix) :]
+                    )
+        return "\n".join("- " + line for line in lines)
+
     def render(self, plan: AnswerPlan) -> str:
         self.validate(plan)
-        zh = plan.language == "zh"
         parts: list[str] = []
         contexts: dict[int, EvidenceContext] = {}
         if plan.notice == "needs_details" and plan.tables:
             mode = self.clarifications[plan.tables[0].table_id]
             parts.append(
-                (
-                    "More matches exist. Narrow the name before choosing a record."
-                    if not zh
-                    else "还有更多匹配记录。请缩小名称范围后再选择。"
-                )
+                "More matches exist. Narrow the name before choosing a record."
                 if mode == "needs_refinement"
                 else (
                     "Please choose the intended record by replying with its canonical ID from these matches."
-                    if not zh
-                    else "请回复匹配记录中要查询的规范 ID。"
                 )
             )
         elif plan.notice != "none":
             return {
-                "needs_details": (
-                    "Please specify a customer, supplier, order, or scenario to look up.",
-                    "请提供要查询的客户、供应商、订单或场景。",
-                ),
-                "unsupported": (
-                    "This assistant supports authorized business lookups and follow-up proposals.",
-                    "此助手支持授权范围内的业务查询和跟进提案。",
-                ),
-            }[plan.notice][zh]
+                "needs_details": "Please specify a customer, supplier, order, or scenario to look up.",
+                "unsupported": "This assistant supports authorized business lookups and follow-up proposals.",
+            }[plan.notice]
         for ref in plan.facts:
             fact = self.facts[ref]
             contexts[fact.context.call_index] = fact.context
@@ -985,24 +1163,60 @@ class EvidenceRegistry:
                 if fact.entity == "authorized scope"
                 else escape_cell(fact.entity) + " — "
             )
-            coverage = COVERAGE_LABELS[fact.coverage][zh]
+            coverage = COVERAGE_LABELS[fact.coverage]
             parts.append(
-                f"{entity}{label(fact.field, plan.language)} ({coverage}): **{escape_cell(fact.value)}{(' ' + escape_cell(fact.currency)) if fact.currency else ''}**. [E{fact.context.call_index}]"
+                f"{entity}{label(fact.field)} ({coverage}): **{escape_cell(fact.value)}{(' ' + escape_cell(fact.currency)) if fact.currency else ''}**. [E{fact.context.call_index}]"
             )
         for selection in plan.tables:
             table = self.tables[selection.table_id]
             contexts[table.context.call_index] = table.context
-            if table.kind == "delivery investigation":
-                heading = "交付调查" if zh else "Delivery investigation"
+            if table.kind == "complaint context":
                 parts.append(
-                    f"### {heading} [E{table.context.call_index}]\n\n"
-                    + "\n".join("- " + escape_cell(row[int(zh)]) for row in table.rows)
+                    "### Customer complaint in Twenty\n\n"
+                    + self._card_markdown(table.rows)
                 )
+                continue
+            if table.kind == "delivery investigation":
+                heading = f"### Delivery investigation [E{table.context.call_index}]"
+                match = re.fullmatch(
+                    r"wwi:sales_order:([1-9][0-9]{0,9})",
+                    self.delivery_calls[table.context.call_index],
+                )
+                if match and table.crm_links:
+                    crm_links = [
+                        f"[{escape_cell(label_text)}](/orders/{match[1]}?open={kind}&record={record_id}"
+                        + (
+                            f"&note={UUID(self.note['note_id'])}"
+                            if kind == "company" and self.note
+                            else ""
+                        )
+                        + ")"
+                        for kind, label_text, record_id in table.crm_links
+                    ]
+                    heading += "\n\nTwenty CRM · " + " · ".join(crm_links)
+                rows = table.rows
+                if table.has_reply_draft:
+                    rows = rows[:-1]
+                parts.append(
+                    heading
+                    + "\n\n"
+                    + self._card_markdown(
+                        rows, match[1] if match else None, table.record_links
+                    )
+                )
+                if table.has_reply_draft:
+                    parts.append(
+                        "### Customer Reply · Draft\n\n**Awaiting human review**\n\n"
+                        f"> {escape_cell(table.rows[-1][0])}\n\n"
+                        "No email sent · Human approval required"
+                    )
+                if match:
+                    parts.append(f"[Open order {match[1]} records](/orders/{match[1]})")
                 continue
             columns = self.selected_columns(table, selection)
             parts.append(
-                f"{TABLE_LABELS[table.kind][zh]} [E{table.context.call_index}]\n\n| "
-                + " | ".join(label(key, plan.language) for key in columns)
+                f"{TABLE_LABELS[table.kind]} [E{table.context.call_index}]\n\n| "
+                + " | ".join(label(key) for key in columns)
                 + " |\n| "
                 + " | ".join("---" for _ in columns)
                 + " |\n"
@@ -1015,10 +1229,20 @@ class EvidenceRegistry:
                     for row in table.rows
                 )
             )
+        if self.only_wwi_delivery_query_failed() and self.note and not plan.tables:
+            parts.append(self._card_markdown(complaint.evidence_rows(self.note)))
         for ctx, status in self.statuses:
             self._context(ctx)
+            if status == "wwi_delivery_query_failed":
+                order = self.delivery_calls[ctx.call_index].removeprefix(
+                    "wwi:sales_order:"
+                )
+                message = f"Order {order}: {STATUS_TEXT[status]}"
+                if message not in parts:
+                    parts.append(message)
+                continue
             contexts[ctx.call_index] = ctx
-            parts.append(STATUS_TEXT[status][zh])
+            parts.append(STATUS_TEXT[status])
         for ctx in contexts.values():
-            parts.append(context_text(ctx, zh))
+            parts.append(context_text(ctx))
         return "\n\n".join(parts)

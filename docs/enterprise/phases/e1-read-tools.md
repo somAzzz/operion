@@ -10,7 +10,7 @@ ERPNext gates cover protected business DocTypes rather than claiming the entire 
 
 Local ignored package: `reports/enterprise/e1/20260919T-e1-complete/`. See the [read contract](../../../contracts/e1-read-tools-v1.md).
 
-## Later interview contract revision (2026-09-22)
+## Later demo contract revision (2026-09-22)
 
 Original P02/v1 excluded email/phone. That is historical acceptance, not the current field interface. [Contact overviews v2](../../../contracts/contact-overviews-v2.md) returns source-verified communication fields for authorized organizations: snapshots only for `public_sample`/`simulated` data, live customer fields from Twenty Person and supplier fields from ERPNext Contact with relation checks. Credit limits, payment terms, and arbitrary notes remain excluded. Real-data field authorization needs E5.1.
 

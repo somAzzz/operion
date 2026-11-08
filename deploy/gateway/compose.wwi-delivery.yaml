@@ -1,0 +1,17 @@
+services:
+  agent:
+    environment:
+      OPERION_DELIVERY_SOURCE: wwi_sqlserver
+      OPERION_WWI_HOST: wwi-sql
+      OPERION_WWI_PASSWORD_FILE: /run/secrets/wwi-delivery-password
+    secrets: [wwi-delivery-password]
+    networks: [wwi-delivery]
+
+networks:
+  wwi-delivery:
+    external: true
+    name: operion-wwi-delivery
+
+secrets:
+  wwi-delivery-password:
+    file: ../../var/demo/wwi-delivery-password

@@ -8,7 +8,7 @@ Implemented on 2026-10-17: runtime policy `structured-evidence-v1` replaces `bus
 2. `EvidenceRegistry` normalizes known tools and versioned results into random references valid only for this run and authorization scope. Facts include entity, field, value, currency, coverage, JSON pointer, and source context; tables contain server-defined rows and columns.
 3. Tools return an `answer_evidence` manifest. The model submits a strict `AnswerPlan` through `present_answer`, selecting only current fact IDs, table IDs, and allowed columns. It cannot submit business prose, custom titles, numbers, currencies, row data, or claims of complete source history.
 4. Validate references, context, fields, duplicate selections, and evidence conflicts. Invalid selections allow one model repair; continued failure produces no business answer. Ordinary text has no default allow path.
-5. The server generates English or Chinese answers from fixed semantic labels and evidence. It validates again before SSE publication. Model intermediate text, output-tool arguments, and unverified partial answers are not published. Only final server-rendered text enters successful conversation history. Documentation language does not change supported answer languages.
+5. The server generates English answers from fixed semantic labels and evidence. It validates again before SSE publication. Model intermediate text, output-tool arguments, and unverified partial answers are not published. Only final server-rendered text enters successful conversation history. `AnswerPlan.language` accepts only `en`. Source values and quoted user statements are escaped without translation.
 6. Final `ModelResponse.metadata["operion.answer_evidence"]` stores selected fact/table evidence for audit and acceptance. The public browser history API retains its existing message structure. Old history is not rewritten; failed/cancelled runs save no new answer.
 
 ## Verification boundaries
@@ -30,7 +30,7 @@ This validates **evidence support for selected facts**. The model can still choo
 
 ## Regressions and observation
 
-- `test_business_fact_binding.py`: the two recorded false-rejection incidents (total 30/page 1; 30 orders/8 customers with orders), English/Chinese rendering, immutable entity/field/currency/scope bindings, old-run/cross-scope references, conflicts, and sales/purchase distinction.
+- `test_business_fact_binding.py`: the two recorded false-rejection incidents (total 30/page 1; 30 orders/8 customers with orders), English rendering and schema-enforced language selection, immutable entity/field/currency/scope bindings, old-run/cross-scope references, conflicts, and sales/purchase distinction.
 - `test_output_guardrails.py`: zero/missing/failure, unknown contracts, projections, fulfillment, proposals/capability, source injection, and empty/duplicate/forged references.
 - `test_answer_evidence_contracts.py`: actual repository outputs exercise read-tool adapters instead of relying only on hand-written response shapes.
 - `test_agent_app.py`: invalid output never enters SSE/successful history; final and restored text agree; permission changes retain visible conversation while refreshing model context; cancellation publishes no partial answer.
@@ -47,5 +47,5 @@ These are the recorded implementation results, not a new acceptance run for the 
 - Offline: 237 tests, 213 passed, 24 isolated PostgreSQL integration tests skipped under the offline workflow; Ruff and `git diff --check` passed.
 - Real qwen3.8-27b → FastAPI → AG-UI: counts, amount/currency, write denial, and forged-reference denial, 4/4 passed with independent CSV expectations. Local report: `/tmp/operion-guardrails-structured-acceptance.json`.
 - The local development Gateway Agent was rebuilt. Browser checks verified total customers 10, a complete 30-row sales table, filtered total 30/page 1, and customer population 10/customers with orders 8/orders 30. Refresh restored final text and previous history.
-- Data was the `interview-wwi-v1` public-sample snapshot. Online ERPNext/Twenty and PostgreSQL integration acceptance were not rerun. Online acceptance scripts were migrated to the new contract and passed import checks.
+- Data was the `demo-wwi-v1` public-sample snapshot. Online ERPNext/Twenty and PostgreSQL integration acceptance were not rerun. Online acceptance scripts were migrated to the new contract and passed import checks.
 - Read-only Langfuse inspection found both checks for browser run `Ey2cy7J` were `GUARDRAIL / DEFAULT / STRUCTURED_EVIDENCE_SUPPORTED`, policy `structured-evidence-v1`: [trace](https://cloud.langfuse.com/project/cmv41jt6h05egad0el9rcy2kh/traces/44cf2e3adc3838c45bbb0f86b5670265).

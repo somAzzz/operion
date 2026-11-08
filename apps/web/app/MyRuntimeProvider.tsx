@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  createContext,
   useCallback,
   useEffect,
   useMemo,
@@ -17,6 +18,8 @@ import {
   fromAgUiMessages,
   useAgUiRuntime,
 } from "@assistant-ui/react-ag-ui";
+
+export const ActiveConversation = createContext("");
 
 const THREAD_STORAGE_KEY = "operion.active-thread";
 
@@ -41,9 +44,9 @@ function initialThreadId() {
  * AG-UI runtime with threadList adapter for multi-thread support.
  */
 export function MyRuntimeProvider({
-  children,
-}: Readonly<{ children: ReactNode }>) {
-  const [currentThreadId, setCurrentThreadId] = useState(initialThreadId);
+  children, fixedThreadId,
+}: Readonly<{ children: ReactNode; fixedThreadId?: string }>) {
+  const [currentThreadId, setCurrentThreadId] = useState(() => fixedThreadId ?? initialThreadId());
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [redirectingToLogin, setRedirectingToLogin] = useState(false);
@@ -181,12 +184,12 @@ export function MyRuntimeProvider({
   });
 
   if (redirectingToLogin) {
-    return <main className="login-page" role="status">正在跳转到登录页面…</main>;
+    return <main className="login-page" role="status">Redirecting to sign in…</main>;
   }
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      {children}
+      <ActiveConversation.Provider value={currentThreadId}>{children}</ActiveConversation.Provider>
     </AssistantRuntimeProvider>
   );
 }
